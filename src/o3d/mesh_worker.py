@@ -19,7 +19,7 @@ def mesh(request):
             raise ValueError(f"STEP face transfer is missing or ambiguous for {region['name']}")
         matches[0].name = region["name"]
     geo = OCCGeometry(shape)
-    result = geo.GenerateMesh(maxh=request["mesh_size"], grading=0.3, optsteps3d=3)
+    result = geo.GenerateMesh(maxh=request["mesh_size"], grading=0.3, optsteps3d=3,curvaturesafety=4,segmentsperedge=2)
     result.SecondOrder()
     nodes = {int(p.nr): list(result[p].p) for element in result.Elements3D() for p in element.points}
     if len(nodes) > request.get("max_nodes", 200000):
@@ -41,7 +41,8 @@ def mesh(request):
         if not surfaces.get(region["name"]):
             raise ValueError(f"No boundary mesh associated with {region['name']}")
     return {"nodes": nodes, "elements": elements, "surfaces": surfaces,
-            "mesher": {"name": "Netgen", "version": importlib.metadata.version("netgen-mesher")}}
+            "mesher": {"name": "Netgen", "version": importlib.metadata.version("netgen-mesher"),
+                       "curvature_safety":4,"segments_per_edge":2}}
 
 
 if __name__ == "__main__":

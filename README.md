@@ -105,6 +105,8 @@ The bundle includes checksum-checked catalog downloads, a basic orthographic PDF
 
 Use the CAD Python environment for geometry helpers. The optional `.[skills]` extra adds ReportLab; native bootstrap and the Docker runtime include it. Setup itself remains Python-standard-library only. See [the workflow catalog and limits](docs/AGENT-SKILLS.md).
 
+For a combined editable handoff, run `./o3d handoff create --section-z 1.5 --json` after building; choose a Z plane that intersects your part. It packages the native release, reference assets and notices, nominal PDF, DXF section and mesh screen with source/toolchain hashes. `./o3d handoff status --json` detects changed source or files; regenerate after edits. A current package can contain failed or absent engineering checks. See [handoff and the real sensor-mount acceptance run](docs/HANDOFF.md).
+
 ## What works
 
 - **Native feature editing:** rectangle/circle/polygon profiles, construction planes, additive/subtractive extrusions, through/blind holes, rectangular hole arrays, fillets, chamfers, and placements.

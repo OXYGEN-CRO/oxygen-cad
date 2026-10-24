@@ -20,7 +20,7 @@ from .analysis_mesh import exterior_triangles, generate_mesh, prepare_geometry
 from .model import digest, geometry_key, study_key
 from .store import now, write_json
 
-ADAPTER_VERSION = "calculix-studies-v3"
+ADAPTER_VERSION = "calculix-studies-v4"
 LABELS = {"linear_static": "Static stress", "modal": "Modal frequencies", "buckling": "Structural buckling",
           "thermal": "Steady thermal", "thermal_stress": "Thermal stress", "nonlinear_static": "Nonlinear static stress",
           "quasistatic_event": "Quasi-static event", "dynamic_event": "Dynamic event", "shape_optimization": "Shape optimization",
@@ -101,16 +101,14 @@ def region_nodes(mesh, name):
 
 
 def distribute_scalar(mesh, name, total):
-    nodes = {int(k): np.array(v) for k, v in mesh["nodes"].items()}
+    from .quadratic import surface_integrals
     triangles = mesh["surfaces"][name]
-    areas = [np.linalg.norm(np.cross(nodes[t[1]]-nodes[t[0]], nodes[t[2]]-nodes[t[0]]))/2 for t in triangles]
-    area = sum(areas)
-    if area <= 0:
-        raise ValueError("Boundary region has zero area")
+    weights,area,_=surface_integrals(mesh,triangles)
     loads = {}
-    for tri, a in zip(triangles, areas):
-        for n in tri[3:]:
-            loads[n] = loads.get(n, 0) + total*a/(3*area)
+    for tri,integrals in zip(triangles,weights):
+        for n,value in zip(tri,integrals):
+            if value==0:continue
+            loads[n] = loads.get(n, 0) + total*value/area
     return loads
 
 
@@ -285,22 +283,33 @@ def parse_eigenvalues(path, kind):
     return values
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=512)
 def _binary_hash(path, mtime, size):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def solver_identity():
-    from .solver import solver_binary
+    from .solver import solver_binary,mesher_python
     path = Path(solver_binary()).resolve()
     stat = path.stat()
     files = [Path(__file__), Path(__file__).with_name("solver.py"), Path(__file__).with_name("model.py"), Path(__file__).with_name("analysis_mesh.py"),
-             Path(__file__).with_name("mesh_worker.py"), Path(__file__).with_name("gmsh_worker.py")]
+             Path(__file__).with_name("mesh_worker.py"), Path(__file__).with_name("gmsh_worker.py"),
+             Path(__file__).with_name("mesh_quality_worker.py"),Path(__file__).with_name("quadratic.py")]
     manifest = {p.name: _binary_hash(str(p),p.stat().st_mtime_ns,p.stat().st_size) for p in files}
     lock = Path(__file__).resolve().parents[2]/"mesh-requirements.lock"
     if lock.exists():manifest[lock.name] = _binary_hash(str(lock),lock.stat().st_mtime_ns,lock.stat().st_size)
+    python=Path(shutil.which(mesher_python()) or mesher_python()).absolute()
+    root=python.parent.parent
+    runtime_files={}
+    if python.exists():
+        actual=python.resolve();stat_python=actual.stat()
+        runtime_files["python"]=_binary_hash(str(actual),stat_python.st_mtime_ns,stat_python.st_size)
+    for pattern in ("lib/libgmsh.so*","lib/python*/site-packages/netgen*/*.so*","lib/python*/site-packages/gmsh*.dist-info/METADATA","lib/python*/site-packages/netgen*.dist-info/METADATA"):
+        for dependency in sorted(root.glob(pattern)):
+            actual=dependency.resolve();details=actual.stat()
+            runtime_files[str(dependency.relative_to(root))]=_binary_hash(str(actual),details.st_mtime_ns,details.st_size)
     return {"name": "CalculiX", "binary_sha256": _binary_hash(str(path), stat.st_mtime_ns, stat.st_size),
-            "adapter_version": ADAPTER_VERSION, "adapter_files": manifest}
+            "adapter_version": ADAPTER_VERSION, "adapter_files": manifest,"mesher_runtime_files":runtime_files}
 
 
 def run_solver(run, mesh, project, name, cancel=None, thermal=False, temperatures=None):
@@ -341,13 +350,17 @@ def mechanical_result(run, mesh, project, frames, boundary, transfer, data=None,
     moment_error = float(np.linalg.norm(applied_moment+reacted_moment)/moment_scale)
     maximum = max(float(np.linalg.norm(v)) for v in displacement.values())
     selected_probe = project.study.probe_point_mm
+    probe_method="User-specified physical point"
     if selected_probe is None:
         load = next((r for r in transfer["regions"] if r["name"]==transfer["aliases"].get("load_0")),None)
-        selected_probe = load["center"] if load else np.mean(np.array(list(nodes.values())),axis=0).tolist()
+        selected_probe = load["representative_point_mm"] if load else transfer["default_probe_mm"]
+        probe_method=load["representative_point_method"] if load else transfer["default_probe_method"]
+        if selected_probe is None:raise ValueError("Specify a geometric probe point; a mesh-dependent average is not a stable convergence quantity")
     probe = float(np.linalg.norm(interpolate_probe(mesh,displacement,selected_probe)))
     stress_probe = float(interpolate_probe(mesh,stress,project.study.stress_probe_mm)) if project.study.stress_probe_mm else None
     metrics = {"max_displacement_mm": maximum,"max_stress_mpa":max(stress.values()),
                "probe_displacement_mm":probe,"displacement_probe_mm":selected_probe,"stress_probe_mpa":stress_probe,
+               "displacement_probe_method":probe_method,
                "force_balance_error":force_error,"moment_balance_error":moment_error,
                "displacement_to_extent_ratio":maximum/max(length,1e-12)}
     field = {"displacements":displacement,"stress_mpa":stress}
@@ -450,6 +463,7 @@ def simulate(store, project, cancel=None):
         raise ValueError("; ".join(errors))
     if cancel and cancel.is_set():
         raise Cancelled("Job cancelled")
+    identity=solver_identity()
     key = study_key(project)
     source_project, selected_id = project, project.active_study_id
     project = project.for_study()
@@ -464,7 +478,7 @@ def simulate(store, project, cancel=None):
     write_json(destination/"region-map.json",portable_transfer)
     write_json(destination/"study-package.json",{"schema_version":1,"project":source_project.model_dump(mode="json"), "study_id": selected_id,
                "geometry_key":geometry_key(project),"study_key":key,"unit_system":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"degC"},
-               "solver":solver_identity(),"regions":portable_transfer,
+               "solver":identity,"regions":portable_transfer,
                "geometry_sha256":hashlib.sha256((geometry/"part.step").read_bytes()).hexdigest()})
     previous,iterations,converged = None,[],False
     start = time.monotonic()
@@ -528,10 +542,13 @@ def simulate(store, project, cancel=None):
             raise RuntimeError("Refinements returned different observation histories; convergence cannot be established")
         scales=metrics.get("convergence_scales",[0]*len(observed))
         deltas = [abs(a-b)/max(abs(a),abs(b),scale*1e-6,1e-12) for a,b,scale in zip(observed,previous,scales)] if previous is not None else None
-        converged = deltas is not None and max(deltas)<=project.study.convergence_tolerance
+        refinement = not iterations or (len(mesh["nodes"])>iterations[-1]["nodes"] and len(mesh["elements"])>iterations[-1]["elements"]
+                     and quality["max_element_volume_mm3"]<iterations[-1]["mesh_quality"]["max_element_volume_mm3"]*.999
+                     and quality["mesh_sha256"]!=iterations[-1]["mesh_quality"]["mesh_sha256"])
+        converged = deltas is not None and max(deltas)<=project.study.convergence_tolerance and refinement and all(it["refinement_verified"] for it in iterations)
         iterations.append({"mesh_size_mm":refined.study.mesh_size_mm,"nodes":len(mesh["nodes"]),"elements":len(mesh["elements"]),
                            **metrics,"quantity_changes":deltas,"displacement_change":deltas[-len(outputs)] if deltas and project.study.type in ("linear_static","thermal_stress") else None,
-                           "mesh_quality":quality})
+                           "mesh_quality":quality,"refinement_verified":refinement})
         write_json(run/"normalized-field.json",field)
         write_json(run/"metrics.json",iterations[-1])
         previous = observed
@@ -553,6 +570,7 @@ def simulate(store, project, cancel=None):
             passed = value>=requirement.value if minimum else value<=requirement.value
             findings.append({"id":requirement.id,"status":"passed" if passed else "failed","value":value,"limit":requirement.value,"passed":bool(passed)})
     if not converged:warnings.append("Mesh refinement did not converge within the allowed steps")
+    if any(not it["refinement_verified"] for it in iterations):warnings.append("Requested mesh sizes did not produce genuine refinement: node/element counts must grow and maximum integrated cell volume must decrease.")
     if not balanced:warnings.append("Balance or model applicability check failed")
     if "max_stress_mpa" in metrics:
         warnings.append("Peak stress at supports/sharp edges may be singular; peak stress alone does not establish strength.")
@@ -574,10 +592,11 @@ def simulate(store, project, cancel=None):
     for j in range(len(iterations)):
         for path in (destination/f"mesh-{j}").iterdir():
             if path.is_file():artifacts[f"mesh_{j}/{path.name}"]=str(path.relative_to(store.cache))
+    if solver_identity()!=identity:raise RuntimeError("Solver, adapter or mesher runtime changed during the study; rerun with one pinned runtime")
     result = {"schema_version":1,"type":project.study.type,"study_id":selected_id,"key":key,"geometry_key":geometry_key(project),"revision":project.revision,
               "state":state,"validation_level":"numerical_only","physical_validation":"not_performed",**metrics,
               "iterations":iterations,"converged":converged,"findings":findings,"warnings":warnings,"solver":"CalculiX",
-              "solver_identity":solver_identity(),"mesher":mesh.get("mesher"),"material":project.material.model_dump(),
+              "solver_identity":identity,"mesher":mesh.get("mesher"),"material":project.material.model_dump(),
               "study":project.study.model_dump(),"elapsed_seconds":time.monotonic()-start,"completed_at":now(),
               "field_artifact":f"studies/{key}/field.json","artifacts":artifacts,
               "logs":[v for k,v in artifacts.items() if k.endswith(".log")]}

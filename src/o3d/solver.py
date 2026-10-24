@@ -73,23 +73,22 @@ def mesher_python():
 def load_boundary(mesh, study):
     """Consistent traction integration on planar quadratic triangles.
 
-    Integrals of corner shape functions are zero and each midside shape
-    function integrates to A/3. Equal weights on all six nodes are incorrect.
+    For affine faces corner weights are zero and midside weights are A/3.
+    Curved planar faces require the full geometry Jacobian; corner weights can
+    be nonzero or negative. Equal weights are incorrect in both cases.
     """
-    nodes = {int(k): np.array(v, dtype=float) for k, v in mesh["nodes"].items()}
+    from .quadratic import surface_integrals
     fixed = set()
     for i, _ in enumerate(study.fixed_faces):
         fixed.update(n for tri in mesh["surfaces"][f"fixed_{i}"] for n in tri)
     forces = {}
     for i, load in enumerate(study.forces):
         triangles = mesh["surfaces"][f"load_{i}"]
-        areas = [np.linalg.norm(np.cross(nodes[t[1]] - nodes[t[0]], nodes[t[2]] - nodes[t[0]])) / 2 for t in triangles]
-        total = sum(areas)
-        if total <= 0:
-            raise ValueError("Loaded region has no area")
-        for triangle, area in zip(triangles, areas):
-            for n in triangle[3:]:
-                forces[n] = forces.get(n, np.zeros(3)) + np.array(load.vector_n) * area / (3 * total)
+        weights,total,_=surface_integrals(mesh,triangles)
+        for triangle,integrals in zip(triangles,weights):
+            for n,weight in zip(triangle,integrals):
+                if weight==0:continue
+                forces[n] = forces.get(n, np.zeros(3)) + np.array(load.vector_n) * weight / total
     if fixed.intersection(forces):
         raise ValueError("A load region overlaps a fixed region; select separate faces")
     return fixed, forces
@@ -143,24 +142,12 @@ def preflight(project):
 def interpolate_probe(mesh, values, point):
     """Sample a fixed geometric point using quadratic tetrahedral shape functions.
 
-    This avoids comparing whichever node happens to be nearest after remeshing.
-    The bounded workflow uses a planar loaded-face centroid and interior probes.
+    Invert the full quadratic geometry map, including curved edges. This avoids
+    corner-only coordinates and whichever node happens to be nearest after remeshing.
     """
-    coordinates = {int(k): np.asarray(v) for k, v in mesh["nodes"].items()}
-    for element in mesh["elements"]:
-        corners = np.array([coordinates[n] for n in element[:4]])
-        matrix = (corners[:3] - corners[3]).T
-        try:
-            first = np.linalg.solve(matrix, np.asarray(point) - corners[3])
-        except np.linalg.LinAlgError:
-            continue
-        barycentric = np.append(first, 1 - first.sum())
-        if barycentric.min() < -1e-6 or barycentric.max() > 1 + 1e-6:
-            continue
-        weights = [x * (2*x - 1) for x in barycentric]
-        weights += [4*barycentric[i]*barycentric[j] for i,j in ((0,1),(1,2),(2,0),(0,3),(1,3),(2,3))]
-        return sum((weight * np.asarray(values[n]) for n, weight in zip(element, weights)), np.asarray(values[element[0]]) * 0)
-    raise ValueError("The named probe could not be located inside the analysis mesh; choose an interior point away from idealized supports")
+    from .quadratic import locate_probe
+    element,weights=locate_probe(mesh,point)
+    return sum((weight*np.asarray(values[n]) for n,weight in zip(element,weights)),np.asarray(values[element[0]])*0)
 
 
 def simulate(store: Store, project: Project, cancel=None):

@@ -104,7 +104,13 @@ These source claims are retained, not authenticated or converted to a certificat
   No conductivity, expansion, load or reference temperature is inferred.
 - `probe_point_mm` samples temperature or displacement at a fixed geometric point;
   `stress_probe_mm` samples the nodal screening stress field. Mesh comparisons use
-  the same point and the quadratic tetrahedral shape functions.
+  the same physical point, inverting the full quadratic geometry map before
+  evaluating the field. The four corner coordinates alone are insufficient for
+  curved cells. Default probes come from CAD rather than a changing mesh average: a
+  trimmed-face centroid if it lies in material, otherwise an interior CAD
+  tessellation patch; unloaded thermal-stress studies use a CAD solid-interior
+  point. The chosen coordinates/method are recorded. An explicit point in a bore
+  or outside material refuses; it is never silently moved.
 
 The UI keeps missing new material/temperature/power inputs blank. An empty field
 does not become a guessed production property. Forces added from a face start at
@@ -122,11 +128,35 @@ and bounds; an ambiguous/missing selection refuses. A face can carry separate
 mechanical and thermal roles through explicit aliases without losing its mesh tag.
 
 Both adapters emit CalculiX C3D10 ordering and quadratic boundary triangles.
-Consistent surface integration puts the correct weights on midside nodes rather
-than distributing traction equally among all six triangle nodes. Validation checks
-finite coordinates, element connectivity, unused nodes, disconnected volumes,
-corner degeneracy/orientation, boundary membership and a coarse CAD/mesh volume
-scale check. This is not a certificate of every curved-element Jacobian.
+Planar boundary integration includes the full quadratic surface Jacobian. For
+affine triangles the corner weights vanish and each midside weight is area/3;
+curved planar triangles can have nonzero or negative corner weights. Gauss4/Duffy
+integration preserves force, first moment and heat power. It does not clamp
+legitimate negative consistent nodal loads or replace them with equal weights.
+
+Validation checks finite coordinates, unique/conforming connectivity, duplicate or
+nonmanifold cells, unused nodes, complete-face volume connectivity (point/edge
+contact alone is insufficient), boundary membership and midside ordering. Each
+mesh then goes through an isolated Gmsh quality worker, regardless of its mesher.
+Gmsh's `minDetJac`/`maxDetJac` return adaptive Bernstein bounds over the complete
+quadratic element; checking corners, interpolation nodes or quadrature samples
+alone can miss a fold. Nonpositive bounds or a lower/upper ratio <=1e-6 refuse.
+Degree-four tetrahedral quadrature supplies actual curved-cell volumes. The 10%
+CAD-volume gate remains a coarse scale/transfer guard, not an accuracy promise.
+Selected planar regions must match their CAD plane, integrated area (2% envelope)
+and centroid (1% of square-root area, with the stated absolute tolerance).
+
+`curved_jacobian_checked` records this whole-element floating-point library check.
+`curved_jacobian_certified` remains false: this is not a formal outward-rounded
+interval proof, a global overlap proof, a check of every future deformed
+configuration or physical validation. Raw bounds, exact mesh hash, integrated
+volumes and backend binary identity remain in `curved-quality.json`.
+
+Netgen uses curvature safety 4 and two segments per edge; Gmsh runs its CAD-aware
+high-order optimizer after creating quadratic elements. Their settings are
+recorded. Both must pass the independent quality gate; there is no fallback that
+accepts an invalid mesh. Field display subdivides each quadratic boundary face
+into four triangles so midside geometry/results participate in the preview.
 
 The runtime includes Gmsh 4.15.2 alongside the pinned Netgen environment. Their
 licences remain separate from original application code; see `THIRD_PARTY.md`.
@@ -137,9 +167,9 @@ Each study directory preserves the input package, region map, exact exported STE
 each mesh request/mesh/quality audit, solver input decks, raw DAT/FRD/logs,
 normalized fields and numerical metrics. The saved package's STEP path is relative
 and its content hash is recorded. Mechanical and thermal solves have distinct
-input/output files. Solver binaries and adapter sources have recorded SHA-256
+input/output files. Solver binaries, adapter sources and installed mesher interpreter/library/package files have recorded SHA-256
 identities; the study signature covers them as well as study/material/geometry and
-relevant requirement inputs. Changing backend code/binary invalidates old results.
+relevant requirement inputs. Changing backend code/binary invalidates old results. A runtime change during a study refuses completion. Refinement must add nodes/elements, decrease maximum integrated cell volume and change the mesh fingerprint; repeating one mesh cannot earn convergence.
 
 Static results expose displacement, screening stress, fixed-point probes, reaction
 force/moment balance and mesh changes. Nonlinear results preserve each load observation, displacement/stress/plastic-strain fields, peak-over-path metrics and distinct final-state metrics. Requirement displacement/stress checks use the whole path, so unloading cannot hide an earlier overload. Large-deformation moment balance uses deformed node positions. Thermal results expose temperature, heat
@@ -174,11 +204,56 @@ The pre-existing static test remains. Browser tests exercise actual modal/therma
 jobs, fields, persistence, stale results, native-command editing and the rest of
 the studio through a disposable project. Named-study tests check doubled-load response, independent invalidation, comparison, scoped requirements and releases. Nonlinear tests compare against an independent elastica boundary-value solution and analytical synthetic plastic loading/unloading, including load-step sensitivity and incomplete-history refusal. Browser tests configure plasticity and inspect load-increment fields. Tests never edit a user's design.
 
+## Reproducible mesh and independent-solver checks
+
+```sh
+PYTHONPATH="$PWD/src" .venv/bin/python scripts/qualify_mesh.py \
+  --output /tmp/oxygen-new-mesh-qualification --refinements 2
+```
+
+The script refuses an existing output directory, creates only disposable projects
+and retains each exact mesh/request/bound/log. Ten **synthetic task-shaped**
+families cover a cantilever, camera bracket, bored/bolted plates, thin panel, slot,
+fillets, ribs, tube and open enclosure. Two sizes through each mesher produce 40
+runs. This does not substitute for ten actual customer parts. The initial run
+found two invalid coarse meshes; the final settings pass all 40, with selected-face
+area error below 0.052% and integrated volume error below 0.024% on these fixtures.
+
+An optional independent checker uses scikit-fem 12.0.2, installed with the pinned
+wheel hash into an existing pinned scientific/CAD environment (or a separate
+environment containing its NumPy/SciPy dependencies):
+
+```sh
+.venv/bin/python -m pip install --no-deps --require-hashes -r verification-requirements.lock
+PYTHONPATH="$PWD/src" O3D_REFERENCE_PYTHON="$PWD/.venv/bin/python" \
+  .venv/bin/python -m pytest -q tests/test_reference_solver.py
+```
+
+The standalone reference worker imports no Oxygen FEM assembly, boundary-load or
+interpolation routines. It reconstructs the same isoparametric C3D10 geometry,
+assembles independent elastic/conduction matrices and facet loads, applies the
+recorded support/temperature regions and solves through SciPy. Four cases cover
+cantilever, hollow-tube and bored-plate structure plus hollow-tube conduction.
+Comparisons include full displacement/temperature fields, consistent nodal
+load/heat vectors, strain energy and equilibrium. Four-point cell integration
+matches the CalculiX formulation; a separate order-six solve measures quadrature
+sensitivity. Gates are 0.2% for agreement/balance and 2% for quadrature sensitivity.
+The current fixtures agree below 0.00004% in displacement/temperature and below
+0.013% under the higher quadrature order.
+
+These are numerical cross-checks on the **same** material/geometry/BC idealization,
+not physical validation or independent approval of the setup. Stress averaging,
+nonlinear/contact/modal/buckling and other study families are not independently
+qualified by this checker. CI installs the optional hash-pinned wheel into a
+disposable container for a separate check; production startup does not require it.
+
 ## Remaining completion requirements
 
 - [x] Persistent named studies, independent loads/results, current-result comparison and scoped simulation requirements. Independently varying loads within a shared study remain separate named studies.
-- [ ] Broader geometry/edit fixtures, ten-part mesher bake-off and independent FE
-  comparison beyond the analytical cases.
+- [x] Ten synthetic CAD task families through both meshers/two sizes, complete
+  curved-element/region checks, and four independent static/conduction comparisons.
+- [ ] Actual customer-part/edit fixtures, assembly/repeated-occurrence topology,
+  broader independent FE families and physical validation remain required.
 - [ ] Mode-shape correlation during refinement for repeated/crossing modes;
   currently comparisons use mode order and report that limitation.
 - [ ] Assembly load paths, connectors/contact, material frames and anisotropic/process

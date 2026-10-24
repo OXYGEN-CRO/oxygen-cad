@@ -1,0 +1,187 @@
+{
+  "name": "BNO055 sensor carrier \u2014 acceptance fixture",
+  "parameters": {
+    "length": {
+      "value": 42,
+      "unit": "mm"
+    },
+    "width": {
+      "value": 32,
+      "unit": "mm"
+    },
+    "thickness": {
+      "value": 3,
+      "unit": "mm"
+    },
+    "sensor_hole_diameter": {
+      "value": 2.7,
+      "unit": "mm",
+      "locked": true
+    }
+  },
+  "features": [
+    {
+      "id": "base_profile",
+      "type": "profile",
+      "name": "Mounting plate",
+      "width": "$length",
+      "height": "$width"
+    },
+    {
+      "id": "base",
+      "type": "extrude",
+      "name": "Carrier plate",
+      "profile": "base_profile",
+      "distance": "$thickness"
+    },
+    {
+      "id": "standoff_profile_0",
+      "type": "profile",
+      "name": "Sensor standoff 1",
+      "shape": "circle",
+      "radius": 2.5,
+      "origin": [
+        -10.16,
+        -7.62,
+        3
+      ]
+    },
+    {
+      "id": "standoff_0",
+      "type": "extrude",
+      "profile": "standoff_profile_0",
+      "distance": 3
+    },
+    {
+      "id": "standoff_profile_1",
+      "type": "profile",
+      "name": "Sensor standoff 2",
+      "shape": "circle",
+      "radius": 2.5,
+      "origin": [
+        -10.16,
+        7.62,
+        3
+      ]
+    },
+    {
+      "id": "standoff_1",
+      "type": "extrude",
+      "profile": "standoff_profile_1",
+      "distance": 3
+    },
+    {
+      "id": "standoff_profile_2",
+      "type": "profile",
+      "name": "Sensor standoff 3",
+      "shape": "circle",
+      "radius": 2.5,
+      "origin": [
+        10.16,
+        -7.62,
+        3
+      ]
+    },
+    {
+      "id": "standoff_2",
+      "type": "extrude",
+      "profile": "standoff_profile_2",
+      "distance": 3
+    },
+    {
+      "id": "standoff_profile_3",
+      "type": "profile",
+      "name": "Sensor standoff 4",
+      "shape": "circle",
+      "radius": 2.5,
+      "origin": [
+        10.16,
+        7.62,
+        3
+      ]
+    },
+    {
+      "id": "standoff_3",
+      "type": "extrude",
+      "profile": "standoff_profile_3",
+      "distance": 3
+    },
+    {
+      "id": "sensor_holes",
+      "type": "hole",
+      "name": "Measured sensor hole pattern",
+      "diameter": "$sensor_hole_diameter",
+      "center": [
+        -10.16,
+        -7.62,
+        0
+      ],
+      "columns": 2,
+      "rows": 2,
+      "spacing": [
+        20.32,
+        15.24
+      ]
+    },
+    {
+      "id": "base_holes",
+      "type": "hole",
+      "name": "Fixture mounting holes",
+      "diameter": 3.4,
+      "center": [
+        -17,
+        -11,
+        0
+      ],
+      "columns": 2,
+      "rows": 2,
+      "spacing": [
+        34,
+        22
+      ]
+    }
+  ],
+  "material": {
+    "name": "Numerical acceptance material",
+    "youngs_modulus_mpa": 200000,
+    "poisson_ratio": 0.3,
+    "density_g_cm3": 7.85,
+    "source": "Test inputs copied from examples/cantilever.json; not a certified production material"
+  },
+  "study": {
+    "fixed_faces": [
+      "part:xmin"
+    ],
+    "forces": [
+      {
+        "face": "part:xmax",
+        "vector_n": [
+          0,
+          0,
+          -10
+        ]
+      }
+    ],
+    "mesh_size_mm": 3,
+    "refinement_steps": 2,
+    "assumptions_confirmed": true,
+    "stress_probe_mm": [
+      0,
+      0,
+      2
+    ]
+  },
+  "requirements": [
+    {
+      "id": "width_limit",
+      "kind": "max_dimension",
+      "axis": "Y",
+      "value": 40
+    },
+    {
+      "id": "deflection",
+      "kind": "max_displacement",
+      "value": 0.1
+    }
+  ]
+}

@@ -32,6 +32,7 @@ def mesh(request):
         gmsh.option.setNumber("Mesh.MeshSizeMin", request["mesh_size"]*.3)
         gmsh.model.mesh.generate(3)
         gmsh.model.mesh.setOrder(2)
+        gmsh.model.mesh.optimize("HighOrder")
         tags, coordinates, _ = gmsh.model.mesh.getNodes()
         if len(tags) > request.get("max_nodes", 200000):
             raise ValueError("Analysis node limit exceeded; increase mesh size")
@@ -51,7 +52,7 @@ def mesh(request):
                     raise ValueError("Expected quadratic surface triangles")
                 surfaces[name].extend(np.array(block).reshape(-1,6).astype(int).tolist())
         return {"nodes": nodes, "elements": elements, "surfaces": surfaces,
-                "mesher": {"name": "Gmsh", "version": gmsh.__version__}}
+                "mesher": {"name": "Gmsh", "version": gmsh.__version__,"high_order_optimizer":"HighOrder"}}
     finally:
         gmsh.finalize()
 

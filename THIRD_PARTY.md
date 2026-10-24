@@ -12,6 +12,7 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 | Netgen | Isolated tetrahedral mesher | LGPL-2.1 — https://github.com/NGSolve/netgen |
 | Gmsh | Optional isolated CAD-aware mesher | GPL-2.0-or-later with upstream linking exception; installed package notices retained — https://gmsh.info/; distributed unmodified in the mesher environment, original application code remains separately licensed |
 | CalculiX | External finite-element solver executable | GPL-2.0-or-later — https://www.dhondt.de/ and https://sources.debian.org/src/calculix-ccx/ |
+| scikit-fem (optional verification only) | Independent quadratic elasticity/conduction assembly and facet integration | BSD-3-Clause — https://github.com/kinnala/scikit-fem; pinned wheel in `verification-requirements.lock`; installed package notices retained |
 | SPOOLES | Solver numerical dependency | Upstream terms included in Debian package — https://sources.debian.org/src/spooles/ |
 | KiCad | External board checking and fabrication CLI | GPL and component-specific terms; installed Debian copyright notices retained — https://www.kicad.org/ and https://sources.debian.org/src/kicad/ |
 | ngspice | External circuit simulation process | BSD-style core and accompanying component terms; installed notices retained — https://ngspice.sourceforge.io/ and https://sources.debian.org/src/ngspice/ |
@@ -23,6 +24,7 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 | Radix Primitives | Accessible dropdown menu foundation | MIT — https://github.com/radix-ui/primitives; installed package notices retained |
 | React, Three.js, Vite, FastAPI, Pydantic, Typer, Trimesh | UI and application/runtime libraries | See installed package license files and upstream projects |
 | ReportLab | Standalone engineering-sheet PDF renderer | BSD-style license; installed package license retained; https://www.reportlab.com/opensource/ |
+| pypdfium2 / PDFium | Optional acceptance-test PDF rendering (`acceptance` extra) | See the installed package's wrapper, PDFium and bundled dependency notices; https://github.com/pypdfium2-team/pypdfium2 |
 | charset-normalizer | ReportLab text dependency | MIT; installed package notices retained; https://github.com/jawah/charset_normalizer |
 | Geist Sans / Geist Mono | Locally served variable fonts | SIL Open Font License — `frontend/public/fonts/Geist-LICENSE.txt` and `Geist-Mono-LICENSE.txt`; https://fontsource.org/fonts/geist |
 

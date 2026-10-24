@@ -48,6 +48,14 @@ def ingest(provider: str, max_parts: Annotated[int | None, typer.Option(min=1)] 
         emit(run(catalog, provider, max_parts=max_parts, category=category, resume=str(resume) if resume else None))
 
 
+@app.command("scrape-mcmaster")
+def scrape_mcmaster(urls: Path):
+    """Import SKU metadata from 1–30 explicitly selected public family URLs (JSON array)."""
+    from .mcmaster_public import ingest as run
+    with database() as catalog:
+        emit(run(catalog, json.loads(urls.read_text())))
+
+
 @app.command()
 def search(q: Annotated[str, typer.Argument()] = "", category: str | None = None, provider: str | None = None,
            cad: bool = False, downloadable: bool = False, hybrid: bool = False,
