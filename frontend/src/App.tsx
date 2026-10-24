@@ -176,6 +176,7 @@ export default function App() {
     [measure, setMeasure] = useState<number[][]>([]),
     [field, setField] = useState<DisplayField>("solid"),
     [modeIndex, setModeIndex] = useState(0),
+    [incrementIndex, setIncrementIndex] = useState(-1),
     [deformation, setDeformation] = useState(0),
     [addOpen, setAddOpen] = useState(false),
     [checks, setChecks] = useState<any>(null),
@@ -204,9 +205,14 @@ export default function App() {
             ? analysis.max_displacement_mm != null
             : field === "temperature"
               ? analysis.max_temperature_c != null
-              : Boolean(analysis.frequencies_hz || analysis.buckling_factors)));
+              : field === "plastic_strain"
+                ? analysis.max_equivalent_plastic_strain != null
+                : Boolean(
+                    analysis.frequencies_hz || analysis.buckling_factors,
+                  )));
     if (!available) setField("solid");
     setModeIndex(0);
+    setIncrementIndex(-1);
   }, [state?.analysis?.key]);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
@@ -223,6 +229,18 @@ export default function App() {
         previous.project.revision === result.project.revision &&
         previous.geometry_state === result.geometry_state &&
         previous.analysis_state === result.analysis_state &&
+        JSON.stringify(
+          Object.values(previous.studies ?? {}).map((s: any) => [
+            s.key,
+            s.result?.completed_at,
+          ]),
+        ) ===
+          JSON.stringify(
+            Object.values(result.studies ?? {}).map((s: any) => [
+              s.key,
+              s.result?.completed_at,
+            ]),
+          ) &&
         JSON.stringify(previous.jobs) === JSON.stringify(result.jobs) &&
         previous.checks?.input_key === result.checks?.input_key
           ? previous
@@ -419,6 +437,39 @@ export default function App() {
     }
   }
   const current = draft;
+  const studyView = current
+    ? {
+        ...current,
+        study:
+          current.active_study_id === "default"
+            ? current.study
+            : current.named_studies[current.active_study_id],
+      }
+    : null;
+  const analysis = dirty ? null : state?.analysis;
+  const increment =
+    analysis?.increments?.[
+      incrementIndex < 0 ? analysis.increments.length - 1 : incrementIndex
+    ];
+  const displayedAnalysis = increment
+    ? { ...analysis, ...increment }
+    : analysis;
+  const studyState =
+    state && dirty
+      ? { ...state, analysis: null, analysis_state: "unsaved_changes" }
+      : state;
+  function editStudy(fn: (p: Project) => void) {
+    edit((p) => {
+      if (p.active_study_id === "default") fn(p);
+      else {
+        const primary = p.study;
+        p.study = p.named_studies[p.active_study_id];
+        fn(p);
+        p.named_studies[p.active_study_id] = p.study;
+        p.study = primary;
+      }
+    });
+  }
   const geometry = state?.build ?? state?.last_build;
   const feature = current?.features.find((f) => f.id === active);
   const reference = current?.references.find((r) => r.id === active);
@@ -526,16 +577,6 @@ export default function App() {
         <Loader2 className="spin" />
       </div>
     );
-  const fixed = (id: string) =>
-    edit((p) => {
-      if (!p.study.fixed_faces.includes(id)) p.study.fixed_faces.push(id);
-    });
-  const force = (id: string) =>
-    edit((p) => {
-      if (!p.study.forces.some((f) => f.face === id))
-        p.study.forces.push({ face: id, vector_n: [0, 0, -10] });
-      p.study.assumptions_confirmed = false;
-    });
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -873,7 +914,7 @@ export default function App() {
               )}
             </div>
             <div>
-              {state.analysis && (
+              {analysis && (
                 <SelectControl
                   aria-label="Viewport display"
                   value={field}
@@ -882,47 +923,66 @@ export default function App() {
                   <option value="solid">Solid model</option>
                   <option
                     value="stress"
-                    disabled={state.analysis.max_stress_mpa == null}
+                    disabled={analysis.max_stress_mpa == null}
                   >
                     Stress field
                   </option>
                   <option
                     value="displacement"
-                    disabled={state.analysis.max_displacement_mm == null}
+                    disabled={analysis.max_displacement_mm == null}
                   >
                     Displacement
                   </option>
                   <option
                     value="temperature"
-                    disabled={state.analysis.max_temperature_c == null}
+                    disabled={analysis.max_temperature_c == null}
                   >
                     Temperature
                   </option>
                   <option
                     value="mode"
                     disabled={
-                      !state.analysis.frequencies_hz &&
-                      !state.analysis.buckling_factors
+                      !analysis.frequencies_hz && !analysis.buckling_factors
                     }
                   >
                     Mode shape
                   </option>
+                  {analysis.max_equivalent_plastic_strain != null && (
+                    <option value="plastic_strain">Plastic strain</option>
+                  )}
                 </SelectControl>
               )}
-              {field === "mode" && state.analysis && (
+              {analysis?.increments && (
+                <SelectControl
+                  aria-label="Load increment"
+                  value={
+                    incrementIndex < 0
+                      ? analysis.increments.length - 1
+                      : incrementIndex
+                  }
+                  onChange={(e) => setIncrementIndex(Number(e.target.value))}
+                >
+                  {analysis.increments.map((v: any, i: number) => (
+                    <option value={i} key={i}>
+                      Step {i + 1} · load ×{v.load_factor.toPrecision(3)}
+                    </option>
+                  ))}
+                </SelectControl>
+              )}
+              {field === "mode" && analysis && (
                 <SelectControl
                   aria-label="Mode number"
                   value={modeIndex}
                   onChange={(e) => setModeIndex(Number(e.target.value))}
                 >
                   {(
-                    state.analysis.frequencies_hz ??
-                    state.analysis.buckling_factors ??
+                    analysis.frequencies_hz ??
+                    analysis.buckling_factors ??
                     []
                   ).map((value: number, i: number) => (
                     <option value={i} key={i}>
                       Mode {i + 1} · {value.toPrecision(4)}{" "}
-                      {state.analysis.frequencies_hz ? "Hz" : "×"}
+                      {analysis.frequencies_hz ? "Hz" : "×"}
                     </option>
                   ))}
                 </SelectControl>
@@ -973,12 +1033,12 @@ export default function App() {
             theme={theme}
             viewRequest={viewRequest}
             geometry={geometry ?? null}
-            project={current}
+            project={studyView ?? current}
             selected={selection}
             onSelect={select}
             section={section}
             field={field}
-            analysis={state.analysis}
+            analysis={displayedAnalysis}
             modeIndex={modeIndex}
             fit={fit}
             deformation={deformation}
@@ -1020,30 +1080,34 @@ export default function App() {
               </Button>
             </div>
           )}
-          {field !== "solid" && state.analysis && (
+          {field !== "solid" && displayedAnalysis && (
             <div className="field-legend">
               <span>
                 {field === "stress"
                   ? "von Mises stress · MPa"
                   : field === "temperature"
                     ? "Temperature · °C"
-                    : field === "mode"
-                      ? "Mode shape · relative amplitude"
-                      : "Displacement · mm"}
+                    : field === "plastic_strain"
+                      ? "Equivalent plastic strain · dimensionless"
+                      : field === "mode"
+                        ? "Mode shape · relative amplitude"
+                        : "Displacement · mm"}
               </span>
               <div />
               <small>
                 {field === "temperature"
-                  ? state.analysis.min_temperature_c?.toPrecision(4)
+                  ? displayedAnalysis.min_temperature_c?.toPrecision(4)
                   : 0}{" "}
                 <b>
                   {(field === "stress"
-                    ? state.analysis.max_stress_mpa
+                    ? displayedAnalysis.max_stress_mpa
                     : field === "temperature"
-                      ? state.analysis.max_temperature_c
-                      : field === "mode"
-                        ? 1
-                        : state.analysis.max_displacement_mm
+                      ? displayedAnalysis.max_temperature_c
+                      : field === "plastic_strain"
+                        ? displayedAnalysis.max_equivalent_plastic_strain
+                        : field === "mode"
+                          ? 1
+                          : displayedAnalysis.max_displacement_mm
                   )?.toPrecision(4)}
                 </b>
               </small>
@@ -1666,7 +1730,17 @@ export default function App() {
                           "max_stress",
                         ]}
                         onChange={(v: string) =>
-                          edit((p) => (p.requirements[i].kind = v))
+                          edit((p) => {
+                            p.requirements[i].kind = v;
+                            if (
+                              [
+                                "max_dimension",
+                                "max_mass",
+                                "min_clearance",
+                              ].includes(v)
+                            )
+                              p.requirements[i].study_id = null;
+                          })
                         }
                       />
                       <Field
@@ -1677,6 +1751,26 @@ export default function App() {
                           edit((p) => (p.requirements[i].value = v))
                         }
                       />
+                      {!["max_dimension", "max_mass", "min_clearance"].includes(
+                        req.kind,
+                      ) && (
+                        <Select
+                          label="Applies to study"
+                          value={req.study_id ?? ""}
+                          options={[
+                            { value: "", label: "All studies" },
+                            ...Object.entries({
+                              default: current.study,
+                              ...current.named_studies,
+                            }).map(([id, s]) => ({ value: id, label: s.name })),
+                          ]}
+                          onChange={(v: string) =>
+                            edit(
+                              (p) => (p.requirements[i].study_id = v || null),
+                            )
+                          }
+                        />
+                      )}
                       {req.kind === "max_dimension" && (
                         <Select
                           label="Dimension axis"
@@ -1722,11 +1816,13 @@ export default function App() {
               )}
               {tab === "verify" && (
                 <StudyPanel
-                  current={current}
-                  state={state}
+                  document={current}
+                  editDocument={edit}
+                  current={studyView ?? current}
+                  state={studyState ?? state}
                   selection={selection}
                   blocked={Boolean(busy || dirty || pending)}
-                  edit={edit}
+                  edit={editStudy}
                   run={run}
                   onField={setField}
                   Field={Field}

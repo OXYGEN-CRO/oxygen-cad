@@ -16,8 +16,11 @@ import {
   type State,
 } from "../api";
 import { Button, Input, SelectControl } from "./ui";
+import { StudyComparison } from "./StudyComparison";
 
 type Props = {
+  document: Project;
+  editDocument: (fn: (p: Project) => void) => void;
   current: Project;
   state: State;
   selection: Selection | null;
@@ -30,6 +33,8 @@ type Props = {
 };
 
 export function StudyPanel({
+  document,
+  editDocument,
   current,
   state,
   selection,
@@ -97,6 +102,90 @@ export function StudyPanel({
         <h2>{capability?.label ?? study.type}</h2>
       </div>
       <label className="field">
+        <span>Saved study</span>
+        <SelectControl
+          aria-label="Saved study"
+          value={document.active_study_id}
+          onChange={(e) =>
+            editDocument((p) => {
+              p.active_study_id = e.target.value;
+            })
+          }
+        >
+          {Object.entries({
+            default: document.study,
+            ...document.named_studies,
+          }).map(([id, s]) => (
+            <option key={id} value={id}>
+              {s.name} · {state.studies?.[id]?.state ?? "not run"}
+            </option>
+          ))}
+        </SelectControl>
+      </label>
+      <div className="two-fields">
+        <Button
+          disabled={Object.keys(document.named_studies).length >= 30}
+          onClick={() =>
+            editDocument((p) => {
+              let index = 1;
+              while (p.named_studies[`study_${index}`]) index++;
+              const id = `study_${index}`;
+              p.named_studies[id] = {
+                ...structuredClone(study),
+                name: `Study ${index}`,
+                fixed_faces: [],
+                forces: [],
+                temperatures: [],
+                heat_sources: [],
+                assumptions_confirmed: false,
+              };
+              p.active_study_id = id;
+            })
+          }
+        >
+          New study
+        </Button>
+        <Button
+          disabled={Object.keys(document.named_studies).length >= 30}
+          onClick={() =>
+            editDocument((p) => {
+              let index = 1;
+              while (p.named_studies[`study_${index}`]) index++;
+              const id = `study_${index}`;
+              p.named_studies[id] = {
+                ...structuredClone(study),
+                name: `${study.name} copy`,
+                assumptions_confirmed: false,
+              };
+              p.active_study_id = id;
+            })
+          }
+        >
+          Duplicate study
+        </Button>
+      </div>
+      {document.active_study_id !== "default" && (
+        <Button
+          className="text-button"
+          disabled={document.requirements.some(
+            (r) => r.study_id === document.active_study_id,
+          )}
+          onClick={() =>
+            editDocument((p) => {
+              delete p.named_studies[p.active_study_id];
+              p.active_study_id = "default";
+            })
+          }
+        >
+          Remove study
+        </Button>
+      )}
+      <Field
+        label="Study name"
+        value={study.name}
+        onChange={(name: string) => edit((p) => (p.study.name = name))}
+      />
+      <label className="field">
         <span>Study type</span>
         <SelectControl
           aria-label="Study type"
@@ -106,6 +195,7 @@ export function StudyPanel({
               p.study.type = e.target.value as Project["study"]["type"];
               p.study.assumptions_confirmed = false;
               p.study.stress_probe_mm = null;
+              if (p.study.type !== "nonlinear_static") p.study.load_path = [];
               if (["modal", "thermal"].includes(p.study.type))
                 p.study.forces = [];
               if (p.study.type === "thermal") p.study.fixed_faces = [];
@@ -249,6 +339,79 @@ export function StudyPanel({
             value={current.material.source}
             onChange={(v: string) => edit((p) => (p.material.source = v))}
           />
+          {study.type === "nonlinear_static" && (
+            <>
+              <div className="section-heading">ISOTROPIC HARDENING</div>
+              <p className="muted">
+                Project material applies to every study. Enter true von Mises
+                stress versus equivalent plastic strain, starting at zero
+                plastic strain. Leave the curve empty for elastic large
+                deformation.
+              </p>
+              {(current.material.plastic_curve ?? []).map(
+                (v: any, i: number) => (
+                  <div className="load-card" key={i}>
+                    <Field
+                      label={`Yield stress ${i + 1}`}
+                      type="number"
+                      unit="MPa"
+                      value={v.stress_mpa}
+                      onChange={(n: number) =>
+                        edit(
+                          (p) => (p.material.plastic_curve[i].stress_mpa = n),
+                        )
+                      }
+                    />
+                    <Field
+                      label={`Plastic strain ${i + 1}`}
+                      type="number"
+                      value={v.plastic_strain}
+                      onChange={(n: number) =>
+                        edit(
+                          (p) =>
+                            (p.material.plastic_curve[i].plastic_strain = n),
+                        )
+                      }
+                    />
+                    <Button
+                      title={`Remove hardening point ${i + 1}`}
+                      onClick={() =>
+                        edit((p) => p.material.plastic_curve.splice(i, 1))
+                      }
+                    >
+                      <X size={13} />
+                    </Button>
+                  </div>
+                ),
+              )}
+              <Button
+                disabled={(current.material.plastic_curve?.length ?? 0) >= 100}
+                onClick={() =>
+                  edit((p) => {
+                    p.material.plastic_curve ??= [];
+                    p.material.plastic_curve.push({
+                      stress_mpa: null,
+                      plastic_strain: p.material.plastic_curve.length
+                        ? null
+                        : 0,
+                    });
+                    p.study.assumptions_confirmed = false;
+                  })
+                }
+              >
+                Add hardening point
+              </Button>
+              {Boolean(current.material.plastic_curve?.length) && (
+                <Field
+                  label="Plastic curve source"
+                  value={current.material.plastic_curve_source}
+                  onChange={(v: string) =>
+                    edit((p) => (p.material.plastic_curve_source = v))
+                  }
+                />
+              )}
+            </>
+          )}
         </>
       )}
       {mechanical && (
@@ -353,6 +516,88 @@ export function StudyPanel({
         </>
       )}
       <div className="section-heading">NUMERICAL SETTINGS</div>
+      {study.type === "nonlinear_static" && (
+        <>
+          <label className="checkbox">
+            <Input
+              type="checkbox"
+              checked={study.large_deformation}
+              onChange={(e) =>
+                edit((p) => {
+                  p.study.large_deformation = e.target.checked;
+                  p.study.assumptions_confirmed = false;
+                })
+              }
+            />
+            Large deformation
+          </label>
+          <Field
+            label="Load increments"
+            type="number"
+            value={study.nonlinear_increments}
+            onChange={(v: number) =>
+              edit((p) => (p.study.nonlinear_increments = v))
+            }
+          />
+          <Field
+            label="Maximum solver increments"
+            type="number"
+            value={study.max_nonlinear_increments}
+            onChange={(v: number) =>
+              edit((p) => (p.study.max_nonlinear_increments = v))
+            }
+          />
+          <div className="section-heading">LOAD PATH</div>
+          {!study.load_path.length ? (
+            <>
+              <p className="muted">
+                Monotonic loading from zero to the specified force. Time is
+                normalized load-path position, not a dynamic duration.
+              </p>
+              <Button
+                onClick={() =>
+                  edit(
+                    (p) =>
+                      (p.study.load_path = [
+                        { time: 0, factor: 0 },
+                        { time: 0.5, factor: 1 },
+                        { time: 1, factor: 0 },
+                      ]),
+                  )
+                }
+              >
+                Add load / unload path
+              </Button>
+            </>
+          ) : (
+            <>
+              {study.load_path.map((v, i) => (
+                <div className="two-fields" key={i}>
+                  <Field
+                    label={`Path time ${i + 1}`}
+                    type="number"
+                    value={v.time}
+                    onChange={(n: number) =>
+                      edit((p) => (p.study.load_path[i].time = n))
+                    }
+                  />
+                  <Field
+                    label={`Load factor ${i + 1}`}
+                    type="number"
+                    value={v.factor}
+                    onChange={(n: number) =>
+                      edit((p) => (p.study.load_path[i].factor = n))
+                    }
+                  />
+                </div>
+              ))}
+              <Button onClick={() => edit((p) => (p.study.load_path = []))}>
+                Use monotonic load
+              </Button>
+            </>
+          )}
+        </>
+      )}
       <label className="field">
         <span>Mesher</span>
         <SelectControl
@@ -439,7 +684,9 @@ export function StudyPanel({
             ? "I have reviewed the material, heat sources and temperature boundaries. Steady conduction and constant isotropic properties apply."
             : eigen
               ? "I have reviewed the material, supports and load case. Linear eigenmodes are idealized and have arbitrary amplitudes."
-              : "I have reviewed the supports, forces and material data. Small deformation, linear elasticity and negligible dynamic effects apply."}
+              : study.type === "nonlinear_static"
+                ? "I have reviewed the supports, load path and material curve conventions. Quasi-static loading and the selected deformation model apply; contact, damage and rate effects are excluded."
+                : "I have reviewed the supports, forces and material data. Small deformation, linear elasticity and negligible dynamic effects apply."}
         </span>
       </label>
       <Button
@@ -465,6 +712,43 @@ export function StudyPanel({
         <>
           {metric("Maximum displacement", result.max_displacement_mm, "mm")}
           {metric("Peak von Mises stress", result.max_stress_mpa, "MPa")}
+          {result.increments && (
+            <>
+              {metric(
+                "Final displacement",
+                result.final_max_displacement_mm,
+                "mm",
+              )}
+              {metric("Final peak stress", result.final_max_stress_mpa, "MPa")}
+              {metric(
+                "Equivalent plastic strain",
+                result.max_equivalent_plastic_strain,
+                "",
+              )}
+              <p className="muted">
+                Maximum values cover the full path. Select a load increment
+                above the viewport to inspect its field.
+              </p>
+              <table aria-label="Load history" className="study-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Load ×</th>
+                    <th>Probe mm</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.increments.map((v: any, i: number) => (
+                    <tr key={i}>
+                      <td>{v.time.toPrecision(3)}</td>
+                      <td>{v.load_factor.toPrecision(3)}</td>
+                      <td>{v.probe_displacement_mm.toPrecision(4)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
           {metric("Maximum temperature", result.max_temperature_c, "°C")}
           {metric("Minimum temperature", result.min_temperature_c, "°C")}
           {(result.frequencies_hz ?? result.buckling_factors ?? []).map(
@@ -487,6 +771,14 @@ export function StudyPanel({
                 onClick={() => onField("displacement")}
               >
                 View displacement
+              </Button>
+            )}
+            {result.max_equivalent_plastic_strain != null && (
+              <Button
+                className="wide-button"
+                onClick={() => onField("plastic_strain")}
+              >
+                View plastic strain
               </Button>
             )}
             {result.max_temperature_c != null && (
@@ -548,6 +840,9 @@ export function StudyPanel({
         </>
       ) : (
         <p className="empty-note">No study results.</p>
+      )}
+      {state.analysis_state !== "unsaved_changes" && (
+        <StudyComparison studies={state.studies} />
       )}
     </>
   );

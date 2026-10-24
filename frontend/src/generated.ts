@@ -45,6 +45,11 @@ export type Hole = {
   spacing: [number, number];
 };
 
+export type LoadPoint = {
+  time: number;
+  factor: number;
+};
+
 export type Material = {
   name: string;
   youngs_modulus_mpa: number | null;
@@ -58,6 +63,8 @@ export type Material = {
   process: string | null;
   condition: string | null;
   property_sources: Record<string, string>;
+  plastic_curve: PlasticPoint[];
+  plastic_curve_source: string | null;
 };
 
 export type NativeFeature = {
@@ -78,6 +85,11 @@ export type Parameter = {
 export type Placement = {
   translation: [number, number, number];
   rotation: [number, number, number];
+};
+
+export type PlasticPoint = {
+  stress_mpa: number;
+  plastic_strain: number;
 };
 
 export type Profile = {
@@ -120,6 +132,7 @@ export type Requirement = {
   axis: "X" | "Y" | "Z";
   reference: string | null;
   enabled: boolean;
+  study_id: string | null;
 };
 
 export type Study = {
@@ -152,6 +165,10 @@ export type Study = {
   stress_probe_mm: [number, number, number] | null;
   probe_point_mm: [number, number, number] | null;
   assumptions_confirmed: boolean;
+  large_deformation: boolean;
+  nonlinear_increments: number;
+  max_nonlinear_increments: number;
+  load_path: LoadPoint[];
 };
 
 export type TemperatureBoundary = {
@@ -172,4 +189,6 @@ export type Project = {
   material: Material | null;
   requirements: Requirement[];
   study: Study;
+  named_studies: Record<string, Study>;
+  active_study_id: string;
 };

@@ -1542,3 +1542,36 @@ option {
   background: rgba(128, 128, 128, 0.2);
   color: var(--text);
 }
+
+.study-table-scroll {
+  overflow-x: auto;
+}
+.study-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 10px 0;
+}
+.study-table th,
+.study-table td {
+  padding: 7px 5px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: top;
+}
+.study-table th:first-child,
+.study-table td:first-child {
+  text-align: left;
+}
+.study-table small {
+  display: block;
+  font-weight: normal;
+  color: var(--muted);
+}
+.study-comparison {
+  margin-top: 18px;
+}
+.study-comparison summary {
+  cursor: pointer;
+  font-size: 12px;
+}

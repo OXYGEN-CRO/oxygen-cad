@@ -3,6 +3,7 @@ import csv
 import html
 import json
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -54,14 +55,15 @@ def render(store, project):
 def export_bundle(store, project):
     from .geometry import check
     build_path = store.cache / "builds" / geometry_key(project) / "build.json"
-    analysis_path = store.cache / "studies" / study_key(project) / "result.json"
     if not build_path.exists():
         raise ValueError("Current geometry has not built successfully; export cannot use an older revision")
-    state = {"build": json.loads(build_path.read_text()), "analysis": json.loads(analysis_path.read_text()) if analysis_path.exists() else None}
-    state["analysis_state"] = state["analysis"]["state"] if state["analysis"] else "stale" if (store.cache / "last-study.json").exists() else "not_run"
+    studies = store.study_states(project)
+    selected = studies[project.active_study_id]
+    state = {"build": json.loads(build_path.read_text()), "analysis": selected["result"], "analysis_state": selected["state"]}
     checks = check(store, project)
-    folder = store.cache / "exports" / str(project.revision)
-    folder.mkdir(parents=True, exist_ok=True)
+    parent = store.cache / "exports" / str(project.revision)
+    parent.mkdir(parents=True, exist_ok=True)
+    folder = Path(tempfile.mkdtemp(prefix="release-", dir=parent))
     for name in ("step", "stl"):
         shutil.copy2(store.artifact(state["build"]["artifacts"][name]), folder / f"part.{name}")
     for kind, filename in (("native_design", "part.solidcraft"), ("engine_script", "engine-script.json")):
@@ -69,20 +71,38 @@ def export_bundle(store, project):
             shutil.copy2(store.artifact(state["build"]["artifacts"][kind]), folder / filename)
     write_json(folder / "o3d.json", project.model_dump(mode="json"))
     analysis = state["analysis"]
-    if analysis:
-        study_folder = folder / "analysis"
-        study_folder.mkdir(exist_ok=True)
-        write_json(study_folder / "result.json", analysis)
-        shutil.copy2(store.artifact(analysis["field_artifact"]), study_folder / "field.json")
-        for name, relative in analysis.get("artifacts", {}).items():
+    study_packages = {}
+    portable_studies = {}
+    for study_id, record in studies.items():
+        current_result = record["result"]
+        if current_result is None:
+            continue
+        package_folder = "analysis" if study_id == project.active_study_id else f"analyses/{study_id}"
+        study_packages[study_id] = package_folder
+        study_folder = folder / package_folder
+        study_folder.mkdir(parents=True, exist_ok=True)
+        names = {relative:{"study_package":"study-package.json", "region_map":"region-map.json"}.get(name,name)
+                 for name,relative in current_result.get("artifacts",{}).items()}
+        names[current_result["field_artifact"]] = "field.json"
+        def portable(value, prefix=""):
+            if isinstance(value,dict):return {k:portable(v,prefix) for k,v in value.items()}
+            if isinstance(value,list):return [portable(v,prefix) for v in value]
+            if isinstance(value,str) and value in names:return prefix+names[value]
+            return value
+        write_json(study_folder / "result.json", portable(current_result))
+        portable_studies[study_id] = portable(current_result,package_folder+"/")
+        shutil.copy2(store.artifact(current_result["field_artifact"]), study_folder / "field.json")
+        for name, relative in current_result.get("artifacts", {}).items():
             target_name = {"study_package":"study-package.json", "region_map":"region-map.json"}.get(name, name)
             target = (study_folder / target_name).resolve()
             if not target.is_relative_to(study_folder.resolve()):
                 raise ValueError("Analysis artifact name escapes the release package")
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(store.artifact(relative), target)
+    report_studies = {i:{**record,"result":portable_studies.get(i)} for i,record in studies.items()}
     report = {"project": project.name, "revision": project.revision, "geometry_key": geometry_key(project), "study_key": study_key(project),
-              "geometry_engine": state["build"].get("engine"), "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": analysis,
+              "geometry_engine": state["build"].get("engine"), "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": portable_studies.get(project.active_study_id),
+              "active_study_id": project.active_study_id, "studies":report_studies, "study_packages":study_packages,
               "dimensions_mm": state["build"]["dimensions_mm"], "volume_mm3": state["build"]["volume_mm3"]}
     write_json(folder / "report.json", report)
     (folder / "report.html").write_text("<!doctype html><meta charset='utf-8'><title>Oxygen CAD engineering report</title>"
@@ -100,4 +120,5 @@ def export_bundle(store, project):
         for path in sorted(folder.rglob("*")):
             if path.is_file() and path != folder / "release.zip":
                 archive.write(path, path.relative_to(folder))
-    return {"revision": project.revision, "artifact": f"exports/{project.revision}/release.zip", "report": f"exports/{project.revision}/report.html"}
+    return {"revision": project.revision, "artifact": str((folder / "release.zip").relative_to(store.cache)),
+            "report": str((folder / "report.html").relative_to(store.cache))}

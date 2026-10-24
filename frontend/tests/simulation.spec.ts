@@ -163,3 +163,161 @@ test("thermal solve, temperature field, energy balance and stale edit", async ({
   ).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test("named studies preserve independent loads, results and comparison", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await fixture(request);
+  await study(page);
+  await page
+    .getByRole("button", { name: "Run static study", exact: true })
+    .click();
+  await expect(
+    page.getByText("Maximum displacement", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  await expect(
+    page.getByRole("button", { name: "Run static study", exact: true }),
+  ).toBeEnabled();
+  const first = (await (await request.get("/api/state")).json()).analysis
+    .max_displacement_mm;
+  await page
+    .getByRole("button", { name: "Duplicate study", exact: true })
+    .click();
+  await expect(
+    page.getByText("Maximum displacement", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Study name", { exact: true }).fill("Double load");
+  await page.getByLabel("Force Z", { exact: true }).fill("-20");
+  await page.locator(".assumptions input").check();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByLabel("Saved study", { exact: true })).toHaveValue(
+    "study_1",
+  );
+  await page
+    .getByRole("button", { name: "Run static study", exact: true })
+    .click();
+  await expect(
+    page.getByText("Maximum displacement", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  await expect(
+    page.getByRole("button", { name: "Run static study", exact: true }),
+  ).toBeEnabled();
+  let state = await (await request.get("/api/state")).json();
+  expect(state.analysis.max_displacement_mm / first).toBeCloseTo(2, 2);
+  await page.getByText("Compare studies", { exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "Study comparison", exact: true }),
+  ).toContainText("Double load");
+  await page.getByLabel("Saved study", { exact: true }).selectOption("default");
+  await expect(
+    page.getByText("Maximum displacement", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByLabel("Force Z", { exact: true })).toHaveValue("-10");
+  await expect(
+    page.getByText("Maximum displacement", { exact: true }),
+  ).toBeVisible();
+  state = await (await request.get("/api/state")).json();
+  expect(state.analysis.max_displacement_mm).toBeCloseTo(first, 5);
+  expect(state.studies.study_1.result.max_displacement_mm / first).toBeCloseTo(
+    2,
+    2,
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Project tools", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Study setup", exact: true })
+    .click();
+  await expect(page.getByLabel("Saved study", { exact: true })).toHaveValue(
+    "default",
+  );
+  await expect(page.getByLabel("Saved study", { exact: true })).toContainText(
+    "Double load",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("plastic nonlinear setup, load/unload history and increment fields", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await fixture(request);
+  await study(page);
+  await page
+    .getByLabel("Study type", { exact: true })
+    .selectOption("nonlinear_static");
+  await page.getByLabel("Poisson ratio", { exact: true }).fill("0");
+  await page.getByLabel("Force X", { exact: true }).fill("10800");
+  await page.getByLabel("Force Z", { exact: true }).fill("0");
+  await page.getByLabel("Large deformation", { exact: true }).uncheck();
+  await page.getByLabel("Load increments", { exact: true }).fill("4");
+  await page
+    .getByRole("button", { name: "Add hardening point", exact: true })
+    .click();
+  await page.getByLabel("Yield stress 1", { exact: true }).fill("250");
+  await page
+    .getByRole("button", { name: "Add hardening point", exact: true })
+    .click();
+  await page.getByLabel("Yield stress 2", { exact: true }).fill("350");
+  await page.getByLabel("Plastic strain 2", { exact: true }).fill("0.01");
+  await page
+    .getByLabel("Plastic curve source", { exact: true })
+    .fill(
+      "Synthetic analytical fixture: true stress/equivalent plastic strain, not production data",
+    );
+  await page
+    .getByRole("button", { name: "Add load / unload path", exact: true })
+    .click();
+  await page.locator(".assumptions input").check();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.getByRole("button", { name: "Run study", exact: true }).click();
+  await expect(
+    page.getByText("Final displacement", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  await expect(
+    page.getByRole("button", { name: "Run study", exact: true }),
+  ).toBeEnabled();
+  const state = await (await request.get("/api/state")).json();
+  expect(state.analysis.completed_load_path).toBe(true);
+  expect(state.analysis.max_displacement_mm).toBeGreaterThan(0.25);
+  expect(state.analysis.final_max_displacement_mm).toBeLessThan(0.17);
+  await expect(
+    page
+      .getByRole("table", { name: "Load history", exact: true })
+      .locator("tbody tr"),
+  ).toHaveCount(4);
+  await page
+    .getByRole("button", { name: "View plastic strain", exact: true })
+    .click();
+  await page.getByLabel("Load increment", { exact: true }).selectOption("1");
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-ready",
+    "true",
+  );
+  await expect(
+    page.getByText("Equivalent plastic strain · dimensionless", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Deformation scale", { exact: true })
+    .press("ArrowRight");
+  await page.getByRole("button", { name: "Fit model", exact: true }).click();
+  await page.screenshot({
+    path: "test-results/study-nonlinear.png",
+    fullPage: true,
+  });
+  await page.getByLabel("Load increment", { exact: true }).selectOption("3");
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-ready",
+    "true",
+  );
+  expect(errors).toEqual([]);
+});

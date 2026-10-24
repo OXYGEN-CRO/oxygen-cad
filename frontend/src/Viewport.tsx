@@ -318,9 +318,11 @@ export function Viewport(props: Props) {
           const values = ids.map((id) =>
             props.field === "stress"
               ? (field.stress_mpa?.[id] ?? 0)
-              : props.field === "temperature"
-                ? field.temperature_c[id]
-                : Math.hypot(...(vectors[id] ?? [0, 0, 0])),
+              : props.field === "plastic_strain"
+                ? field.equivalent_plastic_strain[id]
+                : props.field === "temperature"
+                  ? field.temperature_c[id]
+                  : Math.hypot(...(vectors[id] ?? [0, 0, 0])),
           );
           const low =
             props.field === "temperature"
@@ -347,9 +349,11 @@ export function Viewport(props: Props) {
               const value =
                 props.field === "stress"
                   ? (field.stress_mpa?.[id] ?? 0)
-                  : props.field === "temperature"
-                    ? field.temperature_c[id]
-                    : Math.hypot(...u);
+                  : props.field === "plastic_strain"
+                    ? field.equivalent_plastic_strain[id]
+                    : props.field === "temperature"
+                      ? field.temperature_c[id]
+                      : Math.hypot(...u);
               color.setHSL(
                 (1 - Math.min(Math.max((value - low) / span, 0), 1)) * 0.65,
                 0.85,

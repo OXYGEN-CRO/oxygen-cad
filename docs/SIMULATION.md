@@ -14,7 +14,7 @@ adapter. Existing projects default to `linear_static`; added schema fields have
 defaults and do not require rewriting the user's source document by hand.
 
 Numerical examples are available through `init --template modal`, `buckling`,
-`thermal` and `thermal-stress` in a new project, as well as the existing `cantilever`.
+`thermal`, `thermal-stress`, `nonlinear` and `plastic-unload` in a new project, as well as the existing `cantilever`.
 Their values are explicit analytical test inputs, not certified production data.
 The prepared [physical correlation protocol](PHYSICAL-VALIDATION.md) records what
 must be measured before claiming physical validation.
@@ -26,7 +26,7 @@ must be measured before claiming physical validation.
 | `buckling` | Experimental, executable | Fixed-free column compared with Euler load; ideal eigenvalue analysis, not imperfect nonlinear collapse |
 | `thermal` | Experimental, executable | Prescribed temperatures and total surface heat power; conduction/probe/heat balance checked through both meshers |
 | `thermal_stress` | Experimental, executable | Temperature solve followed by mechanical solve on the same mesh; thermal-expansion reference test |
-| `nonlinear_static` | Not implemented | Constitutive curves, large displacement, contact, increments and force-displacement validation |
+| `nonlinear_static` | Experimental, executable subset | Large deformation or isotropic plastic hardening, prescribed load history, adaptive increments, full-path output; elastica and synthetic plastic unload references; no contact/damage |
 | `quasistatic_event` | Not implemented | Event adapter, contact, energy and mass-scaling sensitivity |
 | `dynamic_event` | Not implemented | Explicit solver adapter, timestep/contact/damage and physical drop correlation |
 | `shape_optimization` | Not implemented | Optimization backend, preserve regions, filters, manufacturability, CAD reconstruction and reanalysis |
@@ -35,10 +35,35 @@ must be measured before claiming physical validation.
 
 Not-implemented studies are explicitly unavailable in the manifest and disabled in
 the studio selector; the CLI refuses them rather than returning synthetic results.
-The five current adapters support one connected solid, planar boundary regions and
+The six current adapters support one connected solid, planar boundary regions and
 quadratic tetrahedra. Assemblies, bolts/contact, shells/beams, anisotropy, calibrated
-printed-material laws, convection/radiation and preloaded modes remain outside this
+printed-material laws, contact/damage, convection/radiation and preloaded modes remain outside this
 implementation. They are still part of the target where required.
+
+## Saved studies and comparisons
+
+The primary study remains in `study` for compatibility. `named_studies` stores up
+to 30 additional studies by stable ID, with `active_study_id` selecting one.
+Materials and geometry are project-wide; loads, supports, mesh and numerical
+settings belong to each study. Duplication retains inputs and clears assumption
+confirmation. Requirements with `study_id: null` apply to all studies; an explicit
+ID scopes a simulation requirement to that study. Geometry checks stay global.
+
+```sh
+o3d study clone service_load --name 'Service load' --expected-revision 1
+o3d study select default --expected-revision 2
+o3d simulate --study-id service_load --json
+o3d study compare default service_load
+```
+
+Commands use the same revision-checked document path as the studio. A one-off
+`simulate --study-id` does not change saved selection. Inspect `studies --json`
+for inputs, setup errors, per-study signatures, states and current results. Changing
+one study's load invalidates only that study; changing shared material/geometry
+invalidates every dependent study. Names alone do not invalidate numerical results.
+The studio creates/duplicates/selects studies and compares current quantities with
+units and result states. Results disappear during unsaved edits. A comparison does
+not assert that different loads/supports describe an equivalent physical problem.
 
 ## Input and unit contract
 
@@ -56,6 +81,24 @@ These source claims are retained, not authenticated or converted to a certificat
 - Thermal stress additionally requires thermal expansion in 1/K and an explicitly
   supplied stress-free reference temperature. Temperature fields transfer node for
   node to the subsequent mechanical solve.
+- Nonlinear static: `large_deformation` selects geometric nonlinearity;
+  `nonlinear_increments` bounds the maximum normalized load increment and defines
+  observation times. `max_nonlinear_increments` bounds adaptive attempts. An empty
+  `load_path` means `(time,factor)=(0,0)..(1,1)`; otherwise supply strictly increasing
+  normalized times starting at zero load and ending at time one. Every force is
+  multiplied by the same piecewise-linear amplitude; forces retain world-frame
+  directions (dead nodal loading), not follower-pressure semantics. Time is path
+  position, not a physical transient. Output includes every requested observation
+  and path kink. Incomplete paths refuse; adaptive internal increments remain in
+  the raw STA/log. Mesh convergence compares the same full-path probe observations.
+- Optional `material.plastic_curve` stores true von Mises stress in MPa versus
+  equivalent plastic strain. At least two points are required, first plastic strain
+  zero, strictly increasing strain and nondecreasing stress. Retain a separate
+  `plastic_curve_source` explaining convention/data provenance. No conversion from
+  engineering stress/total strain is guessed. This is isotropic hardening, with no
+  kinematic hardening, cyclic calibration, damage, fracture, hyperelasticity or
+  rate/temperature dependence. Small-deformation nonlinear studies require a plastic
+  curve. Other adapters reject plastic curves rather than silently ignoring them.
 - Decks consistently use mm, N, s, MPa, tonne and °C: density converts by `1e-9`,
   heat power by `1000`, and conductivity retains the numerical W/(m K) value.
   No conductivity, expansion, load or reference temperature is inferred.
@@ -97,7 +140,7 @@ identities; the study signature covers them as well as study/material/geometry a
 relevant requirement inputs. Changing backend code/binary invalidates old results.
 
 Static results expose displacement, screening stress, fixed-point probes, reaction
-force/moment balance and mesh changes. Thermal results expose temperature, heat
+force/moment balance and mesh changes. Nonlinear results preserve each load observation, displacement/stress/plastic-strain fields, peak-over-path metrics and distinct final-state metrics. Requirement displacement/stress checks use the whole path, so unloading cannot hide an earlier overload. Large-deformation moment balance uses deformed node positions. Thermal results expose temperature, heat
 reactions and heat balance. Eigenstudies expose requested values and complete mode
 vectors; amplitudes are explicitly arbitrary. The studio renders temperature
 ranges including negative values and allows selection of a mode with a relative
@@ -110,9 +153,7 @@ proof of small strain/rotation. Requirements unsupported by the selected study a
 listed as not evaluated. Named stress limits require a stress probe; singular peak
 stress is not silently treated as a strength certificate.
 
-The release ZIP includes the current study's input package, analysis STEP, normalized
-fields, meshes, decks, raw outputs and logs under `analysis/`, alongside the existing
-design/BOM/report. A successful export does not turn a failed or inconclusive study
+The release ZIP includes the active current study under `analysis/` and other current studies under `analyses/<id>/`: input packages, analysis STEP, normalized fields (including nonlinear observations), meshes, decks, raw outputs and logs. `report.json` records all study states and package locations. Stale studies have no numerical package. Each export gets a fresh directory, preventing a previous export from leaking stale evidence into the ZIP. These accompany the design/BOM/report. A successful export does not turn a failed or inconclusive study
 into an engineering pass. Preserve original imported assets for editable references.
 
 ## Verification commands
@@ -129,18 +170,19 @@ and checks analytical modal, conduction, thermal-expansion and buckling response
 energy balance, unsupported/missing input refusal, invalidation and release content.
 The pre-existing static test remains. Browser tests exercise actual modal/thermal
 jobs, fields, persistence, stale results, native-command editing and the rest of
-the studio through a disposable project. Tests never edit a user's design.
+the studio through a disposable project. Named-study tests check doubled-load response, independent invalidation, comparison, scoped requirements and releases. Nonlinear tests compare against an independent elastica boundary-value solution and analytical synthetic plastic loading/unloading, including load-step sensitivity and incomplete-history refusal. Browser tests configure plasticity and inspect load-increment fields. Tests never edit a user's design.
 
 ## Remaining completion requirements
 
-- [ ] Persistent named studies/load cases and comparisons; richer requirement scope.
+- [x] Persistent named studies, independent loads/results, current-result comparison and scoped simulation requirements. Independently varying loads within a shared study remain separate named studies.
 - [ ] Broader geometry/edit fixtures, ten-part mesher bake-off and independent FE
   comparison beyond the analytical cases.
 - [ ] Mode-shape correlation during refinement for repeated/crossing modes;
   currently comparisons use mode order and report that limitation.
 - [ ] Assembly load paths, connectors/contact, material frames and anisotropic/process
   datasets, nonlinear laws and failure criteria.
-- [ ] The remaining six study workflows in the table, each with its own evidence.
+- [x] Nonlinear single-solid large-deformation/plastic-hardening slice, full load-path evidence and numerical reference cases.
+- [ ] The remaining five study branches and missing nonlinear contact/material capabilities in the table, each with its own evidence.
 - [ ] MuJoCo/system-model actuator loads, frame-consistent transfer into FEA and
   measured actuator/contact calibration; rigid-body motion is not stress analysis.
 - [ ] Parameter/topology optimization, fatigue/duty-cycle and uncertainty/sensitivity.

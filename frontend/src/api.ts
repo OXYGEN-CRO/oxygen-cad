@@ -3,7 +3,12 @@ import type {
   Study as GeneratedStudy,
 } from "./generated";
 export type DisplayField =
-  "solid" | "stress" | "displacement" | "temperature" | "mode";
+  | "solid"
+  | "stress"
+  | "displacement"
+  | "temperature"
+  | "mode"
+  | "plastic_strain";
 export async function api(path: string, options: RequestInit = {}) {
   const response = await fetch(`/api/${path}`, options);
   if (!response.ok) {
@@ -33,34 +38,41 @@ export type Feature = {
   suppressed: boolean;
   [key: string]: any;
 };
+export type Study = Omit<
+  GeneratedStudy,
+  | "forces"
+  | "stress_probe_mm"
+  | "probe_point_mm"
+  | "temperatures"
+  | "heat_sources"
+> & {
+  fixed_faces: string[];
+  forces: { face: string; vector_n: number[] }[];
+  mesh_size_mm: number;
+  refinement_steps: number;
+  convergence_tolerance: number;
+  stress_probe_mm: number[] | null;
+  probe_point_mm: number[] | null;
+  temperatures: { face: string; temperature_c: number | null }[];
+  heat_sources: { face: string; power_w: number | null }[];
+  assumptions_confirmed: boolean;
+};
 export type Project = Omit<
   GeneratedProject,
-  "features" | "references" | "placement" | "material" | "study"
+  | "features"
+  | "references"
+  | "placement"
+  | "material"
+  | "study"
+  | "named_studies"
 > & {
   features: Feature[];
   references: any[];
   placement: { translation: number[]; rotation: number[] };
   material: any;
   requirements: any[];
-  study: Omit<
-    GeneratedStudy,
-    | "forces"
-    | "stress_probe_mm"
-    | "probe_point_mm"
-    | "temperatures"
-    | "heat_sources"
-  > & {
-    fixed_faces: string[];
-    forces: { face: string; vector_n: number[] }[];
-    mesh_size_mm: number;
-    refinement_steps: number;
-    convergence_tolerance: number;
-    stress_probe_mm: number[] | null;
-    probe_point_mm: number[] | null;
-    temperatures: { face: string; temperature_c: number | null }[];
-    heat_sources: { face: string; power_w: number | null }[];
-    assumptions_confirmed: boolean;
-  };
+  study: Study;
+  named_studies: Record<string, Study>;
 };
 export type Face = {
   id: string;
@@ -90,6 +102,17 @@ export type Selection = {
   reference?: string;
 };
 export type State = {
+  studies: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      type: string;
+      key: string;
+      state: string;
+      result: any;
+    }
+  >;
   simulation_capabilities: {
     studies: { type: string; label: string; status: string }[];
     scope: string;

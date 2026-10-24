@@ -120,6 +120,11 @@ class ReferenceAsset(Model):
     check_interference: bool = True
 
 
+class PlasticPoint(Model):
+    stress_mpa: float = Field(gt=0)
+    plastic_strain: float = Field(ge=0)
+
+
 class Material(Model):
     name: str = "User-defined material"
     youngs_modulus_mpa: float | None = Field(default=None, gt=0)
@@ -133,6 +138,18 @@ class Material(Model):
     process: str | None = None
     condition: str | None = None
     property_sources: dict[str, str] = Field(default_factory=dict)
+    plastic_curve: list[PlasticPoint] = Field(default_factory=list, max_length=100)
+    plastic_curve_source: str | None = Field(default=None, min_length=1, pattern=r"\S")
+
+    @model_validator(mode="after")
+    def valid_plastic_curve(self):
+        if self.plastic_curve:
+            if len(self.plastic_curve) < 2 or self.plastic_curve[0].plastic_strain != 0:
+                raise ValueError("Plasticity needs at least two points starting at zero plastic strain")
+            for a, b in zip(self.plastic_curve, self.plastic_curve[1:]):
+                if b.plastic_strain <= a.plastic_strain or b.stress_mpa < a.stress_mpa:
+                    raise ValueError("Plastic strain must increase and isotropic hardening stress cannot decrease")
+        return self
 
 
 class Requirement(Model):
@@ -142,6 +159,7 @@ class Requirement(Model):
     axis: Literal["X", "Y", "Z"] = "X"
     reference: str | None = None
     enabled: bool = True
+    study_id: Identifier | None = None
 
 
 class Force(Model):
@@ -163,10 +181,15 @@ StudyType = Literal["linear_static", "modal", "buckling", "thermal", "thermal_st
                     "quasistatic_event", "dynamic_event", "shape_optimization", "electronics_cooling", "injection_molding"]
 
 
+class LoadPoint(Model):
+    time: float = Field(ge=0, le=1)
+    factor: float
+
+
 class Study(Model):
     schema_version: Literal[1] = 1
     type: StudyType = "linear_static"
-    name: str = "Engineering study"
+    name: str = Field(default="Engineering study", min_length=1, max_length=200, pattern=r"\S")
     fixed_faces: list[str] = Field(default_factory=list)
     forces: list[Force] = Field(default_factory=list)
     temperatures: list[TemperatureBoundary] = Field(default_factory=list)
@@ -182,6 +205,19 @@ class Study(Model):
     stress_probe_mm: Vec3 | None = None
     probe_point_mm: Vec3 | None = None
     assumptions_confirmed: bool = False
+    large_deformation: bool = True
+    nonlinear_increments: int = Field(default=10, ge=2, le=100)
+    max_nonlinear_increments: int = Field(default=200, ge=2, le=1000)
+    load_path: list[LoadPoint] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def valid_load_path(self):
+        if self.load_path:
+            if self.load_path[0].time != 0 or self.load_path[0].factor != 0 or self.load_path[-1].time != 1:
+                raise ValueError("Static load paths start at time/factor zero and end at time one")
+            if any(b.time <= a.time for a,b in zip(self.load_path,self.load_path[1:])):
+                raise ValueError("Load path times must strictly increase")
+        return self
 
 
 class Project(Model):
@@ -197,9 +233,20 @@ class Project(Model):
     material: Material | None = None
     requirements: list[Requirement] = Field(default_factory=list)
     study: Study = Field(default_factory=Study)
+    named_studies: dict[Identifier, Study] = Field(default_factory=dict, max_length=30)
+    active_study_id: Identifier = "default"
 
     @model_validator(mode="after")
     def validate_graph(self):
+        if "default" in self.named_studies:
+            raise ValueError("The default study is stored in study, not named_studies")
+        if self.active_study_id != "default" and self.active_study_id not in self.named_studies:
+            raise ValueError("The active study does not exist")
+        for requirement in self.requirements:
+            if requirement.study_id is not None and requirement.kind in ("max_mass", "max_dimension", "min_clearance"):
+                raise ValueError("Geometry requirements are global; only simulation requirements can be scoped to a study")
+            if requirement.study_id not in (None, "default") and requirement.study_id not in self.named_studies:
+                raise ValueError(f"Requirement {requirement.id} refers to a missing study")
         ids = [f.id for f in self.features]
         if len(ids) != len(set(ids)):
             raise ValueError("Feature IDs must be unique")
@@ -223,6 +270,23 @@ class Project(Model):
             if r.file != f"assets/{r.sha256}.step":
                 raise ValueError("Reference files must be content-addressed STEP assets")
         return self
+
+    def study_config(self, study_id: str | None = None) -> Study:
+        study_id = self.active_study_id if study_id is None else study_id
+        if study_id == "default":
+            return self.study
+        if study_id not in self.named_studies:
+            raise ValueError(f"Study {study_id} does not exist")
+        return self.named_studies[study_id]
+
+    def for_study(self, study_id: str | None = None) -> Project:
+        """An analysis view; the saved document keeps every independent study."""
+        study_id = self.active_study_id if study_id is None else study_id
+        result = self.model_copy(deep=True)
+        result.study = self.study_config(study_id).model_copy(deep=True)
+        result.active_study_id = "default"
+        result.requirements = [r.model_copy(deep=True) for r in self.requirements if r.study_id in (None, study_id)]
+        return result
 
     def resolve(self, scalar: Scalar) -> float:
         if isinstance(scalar, str):
@@ -259,6 +323,7 @@ class Job(Model):
     id: str
     kind: Literal["build", "check", "simulate", "render", "export"]
     revision: int
+    study_id: str | None = None
     state: Literal["queued", "running", "succeeded", "failed", "cancelled"] = "queued"
     created_at: str
     started_at: str | None = None
@@ -279,14 +344,16 @@ def geometry_key(project: Project) -> str:
                    "placement": project.placement.model_dump()})
 
 
-def study_key(project: Project) -> str:
+def study_key(project: Project, study_id: str | None = None) -> str:
     from .analysis import solver_identity
     try:
         runtime = solver_identity()
     except (RuntimeError, OSError):
         runtime = {"name": "CalculiX", "available": False}
+    study_id = project.active_study_id if study_id is None else study_id
     return digest({"geometry": geometry_key(project), "material": project.material.model_dump() if project.material else None,
-                   "study": project.study.model_dump(), "requirements": [r.model_dump() for r in project.requirements if r.kind in ("max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress")], "solver": runtime})
+                   "study_id": study_id, "study": project.study_config(study_id).model_dump(exclude={"name"}),
+                   "requirements": [r.model_dump() for r in project.requirements if r.study_id in (None, study_id) and r.kind in ("max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress")], "solver": runtime})
 
 
 def verification_key(project: Project) -> str:
