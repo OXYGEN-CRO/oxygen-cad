@@ -9,6 +9,7 @@ async function beginOperation(page, request, label, timeout, evidenceDir) {
   const before = new Set((await initial.json()).jobs.map((job) => job.id));
   const deadline = Date.now() + timeout;
   const writes = [];
+  const stateReadErrors = [];
   let state;
   const responseFailure = async (response) => {
     if (response.request().method() === "GET" || response.ok()) return;
@@ -20,9 +21,19 @@ async function beginOperation(page, request, label, timeout, evidenceDir) {
     try {
       while (Date.now() < deadline) {
         if (writes.length) throw Error("Application write failed");
-        const response = await request.get("/api/state", {
-          timeout: Math.max(1, Math.min(10000, deadline - Date.now())),
-        });
+        let response;
+        try {
+          response = await request.get("/api/state", {
+            timeout: Math.max(1, Math.min(10000, deadline - Date.now())),
+          });
+        } catch (error) {
+          // A synchronous native command can keep state reads busy on two CPUs.
+          // Its overall deadline still applies; server errors and failed jobs do not retry.
+          if (error.name !== "TimeoutError") throw error;
+          stateReadErrors.push(error.message.split("\n")[0]);
+          if (stateReadErrors.length > 3) stateReadErrors.shift();
+          continue;
+        }
         if (!response.ok()) throw Error(`State HTTP ${response.status()}`);
         state = await response.json();
         const failed = state.jobs.filter(
@@ -49,6 +60,7 @@ async function beginOperation(page, request, label, timeout, evidenceDir) {
         timeout_ms: timeout,
         error: String(error),
         writes,
+        state_read_errors: stateReadErrors,
         revision: state?.project?.revision,
         geometry_state: state?.geometry_state,
         jobs: state?.jobs?.map(
