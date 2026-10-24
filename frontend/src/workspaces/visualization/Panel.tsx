@@ -46,9 +46,11 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       ? props.selection
       : null;
   const cameraRef = useRef<CameraState | null>(null);
+  const activeOperations = useRef(0);
   const run = async (operation: string, input: JsonObject = {}) =>
     props.runDomain("visualization", operation, input);
   const act = async (fn: () => Promise<void>) => {
+    activeOperations.current++;
     setBusy(true);
     setStatus("");
     try {
@@ -57,7 +59,8 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       props.setError(String(error));
       setStatus(String(error));
     } finally {
-      setBusy(false);
+      activeOperations.current--;
+      setBusy(activeOperations.current > 0);
     }
   };
   const change = (patch: Partial<Scene>) =>
@@ -82,19 +85,24 @@ export default function VisualizationPanel(props: DomainPanelProps) {
     await props.saveDomain("visualization", data as unknown as JsonObject);
     setStatus("Scene and storyboards saved");
   };
-  const persistedData=JSON.stringify(props.domainData);
+  const persistedData = JSON.stringify(props.domainData);
   useEffect(() => {
-    setData(persistedData!=="{}"?JSON.parse(persistedData):dataDefault());
+    setData(persistedData !== "{}" ? JSON.parse(persistedData) : dataDefault());
   }, [persistedData]);
   useEffect(() => {
     let alive = true;
-    void act(async () => {
-      const g = await run("scene");
-      if (alive) setGeometry(g as unknown as NativeScene);
-      const c = await run("capabilities");
-      if (alive) setCaps(c);
-      const results = await run("gallery");
-      if (alive) setGallery(results.results as any[]);
+    queueMicrotask(() => {
+      if (alive)
+        void act(async () => {
+          const g = await run("scene");
+          if (!alive) return;
+          setGeometry(g as unknown as NativeScene);
+          const c = await run("capabilities");
+          if (!alive) return;
+          setCaps(c);
+          const results = await run("gallery");
+          if (alive) setGallery(results.results as any[]);
+        });
     });
     const capture = (event: Event) => {
       cameraRef.current = (event as CustomEvent).detail;
@@ -105,7 +113,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       window.removeEventListener(cameraEvent, capture);
       window.dispatchEvent(new CustomEvent(previewEvent, { detail: null }));
     };
-  }, [props.project.revision]);
+  }, [props.state.geometry_key]);
   useEffect(() => {
     const sampled =
       board && board.scene === scene.name
