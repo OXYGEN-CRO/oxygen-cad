@@ -7,6 +7,13 @@ use std::io::{self, BufRead, Read, Write};
 
 const REVISION: &str = "0520910bfd4ff6d24c850f4a20a604f6128f87bf";
 
+fn new_session(document: solidcraft_engine::doc::Document) -> Result<Session, String> {
+    let mut session = Session::new(document);
+    let host = solidcraft_engine::render::job::CpuHost::for_platform().map_err(|e| e.to_string())?;
+    session.set_render_job_host(Some(host)).map_err(|e| e.to_string())?;
+    Ok(session)
+}
+
 fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
     let command = request
         .get("command")
@@ -21,7 +28,7 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
         return Ok(json!({"licenses":solidcraft_engine::licences::all()}));
     }
     if command == "oxygen.reset" {
-        *session = Session::default();
+        *session = new_session(solidcraft_engine::doc::Document::new("Untitled"))?;
         return Ok(json!({"reset":true}));
     }
     // The host persists the upstream versioned document, not a second feature language.
@@ -31,7 +38,7 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
         let document = params.get("document").ok_or("Missing document")?;
         let document = solidcraft_engine::doc::Document::from_json(&document.to_string())
             .map_err(|e| e.to_string())?;
-        let mut restored = Session::new(document);
+        let mut restored = new_session(document)?;
         if let Some(context) = params.get("context") {
             restored.active_sketch = context.get("active_sketch").and_then(Value::as_u64);
             restored.active_component = context.get("active_component").and_then(Value::as_u64).unwrap_or(0);
@@ -78,6 +85,7 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
     // Upstream break_link detaches stored sketch geometry. Materialize the current
     // evaluated projection first, so a parameter edit cannot detach an older silhouette.
     // This is a host adapter correction; the pinned dependency remains unchanged.
+    let before_host_adapter = session.doc.clone();
     if command == "sketch.break_link" {
         if let Some(id) = session.active_sketch {
             let state = session.model.state();
@@ -101,9 +109,41 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
             "The timeline has failed features; repair it before saving or exporting".into(),
         );
     }
-    let result = session
-        .execute(command, request.get("params").unwrap_or(&json!({})))
-        .map_err(|e| e.to_string())?;
+    let mut result = match session.execute(command, request.get("params").unwrap_or(&json!({}))) {
+        Ok(result) => result,
+        Err(error) => {
+            if command == "sketch.break_link" {
+                session.doc = before_host_adapter;
+                session.refresh();
+            }
+            return Err(error.to_string());
+        }
+    };
+    // A divergence-theorem volume of an open shell is origin-dependent, not a
+    // physical volume. Preserve its measured area, but never publish fictitious mass.
+    if matches!(command, "inspect.measure" | "document.inspect") {
+        let world = session.world_state();
+        if let Some(rows) = result.get_mut("bodies").and_then(Value::as_array_mut) {
+            for row in rows.iter_mut() {
+                if let Some(body) = world.bodies.iter().find(|b| row["name"].as_str() == Some(&b.name)) {
+                    let open = !body.body.is_mesh() && body.body.validity().iter().any(|e| e.contains("not closed"));
+                    row["geometry_kind"] = json!(if body.body.is_mesh() { "mesh" } else if open { "surface" } else { "solid" });
+                    if open {
+                        row["volume_mm3"] = Value::Null;
+                        row["mass_g"] = Value::Null;
+                        row["center_of_mass"] = Value::Null;
+                    }
+                }
+            }
+            let volume: f64 = rows.iter().filter_map(|b| b["volume_mm3"].as_f64()).sum();
+            let mass: f64 = rows.iter().filter_map(|b| b["mass_g"].as_f64()).sum();
+            if result.get("total").is_some() {
+                result["total"]["volume_mm3"] = json!(volume);
+                result["total"]["mass_g"] = json!(mass);
+                result["total"]["volume_basis"] = json!("closed_bodies_only");
+            }
+        }
+    }
     let failures = errors(session);
     if !failures.is_empty() {
         return Err(format!(
@@ -115,7 +155,7 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
 }
 
 fn main() -> io::Result<()> {
-    let mut session = Session::default();
+    let mut session = new_session(solidcraft_engine::doc::Document::new("Untitled")).map_err(io::Error::other)?;
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     loop {

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "domain": "native-core",
+  "upstream_revision": "0520910bfd4ff6d24c850f4a20a604f6128f87bf",
+  "implementation": ["engine/src/main.rs", "src/o3d/model.py", "src/o3d/native_document.py", "src/o3d/native_routes.py", "src/o3d/native.py", "src/o3d/geometry.py"],
+  "rows": [
+    {"id":"MOD-001","status":"bounded","evidence":"Editable upstream sketch entities/profiles persist across command processes and cold opens; driving dimensions retain IDs. Graphical editing acceptance belongs to the modeling UI track."},
+    {"id":"MOD-002","status":"bounded","evidence":"Native solver constraints and driving dimension parameter graph persisted and measured through a width edit after cold reopen."},
+    {"id":"MOD-004","status":"bounded","evidence":"Host adapter materializes current evaluated projection before break_link; parameter-edited silhouette detach has an actual source-engine regression test. Arbitrary missing-link relink is not implemented."},
+    {"id":"MOD-008","status":"bounded","evidence":"Source-built box/extrusion fixtures and typed signed extrusions are independently verified through STEP. Not every advanced extent/taper/thin combination is accepted."},
+    {"id":"MOD-014","status":"bounded","evidence":"Two separately named solids persist and export to one compound plus distinct independently verified body STEP artifacts. Distinct body geometry is never fused."},
+    {"id":"MOD-017","status":"bounded","evidence":"Open patch is preserved as a surface, exports exact area-bearing STEP, exposes topology/mesh, and cannot claim physical solid volume or mass."},
+    {"id":"MOD-020","status":"bounded","evidence":"Immutable STL import embeds an explicit mesh body, validates triangle geometry independently, and reopens without fabricating exact B-rep."},
+    {"id":"MOD-022","status":"bounded","evidence":"Native parameter expressions are canonical. Legacy profile dimensions and extrusion distances migrate into the same native parameter graph and update measured geometry after reopen."},
+    {"id":"MOD-023","status":"bounded","evidence":"Native numeric timeline IDs, edits, rollback state and project-level immutable undo/redo persist through Store transactions. Host sketch-entry snapshot supports cancel across processes."},
+    {"id":"MOD-024","status":"bounded","evidence":"Native model.faces/model.edges inspection and persisted selection context exposed; independent viewport face signatures are kept alongside native topology names, never silently equated."},
+    {"id":"MOD-025","status":"bounded","evidence":"Each exact solid STEP is imported in independent OCCT and checked for validity, positive volume and measured agreement; surfaces use area checks and meshes use explicit topology diagnostics."},
+    {"id":"MOD-026","status":"bounded","evidence":"Hash-checked immutable project STEP import embeds native geometry. Arbitrary paths, fonts, scripts, process commands, external glTF buffers and unresolved nested native links are refused."},
+    {"id":"MOD-027","status":"bounded","evidence":"Versioned upstream JSON canonical document plus source-native container/STEP artifacts retain editable history and cold-open behavior. General file format breadth belongs to interop track."},
+    {"id":"MOD-028","status":"bounded","evidence":"HTTP and Python/CLI adapters use one Store optimistic transaction path. Failed operations leave project revision unchanged; context-only selections avoid geometry recompilation/invalidation."}
+  ],
+  "tests": ["tests/test_native_document.py", "tests/test_native_engine.py", "tests/test_engineering.py", "tests/test_editing_sequences.py"],
+  "executed": ["35 source-native/backend tests passed before the final surface-measurement and render-host increment", "12 expanded native-document tests passed with one surface-normalization test awaiting rebuilt binary"],
+  "remaining": [
+    "Full acceptance of every Modeling row requires the domain fixtures and graphical workflows; a registered command is not a passing parity claim.",
+    "Legacy features remain read-only migration provenance once the upstream document is canonical. Store guards and React presentation are integrated by platform/root owners.",
+    "Native body identity uses upstream feature/component IDs and persistent body names; renaming may change the derived scene key. Do not infer face/body correspondence from STEP traversal order.",
+    "Linked source imports are limited to one self-contained native design; nested external dependency packaging must be implemented before allowing that closure.",
+    "Native cancellation of an editing context imported without an Oxygen sketch-entry snapshot requires project undo.",
+    "Netgen and CAD remain in separate environments. Study support has its own multi-body/contact acceptance gates."
+  ]
+}

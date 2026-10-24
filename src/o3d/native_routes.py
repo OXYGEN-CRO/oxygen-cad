@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from .native_document import execute_native, inspect_native
+from .native_document import execute_native, inspect_native, query_native
 from .store import Conflict
 
 
@@ -17,6 +17,14 @@ class NativeCommandRequest(BaseModel):
 
 
 def mount_native_routes(app, store, jobs):
+    @app.get("/api/native/scene")
+    def native_scene():
+        try:
+            project = store.load()
+            return {"revision": project.revision, "scene": query_native(project, "oxygen.scene", {"mesh": True}, store)}
+        except (ValueError, RuntimeError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
     @app.get("/api/native/inspect")
     def native_inspect():
         try:

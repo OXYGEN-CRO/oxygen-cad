@@ -111,9 +111,12 @@ def compile_native(project: Project, destination: Path):
                 "origin": list(profile.origin), "x_dir": vector(x_dir), "y_dir": vector(y_dir)}})
             if profile.shape == "rectangle":
                 w, h = project.resolve(profile.width), project.resolve(profile.height)
-                session.execute("sketch.rectangle.two_point", {"p0": [-w/2, -h/2], "p1": [w/2, h/2]})
+                rectangle = session.execute("sketch.rectangle.center", {"center": [0, 0], "corner": [w/2, h/2]})
+                for side, dimension in (("bottom", profile.width), ("right", profile.height)):
+                    session.execute("sketch.dimension", {"entities": [rectangle["sides"][side]], "value": _resolved(project, dimension)})
             elif profile.shape == "circle":
-                session.execute("sketch.circle.center", {"center": [0, 0], "radius": project.resolve(profile.radius)})
+                circle = session.execute("sketch.circle.center", {"center": [0, 0], "radius": project.resolve(profile.radius)})
+                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "radius", "value": _resolved(project, profile.radius)})
             else:
                 session.execute("sketch.line", {"points": profile.points, "closed": True})
             session.execute("sketch.finish")
@@ -142,7 +145,7 @@ def compile_native(project: Project, destination: Path):
                             raise ValueError("The first extrusion must add material")
                         sketch(profiles[feature.profile], f"{feature.profile}_{feature.id}")
                         distance = project.resolve(feature.distance)
-                        session.execute("solid.extrude", {"distance": abs(distance), "direction": "negative" if distance < 0 else "positive",
+                        session.execute("solid.extrude", {"distance": _resolved(project, feature.distance), "direction": "positive",
                             "operation": "cut" if feature.operation == "cut" else "join" if before["body_count"] else "new",
                             "body_name": "Oxygen part", "name": feature.name or feature.id})
                         if abs(measure()["total"]["volume_mm3"] - before["total"]["volume_mm3"]) < 1e-8:
@@ -172,9 +175,10 @@ def compile_native(project: Project, destination: Path):
                                 point[other_axes[1]] += row * feature.spacing[1]
                                 delta = bd.Vector(point) - bd.Vector(origin)
                                 center = [delta.dot(plane.x_dir), delta.dot(plane.y_dir)]
-                                session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
+                                circle = session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
+                                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "diameter", "value": _resolved(project, feature.diameter)})
                         session.execute("sketch.finish")
-                        session.execute("solid.extrude", {"distance": depth, "operation": "cut", "name": feature.name or feature.id})
+                        session.execute("solid.extrude", {"distance": depth if feature.through else _resolved(project, feature.depth), "operation": "cut", "name": feature.name or feature.id})
                         if before["total"]["volume_mm3"] - measure()["total"]["volume_mm3"] < 1e-8:
                             raise ValueError("Hole pattern did not intersect the solid")
                     elif isinstance(feature, EdgeTreatment):
@@ -187,7 +191,7 @@ def compile_native(project: Project, destination: Path):
                             raise ValueError("Edge selection is empty")
                         edges = [vector(e.position_at(0.5)) for e in selected]
                         session.execute("solid." + feature.type, {"edges": edges,
-                            "radius" if feature.type == "fillet" else "distance": project.resolve(feature.size)})
+                            "radius" if feature.type == "fillet" else "distance": _resolved(project, feature.size)})
                 except Exception as error:
                     raise ValueError(f"Feature {feature.id}: {error}") from error
         measured = measure()
@@ -203,11 +207,16 @@ def compile_native(project: Project, destination: Path):
                 session.execute("solid.move", {"bodies": bodies, "axis": [direction.X(), direction.Y(), direction.Z()], "angle": math.degrees(angle)})
         if bodies and any(project.placement.translation):
             session.execute("solid.move", {"bodies": bodies, "translate": project.placement.translation})
-        if project.material is not None and bodies:
+        if project.native_document is None and project.material is not None and bodies:
             session.execute("material.create", {"name": "Oxygen project material", "density_g_cm3": project.material.density_g_cm3})
             session.execute("material.assign", {"bodies": bodies, "material": "Oxygen project material"})
         measured = measure()
+        placed_canonical = session.execute("oxygen.document.get")
         scene = session.execute("oxygen.scene")
+        for body in scene["bodies"]:
+            if body["geometry_kind"] != "mesh":
+                body["topology"] = {"faces": session.execute("model.faces", {"body": body["name"]})["faces"],
+                    "edges": session.execute("model.edges", {"body": body["name"]})["edges"]}
         recipe = {"commands": [c for c in session.commands if not c["command"].startswith(("oxygen.", "inspect.", "file."))]}
         brep_bodies = [b for b in scene["bodies"] if b["geometry_kind"] != "mesh"]
         if brep_bodies:
@@ -234,10 +243,35 @@ def compile_native(project: Project, destination: Path):
                     raise ValueError(f"Independent OCCT volume disagrees for {body['name']} ({volume_error:.3%})")
             elif shape.area <= 0:
                 raise ValueError(f"Surface {body['name']} has no independently measured area")
+            area_error = abs(shape.area - expected.get("area_mm2", shape.area)) / shape.area
+            if body["geometry_kind"] == "surface" and area_error > 1e-3:
+                raise ValueError(f"Independent OCCT area disagrees for surface {body['name']} ({area_error:.3%})")
             independent.append({"id": body["id"], "name": body["name"], "geometry_kind": body["geometry_kind"],
-                "volume_relative_error": volume_error, "area_mm2": shape.area, "step": path.name})
+                "volume_relative_error": volume_error, "area_relative_error":area_error,"area_mm2": shape.area, "step": path.name})
             shapes.append(shape)
+        mesh_audits = []
+        for body in scene["bodies"]:
+            if body["geometry_kind"] != "mesh":
+                continue
+            import numpy as np
+            import trimesh
+            mesh = body["mesh"]
+            vertices = np.asarray(mesh["positions"], dtype=float)
+            triangles = np.asarray(mesh["triangles"], dtype=int)
+            if vertices.ndim != 2 or vertices.shape[1] != 3 or not np.isfinite(vertices).all() or triangles.ndim != 2 or triangles.shape[1] != 3 or triangles.size == 0 or triangles.min() < 0 or triangles.max() >= len(vertices):
+                raise ValueError(f"Independent mesh validation rejected {body['name']}")
+            audited = trimesh.Trimesh(vertices=vertices, faces=triangles, process=False)
+            if not math.isfinite(audited.area) or audited.area <= 0:
+                raise ValueError(f"Independent mesh validation found no area on {body['name']}")
+            # STL triangle soups legitimately repeat vertex coordinates. Audit coordinate
+            # connectivity on a copy without altering native mesh indices or face groups.
+            welded = audited.copy()
+            welded.merge_vertices(digits_vertex=12)
+            mesh_audits.append({"id":body["id"],"name":body["name"],"triangles":len(triangles),
+                "area_mm2":float(audited.area),"raw_index_watertight":bool(audited.is_watertight),
+                "coordinate_audit_decimal_places":12,"watertight":bool(welded.is_watertight),"winding_consistent":bool(welded.is_winding_consistent)})
     shape = bd.Compound(children=shapes) if len(shapes) > 1 else shapes[0] if shapes else None
     errors = [v["volume_relative_error"] for v in independent if v["volume_relative_error"] is not None]
     return shape, metadata | {"independent_volume_relative_error": max(errors, default=0),
-        "independent_bodies": independent, "canonical": canonical, "scene": scene}
+        "independent_bodies": independent, "independent_meshes": mesh_audits, "canonical": canonical,
+        "placed_canonical":placed_canonical,"scene": scene}

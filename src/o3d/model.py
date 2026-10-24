@@ -181,6 +181,8 @@ class Project(Model):
                 raise ValueError("Native documents must retain their upstream format version")
             if not isinstance(self.native_document.get("features"), list) or not isinstance(self.native_document.get("params"), list):
                 raise ValueError("Expected an upstream native document with features and params")
+            if any(self.placement.translation) or any(self.placement.rotation):
+                raise ValueError("Canonical native documents store placement in their native timeline; use solid.move")
             if len(json.dumps(self.native_document, allow_nan=False).encode()) > 15 * 1024 * 1024:
                 raise ValueError("Native document exceeds 15 MiB")
         ids = [f.id for f in self.features]
@@ -257,7 +259,7 @@ def digest(value) -> str:
 def geometry_key(project: Project) -> str:
     return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-document-v2-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features] if project.native_document is None else None,
                    "native_document": project.native_document,
-                   "native_context": project.domains.get("modeling", {}).get("native_context") if project.native_document else None,
+                   "native_pending_moves": project.domains.get("modeling", {}).get("native_context", {}).get("pending_moves") if project.native_document else None,
                    "parameters": {k: v.value for k, v in project.parameters.items()},
                    "native_material": {"name": project.material.name, "density_g_cm3": project.material.density_g_cm3} if project.geometry_engine == "solidcraft" and project.material else None,
                    "references": [r.model_dump(exclude={"visible"}) for r in project.references],

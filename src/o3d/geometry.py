@@ -186,6 +186,7 @@ def build(store: Store, project: Project):
         shape, engine = compile_occt_shape(project), {"engine": "occt"}
     scene = engine.pop("scene", None)
     engine.pop("canonical", None)
+    engine.pop("placed_canonical", None)
     artifacts = {}
     if shape is not None:
         if not bd.export_brep(shape, destination / "part.brep"):

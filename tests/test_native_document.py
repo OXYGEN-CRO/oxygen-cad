@@ -120,3 +120,93 @@ def test_legacy_parameter_bindings_migrate_into_native_graph(tmp_path):
     before = geometry_key(store.load()); changed = store.load().model_copy(deep=True)
     changed.native_document['name'] = 'Changed native document'
     assert geometry_key(changed) != before
+
+
+def test_open_surface_keeps_area_and_geometry_kind_without_claiming_solid_mass(tmp_path):
+    project = native_project([
+        ('sketch.create', {'plane': {'origin': [0, 0, 5], 'x_dir': [1, 0, 0], 'y_dir': [0, 1, 0]}}),
+        ('sketch.rectangle.two_point', {'p0': [0, 0], 'p1': [20, 7]}),
+        ('sketch.finish', {}), ('surface.patch', {'body_name': 'Patch'}),
+    ])
+    store = Store(tmp_path); store.init(project)
+    result = build(store, project)
+    body = result['scene']['bodies'][0]
+    assert body['geometry_kind'] == 'surface'
+    assert result['engine']['independent_bodies'][0]['area_mm2'] == pytest.approx(140)
+    assert body['faces'] and body['topology']['faces']
+    assert body['mesh']['triangles']
+    measured = query_native(project, 'inspect.measure')
+    assert measured['bodies'][0]['volume_mm3'] is None
+    assert measured['bodies'][0]['mass_g'] is None
+    assert measured['total']['volume_mm3'] == 0
+
+
+def test_mesh_scene_is_explicit_and_never_fabricates_an_exact_brep(tmp_path):
+    source = tmp_path / 'source.stl'; bd.export_stl(bd.Box(4, 5, 6), source)
+    content = source.read_bytes(); sha = hashlib.sha256(content).hexdigest()
+    assets = tmp_path / 'assets'; assets.mkdir(); (assets / f'{sha}.stl').write_bytes(content)
+    store = Store(tmp_path); store.init(Project(domains={'interop': {'schema_version': 1, 'assets': [{'id': 'mesh', 'sha256': sha, 'file': f'assets/{sha}.stl'}]}}))
+    execute_native(store, 1, 'human', 'file.insert_mesh', {'asset_id': 'mesh'})
+    result = build(store, Store(tmp_path).load())
+    assert result['scene']['bodies'][0]['geometry_kind'] == 'mesh'
+    assert result['scene']['bodies'][0]['mesh']['triangles']
+    assert result['engine']['independent_meshes'][0]['watertight']
+    assert 'brep' not in result['artifacts'] and 'step' not in result['artifacts']
+    assert result['volume_mm3'] is None
+
+
+def test_sketch_cancel_restores_the_persisted_entry_across_processes(tmp_path):
+    store = Store(tmp_path); store.init(Project())
+    execute_native(store, 1, 'human', 'sketch.create', {'plane': 'XY'})
+    execute_native(Store(tmp_path), 2, 'human', 'sketch.circle.center', {'center': [0, 0], 'radius': 3})
+    execute_native(Store(tmp_path), 3, 'human', 'sketch.cancel')
+    reopened = inspect_native(Store(tmp_path).load())
+    assert reopened['inspection']['active_sketch'] is None
+    assert reopened['inspection']['timeline'] == []
+    assert 'sketch_entry' not in store.load().domains['modeling']
+
+
+def test_typed_legacy_dimensions_remain_parameter_bound_after_native_migration(tmp_path):
+    from o3d.model import Profile, Extrude
+    project = Project(parameters={'width': Parameter(value=20), 'thickness': Parameter(value=3)},
+        features=[Profile(id='profile', width='$width', height=10), Extrude(id='base', profile='profile', distance='$thickness')])
+    store = Store(tmp_path); store.init(project)
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'width', 'expression': '30 mm'})
+    execute_native(store, 2, 'human', 'parameters.change', {'name': 'thickness', 'expression': '4 mm'})
+    measured = query_native(Store(tmp_path).load(), 'inspect.measure')
+    assert measured['total']['volume_mm3'] == pytest.approx(1200)
+    assert measured['bodies'][0]['bbox']['min'] == pytest.approx([-15, -5, 0])
+    assert store.load().parameters['width'].value == 30
+
+
+def test_break_projection_link_detaches_current_evaluated_geometry():
+    with NativeSession() as session:
+        session.execute('parameters.add', {'name': 'width', 'expression': '40 mm'})
+        session.execute('solid.box', {'length': 'width', 'width': 30, 'height': 5, 'body_name': 'Plate'})
+        session.execute('sketch.create', {'plane': {'origin': [0, 0, 5], 'x_dir': [1, 0, 0], 'y_dir': [0, 1, 0]}})
+        session.execute('sketch.project', {'refs': [{'body': 'Plate'}]})
+        session.execute('parameters.change', {'name': 'width', 'expression': '50 mm'})
+        before = session.execute('sketch.inspect')
+        assert max(p['at'][0] for p in before['points']) == pytest.approx(50)
+        session.execute('sketch.break_link', {'link': 'j1'})
+        after = session.execute('sketch.inspect')
+        assert max(p['at'][0] for p in after['points']) == pytest.approx(50)
+        assert not after['links']
+
+
+def test_future_native_formats_are_refused_without_reinterpreting_geometry(tmp_path):
+    project = native_project([('solid.box', {'length': 2, 'width': 3, 'height': 4})])
+    project.native_document['format'] = 'solidcraft/999999'
+    with pytest.raises(ValueError, match='newer|format'):
+        query_native(project, 'inspect.measure')
+
+
+def test_selection_context_preserves_geometry_cache_and_forbids_file_exports(tmp_path):
+    store = Store(tmp_path); store.init(native_project([('solid.box', {'length': 2, 'width': 3, 'height': 4, 'body_name': 'Part'})]))
+    before = geometry_key(store.load())
+    execute_native(store, 1, 'human', 'select.set', {'items': [{'type': 'body', 'name': 'Part'}]})
+    assert store.load().revision == 2 and geometry_key(store.load()) == before
+    assert inspect_native(Store(tmp_path).load())['inspection']['selection']
+    with pytest.raises(ValueError, match='Filesystem'):
+        execute_native(store, 2, 'human', 'sheet.export_dxf', {'path': 'escape.dxf'})
+    assert store.load().revision == 2

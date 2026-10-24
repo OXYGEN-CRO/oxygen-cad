@@ -13,7 +13,7 @@ import re
 import tempfile
 import zipfile
 
-from .model import Command, Project
+from .model import Command, Placement, Project
 from .native import NativeSession, UPSTREAM_COMMIT, compile_native
 from .store import Conflict
 
@@ -29,7 +29,7 @@ ASSET_COMMANDS = frozenset({"file.insert_step", "file.insert_mesh", "component.i
 
 
 def host_allowed(command: str) -> bool:
-    return command in ASSET_COMMANDS or (command.partition(".")[0] in NATIVE_GROUPS and command not in BLOCKED_COMMANDS) or command in {"engine.commands", "engine.describe", "document.inspect"}
+    return command in ASSET_COMMANDS or (command.partition(".")[0] in NATIVE_GROUPS and command not in BLOCKED_COMMANDS) or command in {"engine.commands", "engine.describe", "document.inspect", "model.faces", "model.edges", "model.threads"}
 
 
 def _safe_params(value, *, key="", curve_paths=False):
@@ -70,13 +70,13 @@ def resolve_asset(store, project: Project, asset_id: str) -> Path:
     path = store.root / file
     root = (store.root / "assets").resolve()
     resolved = path.resolve()
-    if not resolved.is_relative_to(root) or path.is_symlink() or not resolved.is_file():
+    if root != store.root / "assets" or resolved.parent != root or path.is_symlink() or not resolved.is_file():
         raise ValueError("Native imports must resolve immutable assets inside the project assets directory")
+    if resolved.stat().st_size > 50 * 1024 * 1024:
+        raise ValueError("Native imports are limited to 50 MiB")
     digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
     if digest != asset.get("sha256") or resolved.stem != digest:
         raise ValueError("Project asset content or content-addressed filename changed")
-    if resolved.stat().st_size > 50 * 1024 * 1024:
-        raise ValueError("Native imports are limited to 50 MiB")
     return resolved
 
 
@@ -131,7 +131,7 @@ def opened_native(project: Project, store=None):
         elif project.features:
             with tempfile.TemporaryDirectory(prefix="oxygen-migrate-") as folder:
                 _, metadata = compile_native(project, Path(folder))
-                session.execute("oxygen.document.set", metadata["canonical"])
+                session.execute("oxygen.document.set", metadata["placed_canonical"])
         else:
             for name, parameter in project.parameters.items():
                 session.execute("parameters.add", {"name": name, "expression": parameter.value,
@@ -196,6 +196,8 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     if after == before:
         return updated, result
     updated.native_document = after["document"]
+    if project.native_document is None:
+        updated.placement = Placement()
     for parameter in values:
         if parameter["name"] in updated.parameters and parameter.get("value") is not None:
             updated.parameters[parameter["name"]].value = parameter["value"]
@@ -209,10 +211,11 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     locks.update({name: True for name, parameter in project.parameters.items() if parameter.locked})
     # Validate B-rep solids and open surfaces independently before acknowledging an edit.
     # A sketch-only document is valid and intentionally has no exportable body yet.
-    with tempfile.TemporaryDirectory(prefix="oxygen-native-validate-") as folder:
-        candidate = updated.model_copy(deep=True)
-        candidate.domains["modeling"]["native_context"] = after["context"] | {"active_sketch": None}
-        compile_native(candidate, Path(folder))
+    if before["document"] != after["document"]:
+        with tempfile.TemporaryDirectory(prefix="oxygen-native-validate-") as folder:
+            candidate = updated.model_copy(deep=True)
+            candidate.domains["modeling"]["native_context"] = after["context"] | {"active_sketch": None}
+            compile_native(candidate, Path(folder))
     return Project.model_validate(updated.model_dump()), result
 
 
