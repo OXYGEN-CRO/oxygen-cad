@@ -117,7 +117,7 @@ export default function DrawingsPanel(props: DomainPanelProps) {
       </div>
       <div className="drawing-fields">
         <label>View<SelectControl value={view?.id ?? ""} onChange={e => setViewId(e.target.value)}>{sheet.views.map(v => <option key={v.id} value={v.id}>{v.id} · {v.kind}</option>)}</SelectControl></label>
-        {view && <><label>Orientation<SelectControl value={view.orientation} onChange={e => changeView({orientation:e.target.value})}>{["front","back","top","bottom","right","left","isometric"].map(v => <option key={v}>{v}</option>)}</SelectControl></label>
+        {view && <><label>Orientation<SelectControl aria-label="Orientation" value={view.orientation} onChange={e => changeView({orientation:e.target.value})}>{["front","back","top","bottom","right","left","isometric"].map(v => <option key={v}>{v}</option>)}</SelectControl></label>
         <label>X mm<Input type="number" value={view.position[0]} onChange={e => changeView({position:[Number(e.target.value),view.position[1]]})}/></label>
         <label>Y mm<Input type="number" value={view.position[1]} onChange={e => changeView({position:[view.position[0],Number(e.target.value)]})}/></label>
         <label>Scale<Input type="number" min="0.001" step="0.1" value={view.scale} onChange={e => changeView({scale:Number(e.target.value)})}/></label>
@@ -128,7 +128,7 @@ export default function DrawingsPanel(props: DomainPanelProps) {
       {view?.kind==="detail" && <div className="drawing-fields">{["X","Y"].map((axis,i) => <label key={axis}>Detail centre {axis} mm<Input type="number" value={(view.detail_center as number[] ?? [0,0])[i]} onChange={e => changeView({detail_center:(view.detail_center as number[] ?? [0,0]).map((v,index) => index===i ? Number(e.target.value) : v)})}/></label>)}<label>Detail radius mm<Input type="number" min="0.01" value={Number(view.detail_radius ?? 10)} onChange={e => changeView({detail_radius:Number(e.target.value)})}/></label></div>}
       {view && <details className="drawing-details"><summary>Dimensions and manufacturing annotations</summary>
         <div className="drawing-fields"><label>Hole attachment<SelectControl value={hole || holes[0]?.id || ""} onChange={e => setHole(e.target.value)}>{holes.map(h => <option key={h.id} value={h.id}>{h.name || h.id}</option>)}</SelectControl></label>
-          <label>Annotation<SelectControl value={dimensionKind} onChange={e => setDimensionKind(e.target.value)}>{["diameter","radius","linear","hole_note","thread_note","datum","gdt","center","note","surface","weld","edge","balloon"].map(k => <option key={k}>{k}</option>)}</SelectControl></label>
+          <label>Annotation<SelectControl aria-label="Annotation" value={dimensionKind} onChange={e => setDimensionKind(e.target.value)}>{["diameter","radius","linear","hole_note","thread_note","datum","gdt","center","note","surface","weld","edge","balloon"].map(k => <option key={k}>{k}</option>)}</SelectControl></label>
           <label>Tolerance mm<Input type="number" step="0.001" min="0" value={tol} onChange={e => setTol(e.target.value)}/></label>
           <label>Decimals<Input type="number" min="0" max="6" value={unitPrecision} onChange={e => setUnitPrecision(e.target.value)}/></label>
           <label>Label X mm<Input type="number" value={annotationX} onChange={e => setAnnotationX(e.target.value)}/></label><label>Label Y mm<Input type="number" value={annotationY} onChange={e => setAnnotationY(e.target.value)}/></label>

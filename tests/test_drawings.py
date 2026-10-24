@@ -159,3 +159,65 @@ def test_pdf_independent_reader_dimensions_and_unicode(drawing):
         if operator==b"l" and previous:
             current=list(map(float,operands));lengths.append(((current[0]-previous[0])**2+(current[1]-previous[1])**2)**.5*25.4/72);previous=current
     assert any(abs(length-60)<1e-5 for length in lengths)
+
+
+def test_canonical_native_document_never_uses_frozen_legacy_dimensions(drawing):
+    from o3d.domains.drawing_worker import load_geometry, resolve
+    from o3d.domains.drawings import Reference
+    store,p,_=drawing
+    shape,_,_=load_geometry(store,p)
+    # Even an unchanged native document must not use the second, frozen model.
+    object.__setattr__(p,"native_document",{"format":"canonical-test"})
+    with pytest.raises(ValueError,match="detached from the canonical"):
+        resolve(Reference(kind="hole",target="bores"),p,shape)
+    with pytest.raises(ValueError,match="detached from the canonical"):
+        resolve(Reference(kind="parameter",target="diameter"),p,shape)
+
+
+def test_explicit_reference_repair_and_immutable_publication(drawing):
+    from o3d.geometry import signature
+    import build123d as bd
+    from o3d.domains.drawing_worker import load_geometry
+    store,p,data=drawing
+    shape,_,_=load_geometry(store,p)
+    circle=next(e for e in shape.edges() if e.geom_type==bd.GeomType.CIRCLE)
+    repaired=execute(store,p,"repair",{"document":"print","sheet":"sheet1","annotation":"dia","reference_index":0,
+                                        "replacement":{"kind":"edge","target":"edge:"+signature(circle)}})
+    attach(p,repaired["data"])
+    first=execute(store,p,"publish",{})["documents"][0]
+    before=store.artifact(first["pdf"]).read_bytes()
+    second=execute(store,p,"publish",{})["documents"][0]
+    assert store.artifact(second["pdf"]).read_bytes()==before
+    assert first["file_hashes"]==second["file_hashes"]
+    store.artifact(first["artifacts"][0]["dxf"]).write_text("tampered")
+    with pytest.raises(ValueError,match="immutable hash"):
+        execute(store,p,"publish",{})
+
+
+def test_inch_units_template_and_source_revision(drawing):
+    store,p,data=drawing
+    doc=data["documents"][0]
+    doc["standard"]="ASME";doc["projection"]="third";doc["units"]="inch"
+    doc["sheets"][1]["views"][0]["position"]=[70,100]
+    doc["sheets"][0]["annotations"][0]["precision"]=4
+    data["templates"]=[{"id":"asme","name":"ASME reusable","standard":"ASME","projection":"third","units":"inch","sheet":doc["sheets"][0]}]
+    attach(p,data)
+    created=execute(store,p,"template",{"template":"asme","id":"other"})["document"]
+    assert created["units"]=="inch" and created["standard"]=="ASME" and created["source_revision"]==1
+    out=execute(store,p,"preview",{})["documents"][0]
+    assert out["pages"][0]["measurements"][0]["text"]=="⌀0.3937 H7"
+    assert out["pages"][1]["views"][1]["position"]==[70,70]
+    p.revision=2
+    assert execute(store,p,"preview",{})["documents"][0]["source_revision"]==1
+    p.features[2].diameter=11
+    doc["source_geometry_key"]=geometry_key(p)
+    attach(p,data)
+    with pytest.raises(ValueError,match="geometry snapshot"):
+        execute(store,p,"publish",{})
+
+
+def test_step_inventory_preserves_quoted_semicolons():
+    result=read_step_pmi("DATA;#1=DATUM('A; do not split ''quoted'' #99','',#2);#2=SHAPE_ASPECT('DATUM','',#3,.T.);#3=PRODUCT_DEFINITION_SHAPE('','',#4);#4=PRODUCT('part','','',());ENDSEC;")
+    assert result["root_entities"]==["#1"]
+    assert "A; do not split ''quoted'' #99" in result["entities"]["#1"]
+    assert "#99" not in result["entities"]
