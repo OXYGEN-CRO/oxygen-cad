@@ -5,7 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
-import tempfile
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,25 +21,59 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def write_json(path: Path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".write-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w") as output:
-            json.dump(value, output, indent=2, sort_keys=True, allow_nan=False)
-            output.write("\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+from .recovery import write_json, commit, replay, checksum, atomic_bytes
+
+
+def _bindings(before, after, name, path, native=False):
+    """Preserve references by stable entity ID, including nested native expressions."""
+    if isinstance(before, str):
+        bound = bool(re.search(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])", before)) if native else before == f"${name}"
+        if bound and after != before:
+            raise Conflict(f"Parameter {name} binding on {path} is locked by the user")
+    elif isinstance(before, dict):
+        for key, value in before.items():
+            _bindings(value, after.get(key) if isinstance(after, dict) else None, name, f"{path}.{key}", native)
+    elif isinstance(before, (list, tuple)):
+        for index, value in enumerate(before):
+            replacement = after[index] if isinstance(after, (list, tuple)) and index < len(after) else None
+            if isinstance(value, dict) and isinstance(after, list):
+                identity = "id" if "id" in value else "name" if "name" in value else None
+                if identity:
+                    replacement = next((item for item in after if isinstance(item, dict) and item.get(identity) == value[identity]), None)
+            _bindings(value, replacement, name, f"{path}.{index}", native)
+
+
+def enforce_agent_guards(current, updated):
+    for name, parameter in current.parameters.items():
+        other = updated.parameters.get(name)
+        if parameter.locked and (other is None or other != parameter):
+            raise Conflict(f"Parameter {name} is locked by the user")
+        if parameter.locked:
+            _bindings([f.model_dump() for f in current.features], [f.model_dump() for f in updated.features], name, "features")
+            _bindings(getattr(current, "native_document", None), getattr(updated, "native_document", None), name, "native_document", True)
+    locks = getattr(current, "domains", {}).get("modeling", {}).get("parameter_locks", {})
+    new_locks = getattr(updated, "domains", {}).get("modeling", {}).get("parameter_locks", {})
+    before, after = getattr(current, "native_document", None), getattr(updated, "native_document", None)
+    for name, locked in locks.items():
+        if locked:
+            if not new_locks.get(name):
+                raise Conflict(f"Parameter {name} lock is user-owned")
+            old_param = next((p for p in (before or {}).get("params", []) if p.get("name") == name), None)
+            new_param = next((p for p in (after or {}).get("params", []) if p.get("name") == name), None)
+            if old_param != new_param:
+                raise Conflict(f"Parameter {name} is locked by the user")
+            _bindings(before, after, name, "native_document", True)
+    requirements = {r.id: r.model_dump() for r in updated.requirements}
+    for requirement in current.requirements:
+        if requirements.get(requirement.id) != requirement.model_dump():
+            raise Conflict(f"Requirement {requirement.id} is user-owned; agents cannot weaken or remove it")
 
 
 class Store:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
         self.cache = self.root / ".o3d"
+        self._fault = None  # injectable crash boundary for persistence tests
 
     @contextmanager
     def lock(self):
@@ -47,12 +81,19 @@ class Store:
         with (self.cache / "lock").open("a+") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             try:
+                replay(self.root)
                 yield
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
+    def _load(self) -> Project:
+        from .projects import migrate_document
+        value, _ = migrate_document(json.loads((self.root / "o3d.json").read_text()))
+        return Project.model_validate(value)
+
     def load(self) -> Project:
-        return Project.model_validate_json((self.root / "o3d.json").read_text())
+        with self.lock():
+            return self._load()
 
     def init(self, project: Project):
         with self.lock():
@@ -62,21 +103,76 @@ class Store:
             self._agent_files()
         return project
 
-    def _save(self, project: Project, actor: str, summary: str, action: str):
+    def _history(self):
+        path = self.cache / "history.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+
+    def _save(self, project: Project, actor: str, summary: str, action: str, undo=None, request_id=None, request_hash=None):
         value = project.model_dump(mode="json")
-        write_json(self.cache / "history" / f"{project.revision:08d}.json", value)
-        write_json(self.root / "o3d.json", value)
-        entry = {"revision": project.revision, "actor": actor, "summary": summary, "action": action, "time": now()}
-        with (self.cache / "history.jsonl").open("a") as history:
-            history.write(json.dumps(entry) + "\n")
+        entry = {"revision": project.revision, "actor": actor, "summary": summary, "action": action,
+                 "time": now(), "sha256": checksum(value)}
+        if request_id:
+            entry.update(request_id=request_id, request_hash=request_hash)
+        commit(self.root, {"project": value, "history": self._history() + [entry],
+                          "undo": undo or {"undo": [], "redo": []}}, self._fault)
 
     def history(self):
-        path = self.cache / "history.jsonl"
-        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-
-    def apply(self, command: Command) -> Project:
         with self.lock():
-            current = self.load()
+            return self._history()
+
+    def recover(self):
+        """Inspect and repair from verified immutable revisions, retaining bad files."""
+        with self.lock():
+            events = []
+            history = self._history()
+            valid = {}
+            for entry in history:
+                path = self.cache / "history" / f"{entry['revision']:08d}.json"
+                try:
+                    value = json.loads(path.read_text())
+                    Project.model_validate(value)
+                    if entry.get("sha256") and checksum(value) != entry["sha256"]:
+                        raise ValueError("checksum mismatch")
+                    valid[entry["revision"]] = value
+                except (OSError, ValueError) as error:
+                    events.append({"revision": entry["revision"], "error": str(error)})
+            if not valid:
+                raise ValueError("No verified revision available; original evidence retained")
+            revision = max(valid)
+            current_path = self.root / "o3d.json"
+            try:
+                intact = checksum(json.loads(current_path.read_text())) == checksum(valid[revision])
+            except (OSError, ValueError):
+                intact = False
+            if not intact:
+                evidence = self.cache / "recovery" / (now().replace(":", "-") + "-o3d.json")
+                if current_path.exists():
+                    atomic_bytes(evidence, current_path.read_bytes())
+                write_json(current_path, valid[revision])
+                events.append({"restored_revision": revision, "evidence": str(evidence.relative_to(self.root))})
+            pointer = self.cache / "undo.json"
+            try:
+                undo = json.loads(pointer.read_text())
+            except (OSError, ValueError):
+                undo = {}
+            write_json(pointer, {key: [r for r in undo.get(key, []) if r in valid] for key in ("undo", "redo")})
+            report = {"revision": revision, "events": events, "valid_revisions": sorted(valid)}
+            if events:
+                write_json(self.cache / "recovery" / "last-report.json", report)
+            return report
+
+    def apply(self, command: Command, request_id: str | None = None) -> Project:
+        with self.lock():
+            current = self._load()
+            request_hash = checksum(command.model_dump(mode="json"))
+            if request_id:
+                if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", request_id):
+                    raise ValueError("Invalid request ID")
+                prior = next((entry for entry in self._history() if entry.get("request_id") == request_id), None)
+                if prior:
+                    if prior.get("request_hash") != request_hash:
+                        raise Conflict("Request ID already used for a different edit")
+                    return Project.model_validate_json((self.cache / "history" / f"{prior['revision']:08d}.json").read_text())
             if command.expected_revision != current.revision:
                 raise Conflict(f"Revision conflict: expected {command.expected_revision}, current {current.revision}. Re-inspect before applying.")
             pointer = self.cache / "undo.json"
@@ -104,30 +200,9 @@ class Store:
                 else:
                     state = {"undo": state.get("undo", []) + [current.revision], "redo": []}
             if command.actor == "agent":
-                for name, parameter in current.parameters.items():
-                    other = updated.parameters.get(name)
-                    if parameter.locked and (other is None or other != parameter):
-                        raise Conflict(f"Parameter {name} is locked by the user")
-                    if parameter.locked:
-                        replacements = {f.id: f.model_dump() for f in updated.features}
-                        for feature in current.features:
-                            def check_bindings(before, after, path):
-                                if isinstance(before, str) and before == f"${name}" and after != before:
-                                    raise Conflict(f"Parameter {name} binding on {path} is locked by the user")
-                                if isinstance(before, dict):
-                                    for key, value in before.items():
-                                        check_bindings(value, after.get(key) if isinstance(after, dict) else None, f"{path}.{key}")
-                                elif isinstance(before, (list, tuple)):
-                                    for index, value in enumerate(before):
-                                        check_bindings(value, after[index] if isinstance(after, (list, tuple)) and index < len(after) else None, f"{path}.{index}")
-                            check_bindings(feature.model_dump(), replacements.get(feature.id), feature.id)
-                requirements = {r.id: r.model_dump() for r in updated.requirements}
-                for requirement in current.requirements:
-                    if requirements.get(requirement.id) != requirement.model_dump():
-                        raise Conflict(f"Requirement {requirement.id} is user-owned; agents cannot weaken or remove it")
+                enforce_agent_guards(current, updated)
             updated = Project.model_validate(updated.model_dump() | {"revision": current.revision + 1})
-            self._save(updated, command.actor, command.summary, command.action)
-            write_json(pointer, state)
+            self._save(updated, command.actor, command.summary, command.action, state, request_id, request_hash)
             return updated
 
     def import_step(self, content: bytes, name: str, expected_revision: int):

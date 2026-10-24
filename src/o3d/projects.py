@@ -1,0 +1,243 @@
+"""Local project catalog, safe paths, explicit migrations and portable archives."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import stat
+import tempfile
+import uuid
+import zipfile
+from pathlib import Path, PurePosixPath
+
+from .recovery import atomic_bytes, checksum, sync_directory, write_json
+
+SCHEMA_VERSION = 1
+ARCHIVE_VERSION = 1
+MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+
+
+def migrate_document(value: dict) -> tuple[dict, list[str]]:
+    """Only lossless known migrations are accepted. Never rewrite an open file."""
+    if not isinstance(value, dict):
+        raise ValueError("Project document must be an object")
+    version = value.get("schema_version", 1)
+    if not isinstance(version, int) or isinstance(version, bool) or version != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported project schema {version}; original file retained. Open with a compatible Oxygen CAD release.")
+    result = dict(value)
+    result.setdefault("schema_version", 1)
+    return result, ["Added explicit schema_version=1"] if "schema_version" not in value else []
+
+
+def safe_name(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", value):
+        raise ValueError("Project directory name must be 1–64 ASCII letters, numbers, hyphens or underscores")
+    if value.lower() in {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}:
+        raise ValueError("Project name is reserved by the operating system")
+    return value
+
+
+def contained(root: Path, relative: str, *, exists=True) -> Path:
+    path = PurePosixPath(relative)
+    if path.is_absolute() or not path.parts or any(part in {"..", "."} for part in path.parts) or "\\" in relative:
+        raise ValueError("Unsafe project path")
+    result = root.joinpath(*path.parts)
+    cursor = root
+    for part in path.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise ValueError("Project paths cannot traverse symbolic links")
+    if not result.resolve().is_relative_to(root.resolve()) or (exists and not result.is_file()):
+        raise ValueError(f"Project dependency is missing: {relative}")
+    return result
+
+
+def verify_assets(root: Path, documents: list[dict]):
+    for document in documents:
+        for reference in document.get("references", []):
+            path = contained(root, reference["file"])
+            if hashlib.sha256(path.read_bytes()).hexdigest() != reference["sha256"]:
+                raise ValueError(f"Project dependency hash mismatch: {reference['file']}")
+
+
+def project_metadata(store):
+    path = store.cache / "project.json"
+    if path.exists():
+        return json.loads(path.read_text())
+    value = {"schema_version": 1, "id": str(uuid.uuid4()), "archived": False}
+    write_json(path, value)
+    return value
+
+
+def portable_archive(store, destination: Path | None = None, *, include_results=True):
+    """Capture source, all retained history and immutable dependencies, never credentials."""
+    with store.lock():
+        project = store._load()
+        files = {"o3d.json": store.root / "o3d.json"}
+        for relative in (".o3d/history.jsonl", ".o3d/undo.json", ".o3d/project.json", ".o3d/collaboration.json"):
+            path = store.root / relative
+            if path.exists():
+                files[relative] = contained(store.root, relative)
+        directories = ["assets", ".o3d/history"]
+        if include_results:
+            directories.extend([".o3d/builds", ".o3d/studies"])
+        for directory in directories:
+            base = store.root / directory
+            if base.is_symlink():
+                raise ValueError("Archive source cannot be a symbolic link")
+            if base.exists():
+                for path in sorted(base.rglob("*")):
+                    if path.is_symlink():
+                        raise ValueError("Archive dependencies cannot be symbolic links")
+                    if path.is_file():
+                        relative = path.relative_to(store.root).as_posix()
+                        files[relative] = contained(store.root, relative)
+        documents = [json.loads(path.read_text()) for name, path in files.items() if name == "o3d.json" or name.startswith(".o3d/history/")]
+        from .model import Project
+        for value in documents:
+            Project.model_validate(migrate_document(value)[0])
+        verify_assets(store.root, documents)
+        for entry in store._history():
+            name = f".o3d/history/{entry['revision']:08d}.json"
+            if name not in files or (entry.get("sha256") and checksum(json.loads(files[name].read_text())) != entry["sha256"]):
+                raise ValueError(f"Revision {entry['revision']} is missing or corrupt; repair before export")
+        size = sum(path.stat().st_size for path in files.values())
+        if size > MAX_ARCHIVE_BYTES:
+            raise ValueError("Portable archive exceeds the 512 MiB uncompressed limit")
+        manifest = {"format": "oxygen-cad-project", "schema_version": ARCHIVE_VERSION, "project_schema": project.schema_version,
+                    "revision": project.revision, "scope": {"history": "all retained revisions", "assets": "all local assets", "results": include_results,
+                    "excluded": ["credentials", "jobs", "unsaved drafts", "derived exports"]},
+                    "files": {name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size} for name, path in sorted(files.items())}}
+        destination = destination or store.cache / "exports" / str(project.revision) / "project.oxygen.zip"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".archive-", dir=destination.parent)
+        os.close(descriptor)
+        try:
+            with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
+                # Fixed metadata makes archives reproducible for unchanged inputs.
+                for name, path in sorted(files.items()):
+                    archive.writestr(zipfile.ZipInfo(name), path.read_bytes())
+                archive.writestr(zipfile.ZipInfo("manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            with open(temporary, "rb") as output:
+                os.fsync(output.fileno())
+            os.replace(temporary, destination)
+            sync_directory(destination.parent)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return {"revision": project.revision, "path": str(destination), "manifest": manifest}
+
+
+def restore_archive(source: Path | bytes, destination: Path):
+    """Validate every member before adopting a new project. Existing data is untouched."""
+    import io
+    destination = Path(destination)
+    if destination.exists() or destination.is_symlink():
+        raise ValueError("Restore destination already exists")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=".restore-", dir=destination.parent))
+    try:
+        with zipfile.ZipFile(io.BytesIO(source) if isinstance(source, bytes) else source) as archive:
+            entries = archive.infolist()
+            names = [entry.filename for entry in entries]
+            if len(entries) > 100000 or len(names) != len(set(names)) or sum(entry.file_size for entry in entries) > MAX_ARCHIVE_BYTES:
+                raise ValueError("Archive contains duplicate files or exceeds safety limits")
+            for entry in entries:
+                contained(temporary, entry.filename, exists=False)
+                if stat.S_ISLNK(entry.external_attr >> 16) or entry.is_dir():
+                    raise ValueError("Archive must contain regular files only")
+            manifest = json.loads(archive.read("manifest.json"))
+            if manifest.get("format") != "oxygen-cad-project" or manifest.get("schema_version") != ARCHIVE_VERSION:
+                raise ValueError("Unsupported portable project format")
+            expected = manifest.get("files", {})
+            if set(names) != set(expected) | {"manifest.json"} or "o3d.json" not in expected:
+                raise ValueError("Archive manifest does not describe every file")
+            allowed = ("assets/", ".o3d/history/", ".o3d/builds/", ".o3d/studies/")
+            exact = {"o3d.json", ".o3d/history.jsonl", ".o3d/undo.json", ".o3d/project.json", ".o3d/collaboration.json"}
+            for name, metadata in expected.items():
+                if name not in exact and not name.startswith(allowed):
+                    raise ValueError(f"Archive file is outside portable scope: {name}")
+                content = archive.read(name)
+                if len(content) != metadata["bytes"] or hashlib.sha256(content).hexdigest() != metadata["sha256"]:
+                    raise ValueError(f"Archive checksum mismatch: {name}")
+                atomic_bytes(contained(temporary, name, exists=False), content)
+        from .store import Store
+        from .model import Project
+        documents = [json.loads((temporary / "o3d.json").read_text())]
+        documents.extend(json.loads(path.read_text()) for path in (temporary / ".o3d/history").glob("*.json"))
+        for document in documents:
+            Project.model_validate(migrate_document(document)[0])
+        verify_assets(temporary, documents)
+        restored = Store(temporary)
+        # Recovery must not discard a corrupt latest state from a purported complete archive.
+        report = restored.recover()
+        if report["events"] or report["revision"] != manifest["revision"]:
+            raise ValueError("Archive history/source integrity mismatch")
+        restored._agent_files()
+        os.replace(temporary, destination)
+        sync_directory(destination.parent)
+        return {"path": str(destination), "revision": report["revision"], "files": len(expected)}
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+
+
+class ProjectCatalog:
+    """Filesystem-local project organization; no cloud or identity claim."""
+    def __init__(self, root: Path | str):
+        self.root = Path(root).resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def store(self, name):
+        from .store import Store
+        name = safe_name(name)
+        path = self.root / name
+        if path.is_symlink():
+            raise ValueError("Project directory cannot be a symbolic link")
+        return Store(path)
+
+    def list(self, query="", archived=False):
+        items = []
+        for path in sorted(self.root.iterdir()):
+            if path.is_symlink() or not path.is_dir() or not (path / "o3d.json").is_file() or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", path.name):
+                continue
+            store = self.store(path.name)
+            try:
+                with store.lock():
+                    project = store._load()
+                    meta = project_metadata(store)
+                if meta["archived"] == archived and query.lower() in (path.name + project.name).lower():
+                    items.append({**meta, "directory": path.name, "name": project.name, "revision": project.revision})
+            except (ValueError, OSError) as error:
+                items.append({"directory": path.name, "error": str(error)})
+        return items
+
+    def create(self, name, project):
+        store = self.store(name)
+        # mkdir is the catalog-level exclusive creation primitive.
+        store.root.mkdir(exist_ok=False)
+        store.init(project)
+        with store.lock():
+            project_metadata(store)
+        return store
+
+    def duplicate(self, source, name):
+        original = self.store(source)
+        target = self.store(name)
+        if target.root.exists():
+            raise ValueError("Duplicate destination already exists")
+        archive = portable_archive(original)
+        restore_archive(Path(archive["path"]), target.root)
+        with target.lock():
+            write_json(target.cache / "project.json", {"schema_version": 1, "id": str(uuid.uuid4()), "archived": False})
+        return target
+
+    def archive(self, name, archived=True):
+        store = self.store(name)
+        store.load()
+        with store.lock():
+            meta = project_metadata(store) | {"archived": bool(archived)}
+            write_json(store.cache / "project.json", meta)
+        return meta
