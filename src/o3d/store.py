@@ -307,6 +307,11 @@ class Store:
                 if updated.native_document == current.native_document and canonical_parameter_values(updated) != canonical_parameter_values(current):
                     raise Conflict("Native document is canonical; edit dimensions through native parameter commands")
             if command.actor == "agent":
+                if (getattr(current, "native_document", None) is None
+                        and getattr(updated, "native_document", None) is not None
+                        and any(parameter.locked for parameter in current.parameters.values())):
+                    from .native_document import enforce_native_migration_guards
+                    enforce_native_migration_guards(current, updated, self)
                 enforce_agent_guards(current, updated)
             validate_domain_transitions(current, updated, command.actor)
             updated = Project.model_validate(updated.model_dump() | {"revision": current.revision + 1})
