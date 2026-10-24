@@ -189,3 +189,29 @@ def test_concurrent_cache_replacement_keeps_archive_manifest_consistent(tmp_path
     assert real_read(Path(restored["path"]) / path.relative_to(store.root)) == original
     assert reads == [original]
     assert real_read(path) == replacement
+
+
+def test_legacy_alias_bindings_stay_locked_when_older_canonical_metadata_omits_native_lock_map(tmp_path):
+    legacy = Project(parameters={"bad-name": Parameter(value=10, locked=True)}, features=[NativeFeature(id="base", command="solid.box", params={"length": "$bad-name", "width": 4, "height": 2})])
+    original = Store(tmp_path / "original"); original.init(legacy)
+    execute_native(original, 1, "human", "solid.box", {"length": 2, "width": 2, "height": 2, "corner": [20, 0, 0]})
+    canonical = original.load().model_copy(deep=True)
+    canonical.revision = 1
+    canonical.domains["modeling"].pop("parameter_locks")
+    older = Store(tmp_path / "older-canonical"); older.init(canonical)
+    feature = canonical.native_document["features"][0]["id"]
+    with pytest.raises(Conflict, match="binding"):
+        execute_native(older, 1, "agent", "timeline.edit", {"feature": feature, "set": {"length": "14 mm"}})
+    assert older.load().revision == 1
+
+
+def test_archive_size_limit_counts_its_own_manifest(tmp_path, monkeypatch):
+    import o3d.projects as projects
+    store = Store(tmp_path / "source"); store.init(Project())
+    exported = portable_archive(store)
+    with zipfile.ZipFile(exported["path"]) as archive:
+        total = sum(entry.file_size for entry in archive.infolist())
+        assert archive.getinfo("manifest.json").file_size > 0
+    monkeypatch.setattr(projects, "MAX_ARCHIVE_BYTES", total - 1)
+    with pytest.raises(ValueError, match="manifest"):
+        portable_archive(store)

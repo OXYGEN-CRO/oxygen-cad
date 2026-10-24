@@ -228,7 +228,10 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
                         raise ValueError(f"Saved dependency changed during capture: {name}")
                     manifest["files"][name] = {"sha256": digest, "bytes": len(content)}
                     archive.writestr(zipfile.ZipInfo(name), content)
-                archive.writestr(zipfile.ZipInfo("manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+                manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+                if written_bytes + len(manifest_bytes) > MAX_ARCHIVE_BYTES:
+                    raise ValueError("Portable archive manifest exceeds the total 512 MiB member limit")
+                archive.writestr(zipfile.ZipInfo("manifest.json"), manifest_bytes)
             with open(temporary, "rb") as output:
                 os.fsync(output.fileno())
             os.replace(temporary, destination)

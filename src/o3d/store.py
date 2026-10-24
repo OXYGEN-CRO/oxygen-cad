@@ -51,7 +51,14 @@ def enforce_agent_guards(current, updated):
             raise Conflict(f"Parameter {name} is locked by the user")
         if parameter.locked:
             _bindings([f.model_dump() for f in current.features], [f.model_dump() for f in updated.features], name, "features")
-            _bindings(getattr(current, "native_document", None), getattr(updated, "native_document", None), name, "native_document", True)
+            parameter_map = getattr(current, "domains", {}).get("modeling", {}).get("legacy_parameter_map", {})
+            native_name = parameter_map.get(name, name)
+            before_native, after_native = getattr(current, "native_document", None), getattr(updated, "native_document", None)
+            before_parameter = next((p for p in (before_native or {}).get("params", []) if p.get("name") == native_name), None)
+            after_parameter = next((p for p in (after_native or {}).get("params", []) if p.get("name") == native_name), None)
+            if before_native is not None and before_parameter != after_parameter:
+                raise Conflict(f"Parameter {name} native definition is locked by the user")
+            _bindings(before_native, after_native, native_name, "native_document", True)
     locks = getattr(current, "domains", {}).get("modeling", {}).get("parameter_locks", {})
     new_locks = getattr(updated, "domains", {}).get("modeling", {}).get("parameter_locks", {})
     before, after = getattr(current, "native_document", None), getattr(updated, "native_document", None)
