@@ -6,6 +6,8 @@ A Rust CAD engine. An editable text project. A JSON CLI. Our interactive studio.
 
 The workflow is familiar from code-driven creative tools such as Hyperframes and Remotion: author files, preview the result, inspect it, revise, and export. Here the output is exact CAD geometry, with measurements and engineering checks alongside the preview.
 
+The workspace selector now covers modeling, assemblies, drawings, manufacturing, simulation, electronics, rendering, import/repair and project management. Our UI stays in place. [Implementation evidence and remaining parity work](docs/parity/README.md) distinguish working workflows from the broader Fusion parity target.
+
 ![Oxygen CAD studio](docs/studio.png)
 
 The studio uses [Oxygen Studio components](docs/UI.md): neutral dark and light themes, compact glass controls, quiet field focus, Geist typography and floating tools around the real CAD viewport. The sun/moon control switches themes and remembers your choice. The same components extend to engineering studies, history and source editing, with an adaptive layout on smaller screens. [Preview light mode](docs/studio-light.png).
@@ -167,7 +169,8 @@ cd frontend
 npm ci
 npx playwright install chromium
 # Point at a disposable running studio:
-O3D_BROWSER_URL=http://127.0.0.1:8787 npm test
+cd ..
+python3 scripts/run_browser_checks.py --mode docker --image oxygen-cad
 ```
 
 Browser tests edit their target project. Use a disposable project, not your working design.

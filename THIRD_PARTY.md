@@ -13,6 +13,13 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 | Gmsh | Optional isolated CAD-aware mesher | GPL-2.0-or-later with upstream linking exception; installed package notices retained — https://gmsh.info/; distributed unmodified in the mesher environment, original application code remains separately licensed |
 | CalculiX | External finite-element solver executable | GPL-2.0-or-later — https://www.dhondt.de/ and https://sources.debian.org/src/calculix-ccx/ |
 | SPOOLES | Solver numerical dependency | Upstream terms included in Debian package — https://sources.debian.org/src/spooles/ |
+| KiCad | External board checking and fabrication CLI | GPL and component-specific terms; installed Debian copyright notices retained — https://www.kicad.org/ and https://sources.debian.org/src/kicad/ |
+| ngspice | External circuit simulation process | BSD-style core and accompanying component terms; installed notices retained — https://ngspice.sourceforge.io/ and https://sources.debian.org/src/ngspice/ |
+| CuraEngine and Cura base definitions | External FFF slicer and its unmodified printer/extruder definitions | AGPL-3.0-or-later engine; profile-package notices copied into the runtime — https://github.com/Ultimaker/CuraEngine and https://sources.debian.org/src/cura/ |
+| OpenCAMLib | Isolated ball-cutter surface sampling | LGPL-2.1-or-later; installed Debian notices retained — https://github.com/aewallin/opencamlib |
+| GNU FreeFont | Unicode drawing publication font | GPL-3.0-or-later with font exception; package notices retained — https://savannah.gnu.org/projects/freefont/ |
+| NumPy, SciPy, Shapely/GEOS, ezdxf, NetworkX, FontTools | Numerical, polygon, mesh and vector-publication dependencies | See installed upstream package notices; GEOS retains its separate LGPL terms |
+| pypdf and Gerbonara | Independent verification readers, installed only for checks | BSD-3-Clause and Apache-2.0 respectively; verification lock and upstream notices retained — https://github.com/py-pdf/pypdf and https://git.jaseg.de/gerbonara.git/ |
 | Radix Primitives | Accessible dropdown menu foundation | MIT — https://github.com/radix-ui/primitives; installed package notices retained |
 | React, Three.js, Vite, FastAPI, Pydantic, Typer, Trimesh | UI and application/runtime libraries | See installed package license files and upstream projects |
 | ReportLab | Standalone engineering-sheet PDF renderer | BSD-style license; installed package license retained; https://www.reportlab.com/opensource/ |
