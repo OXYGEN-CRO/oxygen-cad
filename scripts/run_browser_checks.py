@@ -200,7 +200,8 @@ def main() -> int:
                     if spec == "manufacturing":
                         command = ["node", str(ROOT / "tests/browser_manufacturing.cjs")]
                     else:
-                        config = "tests/modeling/playwright.config.ts" if spec.startswith("modeling/") else "playwright.config.ts"
+                        fixture_ui = spec.startswith("modeling/") or spec == "simulation-domain.spec.ts"
+                        config = "tests/modeling/playwright.config.ts" if fixture_ui else "playwright.config.ts"
                         command = ["npx", "--no-install", "playwright", "test", "--config", config,
                                    spec, "--output", str(directory / "artifacts"), "--reporter=list"]
                     result["exit_code"] = run_command(command, browser_env, directory / "browser.log")

@@ -18,8 +18,8 @@ if (process.env.O3D_BROWSER_URL) {
   }
 }
 export default defineConfig({
-  testDir: ".",
-  testMatch: "modeling.spec.ts",
+  testDir: "..",
+  testMatch: ["**/modeling/modeling.spec.ts", "**/simulation-domain.spec.ts"],
   workers: 1,
   timeout: 120000,
   use: {

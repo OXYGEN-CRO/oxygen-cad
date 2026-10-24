@@ -39,6 +39,9 @@ project filesystem, and a free loopback port. The runner waits for the API and a
 successful build before launching the browser. Containers have no host project
 mount and are removed after each suite, including failed suites. Modeling uses
 its separate Vite UI fixture on port 5194, proxied to that suite's disposable API.
+The simulation domain's component and numerical-field fixtures use the same
+dedicated Vite configuration; the production modal/thermal study suite still
+runs against the integrated studio.
 Assembly acceptance is seeded with `examples/assemblies/slider.json`. Specs that
 generate native source files invoke the image's engine through a short-lived
 helper container with their generated fixture working directory mounted. The
