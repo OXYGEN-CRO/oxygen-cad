@@ -316,16 +316,14 @@ test("reference image calibration and bundled text survive reopening", async ({
   await page
     .getByText("Reference image and calibration", { exact: true })
     .click();
-  await page
-    .getByLabel("Insert PNG or JPEG", { exact: true })
-    .setInputFiles({
-      name: "reference.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    });
+  await page.getByLabel("Insert PNG or JPEG", { exact: true }).setInputFiles({
+    name: "reference.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
   await idle(page);
   await expect(page.locator(".modeling-sketch-canvas image")).toHaveCount(1);
   const before = await inspect(request);
@@ -357,6 +355,52 @@ test("reference image calibration and bundled text survive reopening", async ({
   const reopened = await inspect(request);
   expect(reopened.document.canvases).toEqual(written.document.canvases);
   expect(reopened.sketches[0].curves).toEqual(written.sketches[0].curves);
+});
+
+test("plastic operation dialogs create measured editable enclosure features", async ({
+  page,
+  request,
+}) => {
+  await native(request, "solid.box", {
+    length: 40,
+    width: 30,
+    height: 2,
+    body_name: "Plate",
+  });
+  await page.goto("/tests/modeling/fixture.html");
+  await page.getByRole("button", { name: "Solid", exact: true }).click();
+  await page
+    .getByLabel("Solid operation", { exact: true })
+    .selectOption("plastic.boss");
+  await page.getByLabel("Body", { exact: true }).fill("Plate");
+  await page
+    .getByRole("button", { name: "Apply plastic boss", exact: true })
+    .click();
+  await idle(page);
+  const boss = await inspect(request);
+  expect(boss.inspection.bodies[0].volume_mm3).toBeCloseTo(
+    2400 + Math.PI * (16 - 2.25) * 8,
+    0,
+  );
+  await page
+    .getByLabel("Solid operation", { exact: true })
+    .selectOption("plastic.rest");
+  await page.getByLabel("Body", { exact: true }).fill("Plate");
+  await page
+    .getByRole("button", { name: "Apply plastic rest", exact: true })
+    .click();
+  await idle(page);
+  const rest = await inspect(request);
+  expect(
+    rest.inspection.bodies[0].volume_mm3 - boss.inspection.bodies[0].volume_mm3,
+  ).toBeCloseTo(Math.PI * 9 * 3, 0);
+  await page.reload();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Boss1/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Rest1/ })).toBeVisible();
+  expect(
+    (await inspect(request)).inspection.timeline.every((f: any) => !f.error),
+  ).toBeTruthy();
 });
 
 test("native history and topology work in both themes at narrow widths", async ({

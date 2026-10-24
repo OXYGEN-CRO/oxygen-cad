@@ -11,7 +11,7 @@ export interface Field {
 export interface Operation {
   command: string;
   label: string;
-  group: "Create" | "Modify" | "Construct" | "Sketch";
+  group: "Create" | "Modify" | "Construct" | "Sketch" | "Plastic";
   fields: Field[];
 }
 const expr = (
@@ -69,6 +69,197 @@ const path = [
 
 export const operations: Operation[] = [
   {
+    command: "solid.rib",
+    label: "Rib",
+    group: "Create",
+    fields: [
+      sketch,
+      names("curves", "Open sketch curves in order"),
+      expr("thickness", "Thickness", "2 mm"),
+      expr("depth", "Depth (empty = next face)", "", true),
+      choice("direction", "Direction", ["in_plane", "normal"]),
+    ],
+  },
+  {
+    command: "solid.web",
+    label: "Web",
+    group: "Create",
+    fields: [
+      sketch,
+      names("curves", "Open sketch curves"),
+      expr("thickness", "Thickness", "2 mm"),
+      expr("depth", "Depth (empty = next face)", "", true),
+      choice("direction", "Direction", ["in_plane", "normal"]),
+    ],
+  },
+  {
+    command: "solid.coil",
+    label: "Coil",
+    group: "Create",
+    fields: [
+      expr("diameter", "Coil diameter", "20 mm"),
+      expr("revolutions", "Revolutions", "3"),
+      expr("pitch", "Pitch", "5 mm"),
+      expr("section_size", "Section size", "2 mm"),
+      choice("section", "Section", ["circular", "square"]),
+      choice("section_position", "Section position", [
+        "center",
+        "inside",
+        "outside",
+      ]),
+      data("base", "Base", "[0,0,0]"),
+      operation,
+    ],
+  },
+  {
+    command: "solid.emboss",
+    label: "Emboss / deboss",
+    group: "Create",
+    fields: [
+      sketch,
+      profiles,
+      expr("depth", "Depth", "1 mm"),
+      choice("mode", "Mode", ["emboss", "deboss"]),
+      data("face", "Target face point", "", true),
+    ],
+  },
+  {
+    command: "solid.pattern.path",
+    label: "Pattern along path",
+    group: "Create",
+    fields: [
+      bodies,
+      ...path,
+      expr("count", "Quantity", "3"),
+      expr("spacing", "Spacing", "10 mm"),
+      choice("orientation", "Orientation", ["identical", "path"]),
+    ],
+  },
+  {
+    command: "solid.boundary_fill",
+    label: "Boundary fill",
+    group: "Create",
+    fields: [
+      names("tools", "Tool bodies"),
+      data("cells", "Point inside each selected cell", "[[0,0,0]]"),
+      operation,
+      {
+        key: "remove_tools",
+        label: "Remove tool bodies",
+        kind: "boolean",
+        value: "false",
+      },
+    ],
+  },
+  {
+    command: "solid.replace_face",
+    label: "Replace faces",
+    group: "Modify",
+    fields: [faces, text("target", "Target plane", "XY"), body],
+  },
+  {
+    command: "solid.align",
+    label: "Align bodies",
+    group: "Modify",
+    fields: [
+      bodies,
+      data("from", "Source point or snap reference", "[0,0,0]"),
+      data("to", "Target point or snap reference", "[10,0,0]"),
+    ],
+  },
+  {
+    command: "solid.remove",
+    label: "Remove bodies",
+    group: "Modify",
+    fields: [bodies],
+  },
+  {
+    command: "plastic.boss",
+    label: "Plastic boss",
+    group: "Plastic",
+    fields: [
+      data("position", "Position on face", "[20,15,2]"),
+      expr("diameter", "Boss diameter", "8 mm"),
+      expr("height", "Height", "8 mm"),
+      expr("hole_diameter", "Hole diameter", "3 mm", true),
+      expr("hole_depth", "Hole depth", "", true),
+      expr("draft", "Draft angle", "0 deg", true),
+      expr("fillet", "Root fillet radius", "", true),
+      expr("ribs", "Rib quantity", "", true),
+      expr("rib_thickness", "Rib thickness", "", true),
+      expr("rib_length", "Rib length", "", true),
+      body,
+    ],
+  },
+  {
+    command: "plastic.snap_fit",
+    label: "Plastic snap fit",
+    group: "Plastic",
+    fields: [
+      data("position", "Position on face", "[20,15,2]"),
+      data("hook", "Catch direction", "[1,0,0]"),
+      expr("length", "Cantilever length", "12 mm"),
+      expr("thickness", "Thickness", "1 mm"),
+      expr("width", "Width", "4 mm"),
+      expr("catch_depth", "Catch depth", "1 mm"),
+      expr("catch_length", "Catch length", "2 mm"),
+      body,
+    ],
+  },
+  {
+    command: "plastic.lip",
+    label: "Plastic lip / groove",
+    group: "Plastic",
+    fields: [
+      data("face", "Rim face point", "[0,0,2]"),
+      expr("width", "Lip width", "1 mm"),
+      expr("height", "Lip height", "2 mm"),
+      choice("type", "Type", ["lip", "groove"]),
+      choice("side", "Rim side", ["inside", "outside"]),
+      expr("gap", "Groove clearance", "", true),
+      body,
+    ],
+  },
+  {
+    command: "plastic.rest",
+    label: "Plastic rest",
+    group: "Plastic",
+    fields: [
+      data("position", "Position on face", "[30,15,2]"),
+      expr("width", "Width / round diameter", "6 mm"),
+      expr("length", "Rectangle length (empty = round)", "", true),
+      expr("height", "Height", "3 mm"),
+      expr("draft", "Draft angle", "0 deg", true),
+      expr("thickness", "Hollow wall thickness", "", true),
+      body,
+    ],
+  },
+  {
+    command: "plastic.manage_rules",
+    label: "Edit plastic rule",
+    group: "Plastic",
+    fields: [
+      text("name", "Rule name", "Oxygen enclosure"),
+      text("from", "Base rule", "ABS (1.5mm)"),
+      expr("thickness", "Nominal thickness", "1.5 mm", true),
+      expr("nominal_radius", "Nominal radius", "", true),
+      expr("clearance", "Clearance", "0.2 mm", true),
+      expr("draft", "Draft angle", "1 deg", true),
+      {
+        key: "active",
+        label: "Set as active rule",
+        kind: "boolean",
+        value: "true",
+      },
+    ],
+  },
+  {
+    command: "plastic.assign_rule",
+    label: "Assign plastic rule",
+    group: "Plastic",
+    fields: [bodies, text("rule", "Rule name", "ABS (1.5mm)")],
+  },
+  {
     command: "sketch.text",
     label: "Sketch text",
     group: "Sketch",
@@ -91,6 +282,22 @@ export const operations: Operation[] = [
       choice("direction", "Direction", ["positive", "negative", "symmetric"]),
       expr("distance2", "Second side", "", true),
       expr("taper", "Taper angle", "", true),
+      expr("start_offset", "Start offset", "", true),
+      data("to", "To-object point", "", true),
+      data("from", "From-object point", "", true),
+      {
+        key: "thin",
+        label: "Thin extrusion along sketch curves",
+        kind: "boolean",
+        value: "false",
+      },
+      expr("thickness", "Thin wall thickness", "", true),
+      choice("side", "Thin wall side", [
+        "center",
+        "inside",
+        "outside",
+        "two_sides",
+      ]),
       operation,
     ],
   },
@@ -488,6 +695,18 @@ export const operations: Operation[] = [
     fields: [data("points", "3D fit points", "[[0,0,0],[10,10,10],[20,0,20]]")],
   },
 ];
+
+// Explicit participant bodies are shared by native constructive solid operations.
+// Keep their expressions and target list in the same typed operation submission.
+for (const op of operations) {
+  if (
+    op.command.startsWith("solid.") &&
+    op.fields.some((field) => field.key === "operation") &&
+    op.command !== "solid.combine"
+  ) {
+    op.fields.push(names("targets", "Participant bodies", "", true));
+  }
+}
 
 export function operationParams(
   op: Operation,

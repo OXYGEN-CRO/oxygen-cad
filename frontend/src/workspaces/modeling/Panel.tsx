@@ -115,6 +115,42 @@ export default function ModelingPanel(props: DomainPanelProps) {
     return run;
   };
   const inspection = snapshot?.inspection;
+  const locks = {
+    ...Object.fromEntries(
+      Object.entries(props.project.parameters ?? {}).map(
+        ([name, parameter]) => [name, parameter.locked],
+      ),
+    ),
+    ...((props.domainData.parameter_locks ?? {}) as Record<string, boolean>),
+  };
+  const lockParameter = (name: string, locked: boolean): Promise<void> => {
+    pending.current += 1;
+    setBusy(true);
+    setError("");
+    const run = queue.current
+      .catch(() => {})
+      .then(async () => {
+        const current = propsRef.current;
+        try {
+          await current.saveDomain("modeling", {
+            ...current.domainData,
+            parameter_locks: {
+              ...((current.domainData.parameter_locks ?? {}) as JsonObject),
+              [name]: locked,
+            },
+          });
+          await reload();
+        } catch (e) {
+          setError(errorText(e));
+          throw e;
+        } finally {
+          pending.current -= 1;
+          setBusy(pending.current > 0);
+        }
+      });
+    queue.current = run;
+    return run;
+  };
   const sketches = snapshot?.sketches ?? [];
   const canvases = ((snapshot?.document as JsonObject | undefined)?.canvases ??
     []) as NativeCanvas[];
@@ -499,7 +535,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
               value={operationId}
               onChange={(e) => setOperationId(e.target.value)}
             >
-              {["Create", "Modify", "Construct"].map((group) => (
+              {["Create", "Modify", "Construct", "Plastic"].map((group) => (
                 <optgroup key={group} label={group}>
                   {operations
                     .filter((o) => o.group === group)
@@ -537,6 +573,8 @@ export default function ModelingPanel(props: DomainPanelProps) {
           parameters={inspection?.params ?? []}
           execute={execute}
           busy={busy}
+          locks={locks}
+          onLock={lockParameter}
         />
       )}
       {result && (

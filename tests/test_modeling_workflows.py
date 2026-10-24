@@ -118,3 +118,32 @@ def test_parameter_units_equations_and_cycle_rejection(tmp_path):
         assert session.execute("inspect.measure")["bodies"][0]["volume_mm3"] == pytest.approx(body["volume_mm3"])
         exported = session.execute("parameters.export", {"format": "csv"})["text"]
         assert "clearance" in exported and "2 * height + clearance" in exported
+
+
+def test_plastic_boss_and_rest_have_measured_material_and_persist(tmp_path):
+    saved = tmp_path / "enclosure.solidcraft"
+    with NativeSession() as session:
+        session.execute("solid.box", {"length": 40, "width": 30, "height": 2, "body_name": "Plate"})
+        boss = session.execute("plastic.boss", {"position": [20, 15, 2], "diameter": "8 mm", "height": "8 mm", "hole_diameter": "3 mm", "draft": "0 deg", "body": "Plate"})
+        with_boss = session.execute("inspect.measure")["total"]["volume_mm3"]
+        assert with_boss == pytest.approx(2400 + math.pi * (4 ** 2 - 1.5 ** 2) * 8, abs=0.05)
+        rest = session.execute("plastic.rest", {"position": [30, 15, 2], "width": "6 mm", "height": "3 mm", "draft": "0 deg", "body": "Plate"})
+        final = session.execute("inspect.measure")["total"]["volume_mm3"]
+        assert final - with_boss == pytest.approx(math.pi * 3 ** 2 * 3, abs=0.05)
+        session.execute("file.save_as", {"path": str(saved)})
+    with NativeSession() as session:
+        session.execute("doc.open", {"path": str(saved)})
+        assert session.execute("inspect.measure")["total"]["volume_mm3"] == pytest.approx(final, abs=1e-6)
+        assert session.execute("timeline.inspect", {"feature": boss["feature"]})["definition"]
+        assert session.execute("timeline.inspect", {"feature": rest["feature"]})["definition"]
+
+
+def test_boundary_fill_selects_a_real_bounded_cell():
+    with NativeSession() as session:
+        session.execute("solid.box", {"length": 20, "width": 10, "height": 10, "body_name": "Left"})
+        session.execute("solid.box", {"length": 20, "width": 10, "height": 10, "corner": [10, 0, 0], "operation": "new", "body_name": "Right"})
+        session.execute("solid.boundary_fill", {"tools": ["Left", "Right"], "cells": [[15, 5, 5]], "operation": "new", "remove_tools": True})
+        measure = session.execute("inspect.measure")
+        assert measure["body_count"] == 1
+        assert measure["total"]["volume_mm3"] == pytest.approx(1000)
+        assert measure["bodies"][0]["bbox"] == {"min": [10, 0, 0], "max": [20, 10, 10]}

@@ -9,10 +9,14 @@ function ParameterRow({
   parameter,
   execute,
   busy,
+  locked,
+  onLock,
 }: {
   parameter: NativeParameter;
   execute: Execute;
   busy: boolean;
+  locked: boolean;
+  onLock: (name: string, locked: boolean) => Promise<void>;
 }) {
   const [expression, setExpression] = useState(parameter.expression);
   const [name, setName] = useState(parameter.name);
@@ -34,6 +38,13 @@ function ParameterRow({
       >
         <div className="modeling-row">
           <strong>{parameter.name}</strong>
+          <Button
+            aria-label={`${locked ? "Unlock" : "Lock"} parameter ${parameter.name}`}
+            disabled={busy}
+            onClick={() => safe(onLock(parameter.name, !locked))}
+          >
+            {locked ? "Locked · unlock" : "Lock"}
+          </Button>
           <span className="modeling-muted">
             {parameter.value ?? "—"} {parameter.unit}
             {parameter.model ? " · model" : ""}
@@ -99,10 +110,14 @@ export default function Parameters({
   parameters,
   execute,
   busy,
+  locks = {},
+  onLock,
 }: {
   parameters: NativeParameter[];
   execute: Execute;
   busy: boolean;
+  locks?: Record<string, boolean>;
+  onLock: (name: string, locked: boolean) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [expression, setExpression] = useState("10 mm");
@@ -175,6 +190,8 @@ export default function Parameters({
             parameter={p}
             execute={execute}
             busy={busy}
+            locked={locks[p.name] === true}
+            onLock={onLock}
           />
         ))}
       <Button

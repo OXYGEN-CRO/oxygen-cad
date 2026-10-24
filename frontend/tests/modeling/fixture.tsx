@@ -7,13 +7,13 @@ import "../../src/tokens.css";
 import "../../src/components/ui.css";
 import "../../src/style.css";
 
-async function api(path: string, data?: unknown) {
+async function api(path: string, data?: unknown, method = "POST") {
   const response = await fetch(
     `/api/${path}`,
     data === undefined
       ? undefined
       : {
-          method: "POST",
+          method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         },
@@ -57,7 +57,7 @@ function Fixture() {
           project={state.project}
           state={state}
           selection={null}
-          domainData={{}}
+          domainData={((state.project as unknown as { domains?: Record<string, JsonObject> }).domains ?? {}).modeling ?? {}}
           native={async (command, params = {}) => {
             const reply = await api("native/execute", {
               expected_revision: current.current!.revision,
@@ -70,8 +70,9 @@ function Fixture() {
             return reply;
           }}
           inspectNative={() => api("native/inspect")}
-          saveDomain={async () => {
-            throw new Error("No metadata writes in this modeling fixture");
+          saveDomain={async (domain, data) => {
+            const reply = await api(`domains/${domain}`, { expected_revision: current.current!.revision, actor: "human", data: { schema_version: 1, ...data } }, "PUT");
+            current.current = reply.project; setState((s) => s ? { ...s, project: reply.project } : s);
           }}
           runDomain={async () => {
             throw new Error("No domain workers in this modeling fixture");

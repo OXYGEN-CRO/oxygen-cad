@@ -11,41 +11,191 @@
     "frontend/src/workspaces/modeling/History.tsx",
     "frontend/src/workspaces/modeling/Parameters.tsx",
     "frontend/src/workspaces/modeling/Topology.tsx",
-    "frontend/src/workspaces/modeling/CanvasAssets.tsx"
+    "frontend/src/workspaces/modeling/CanvasAssets.tsx",
+    "src/o3d/domains/modeling.py"
   ],
   "validation": [
-    {"command": "cd frontend && npm ci && npm run build", "result": "passed"},
-    {"command": "PYTHONPATH=src O3D_ENGINE_BINARY=<native-engine> .venv/bin/python -m pytest -q tests/test_modeling_workflows.py", "result": "6 passed; analytic geometry, constraints, dragging, cold reopen, associative projection/detach, multibody history, unit equations and cycle refusal"},
-    {"command": "cd frontend && PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<native-engine> O3D_TEST_PORT=8964 npx playwright test --config tests/modeling/playwright.config.ts", "result": "5 passed in 10.6 seconds on disposable Store/Vite ports 8964/5194; actual native transaction routes, no engine mocks"}
+    {
+      "command": "cd frontend && npm ci && npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "PYTHONPATH=src O3D_ENGINE_BINARY=<native-engine> .venv/bin/python -m pytest -q tests/test_modeling_workflows.py tests/test_modeling_metadata.py",
+      "result": "10 passed; adds measured plastic boss/rest material, cold reopen, exact bounded boundary-fill cell, context/checkpoint preservation and agent-unlock refusal"
+    },
+    {
+      "command": "cd frontend && PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<native-engine> O3D_TEST_PORT=8964 npx playwright test --config tests/modeling/playwright.config.ts",
+      "result": "6 passed in 16.4 seconds on disposable Store/Vite ports 8964/5194; actual native transaction routes, no engine mocks; includes measured plastic operation dialogs"
+    }
   ],
   "rows": [
-    {"id":"MOD-001","status":"partial","implemented":"SVG placement of points, lines, rectangles, rounded rectangles, circles, arcs and fit splines; native solved entities, stable profile selectors and sketch reuse for feature forms.","remaining":"Spline canvas currently shows a labeled fit/control polygon, not an evaluated spline. Full region hit-testing and broad face-attached sketch cases need acceptance."},
-    {"id":"MOD-002","status":"partial","implemented":"Driving/reference dimension commands, geometric constraints, AutoConstrain, actual DOF/failure IDs, glyph inspection, constrained dragging, constraint deletion and driven toggles.","remaining":"Full constraint-proposal UX and all rounded-profile conflict recovery cases are unaccepted."},
-    {"id":"MOD-003","status":"partial","implemented":"Canvas trim/extend/break; engine-computed trim-path dry-run preview; offset, fillet, pattern, mirror, construction and move/copy forms.","remaining":"Full mixed-curve offset/trim/pattern and undo corpus has not passed product acceptance."},
-    {"id":"MOD-004","status":"partial","implemented":"Associative project/intersect/include forms, source sketch references, linked/lost-link status and explicit detach/reproject repair controls. Projection update and solved-geometry detach regression pass with the core materialization fix.","remaining":"Atomic source relinking preserving derived curve identities is unavailable; the full lost/split/ambiguous reference corpus remains."},
-    {"id":"MOD-005","status":"partial","implemented":"3D-sketch mode toggle, native 3D polyline/spline input and sweep/pipe path forms.","remaining":"No graphical three-dimensional point manipulator or accepted nonplanar path/frame editing workflow."},
-    {"id":"MOD-006","status":"partial","implemented":"Bundled-font sketch text, PNG/JPEG reference-image insertion and native calibration; browser acceptance verifies image scale and text curve identities after cold reload. SVG/DXF exchange is owned by interop.","remaining":"Text emboss/extrusion and broad image/sketch interchange acceptance are pending. Images are limited to 512 KiB by the command envelope. External font paths are unavailable."},
-    {"id":"MOD-007","status":"partial","implemented":"Offset, angled and midplane, cylinder-axis and two-point-axis forms using actual construction commands; construction planes offered for sketches.","remaining":"Broad dependent construction/reference workflows and coordinate-system equivalence are unaccepted. Advanced construction commands are in the interop panel."},
-    {"id":"MOD-008","status":"partial","implemented":"Extrude including profile indices, direction, second side and taper; box/cylinder/sphere/torus with new/join/cut/intersect/auto semantics.","remaining":"Thin extrusion and from/to-object dialogs and the full Boolean/taper corpus need further integration."},
-    {"id":"MOD-009","status":"partial","implemented":"Native revolve, sweep with twist/orientation, and loft with ordered sections and guide rails.","remaining":"Graphical axis/path/rail selection and full nonplanar/self-intersection acceptance are incomplete."},
-    {"id":"MOD-010","status":"partial","implemented":"Simple/drilled/counterbore/countersink hole forms and cosmetic/modeled native thread options, selectable face point population.","remaining":"Full thread designation, angled drilling and feature edit/reopen corpus is unaccepted."},
-    {"id":"MOD-011","status":"partial","implemented":"Native topology edge picking, constant/curvature/variable/chord fillet and chamfer forms with real refusal/fit behavior.","remaining":"Spline-radius controls, corner blends and all persistent edge-reference cases are unaccepted."},
-    {"id":"MOD-012","status":"partial","implemented":"Shell, draft and pipe forms with native parameter expressions.","remaining":"Dedicated rib/web/coil controls and a measured thin-wall corpus remain."},
-    {"id":"MOD-013","status":"partial","implemented":"Rectangular/circular patterns, mirror and body move/copy/scale forms; sketch patterns.","remaining":"Path patterns, instance suppression and full feature/component pattern selection remain."},
-    {"id":"MOD-014","status":"partial","implemented":"Multiple native bodies, native body/topology browser, individual measurements, combine and split-body forms; measured two-body history test.","remaining":"Interactive boundary-fill cell selection and the full Boolean robustness corpus are unavailable/unaccepted."},
-    {"id":"MOD-015","status":"not_implemented","implemented":"No plastic-feature UI is claimed by this track.","remaining":"Boss, snap-fit, lip/rest and editable generated connection workflows."},
-    {"id":"MOD-016","status":"partial","implemented":"Press/pull, face offset, delete/heal, shell and body transforms use real native face/body operations and timeline persistence.","remaining":"Base-feature/history-free mode and graphical replace-face controls are incomplete."},
-    {"id":"MOD-017","status":"owned_by_interop","implemented":"Canonical surface document support is shared core work; advanced surface forms are owned by the interop panel.","remaining":"See interop acceptance for create/continuity/thicken. No complete surface parity is claimed here."},
-    {"id":"MOD-018","status":"owned_by_interop","implemented":"Surface repair controls and tolerance reporting are delegated to the interop implementation.","remaining":"See interop evidence; surface-fillet parity is not inferred from other repair commands."},
-    {"id":"MOD-019","status":"not_implemented","implemented":"No T-spline sculpting UI or conversion workflow is claimed.","remaining":"Control-cage editor, subdivision/bridge/crease, self-intersection checks and B-rep conversion."},
-    {"id":"MOD-020","status":"owned_by_interop","implemented":"Mesh asset insertion and bounded reconstruction are owned by interop; native mesh representation belongs to core.","remaining":"See interop tests; broad scan reconstruction is not claimed."},
-    {"id":"MOD-021","status":"not_implemented","implemented":"No broad mesh-authoring/repair toolset is claimed by the modeling panel.","remaining":"Face-group edits, reduction/remeshing, hole/normal/nonmanifold repair, plane cut and shell/combine acceptance."},
-    {"id":"MOD-022","status":"partial","implemented":"Native equation/unit parameters, model/user filtering, rename/change/delete, dependency inspection/graph, CSV/JSON import and CSV export; measured inch/mm equation and cycle rejection tests.","remaining":"Shared host-lock bridging and all rename/import/recompute workflows need integrated acceptance."},
-    {"id":"MOD-023","status":"partial","implemented":"Native timeline inspection/editing, rename, suppress, reorder, roll-after/end, grouping, dependents and first actual feature errors.","remaining":"Graphical drag reorder, folder/marker manipulation and the full dependency/rollback repair corpus remain."},
-    {"id":"MOD-024","status":"partial","implemented":"Sketch entity multi-select/drag and profile selection; native face/edge filter/browser and certified topology metadata; selections persist in shared native context.","remaining":"Window/crossing/freeform/paint selection, named saved sets and broad symmetric duplicate/rebuild reference acceptance are incomplete."},
-    {"id":"MOD-025","status":"partial","implemented":"Actual native geometry evaluation and body measurements, analytic mass comparisons and explicit operation failures in tests; no fabricated preview geometry.","remaining":"A comprehensive independent NURBS/tangent/thin-wall robustness/deviation corpus is not supplied by this UI track."},
-    {"id":"MOD-026","status":"owned_by_interop","implemented":"Editable immutable CAD assets and import provenance are owned by interop/core.","remaining":"See interop import/direct-edit/cold-reopen acceptance and format limits."},
-    {"id":"MOD-027","status":"owned_by_interop","implemented":"Native authoring persistence uses the canonical document; file format export/import is owned by interop.","remaining":"See interop unit/name/material/metadata roundtrip evidence and unavailable formats."},
-    {"id":"MOD-028","status":"partial","implemented":"All UI native edits use the shared revision/actor command path, explicit failures, persisted sketch context and canonical model; browser suite includes alternating GUI/agent parameter edits and stale revisions.","remaining":"Performance budgets, cancellation/crash recovery and the complete mixed solid/surface/history 20-edit corpus remain unaccepted."}
+    {
+      "id": "MOD-001",
+      "status": "partial",
+      "implemented": "SVG placement of points, lines, rectangles, rounded rectangles, circles, arcs and fit splines; native solved entities, stable profile selectors and sketch reuse for feature forms.",
+      "remaining": "Spline canvas currently shows a labeled fit/control polygon, not an evaluated spline. Full region hit-testing and broad face-attached sketch cases need acceptance."
+    },
+    {
+      "id": "MOD-002",
+      "status": "partial",
+      "implemented": "Driving/reference dimension commands, geometric constraints, AutoConstrain, actual DOF/failure IDs, glyph inspection, constrained dragging, constraint deletion and driven toggles.",
+      "remaining": "Full constraint-proposal UX and all rounded-profile conflict recovery cases are unaccepted."
+    },
+    {
+      "id": "MOD-003",
+      "status": "partial",
+      "implemented": "Canvas trim/extend/break; engine-computed trim-path dry-run preview; offset, fillet, pattern, mirror, construction and move/copy forms.",
+      "remaining": "Full mixed-curve offset/trim/pattern and undo corpus has not passed product acceptance."
+    },
+    {
+      "id": "MOD-004",
+      "status": "partial",
+      "implemented": "Associative project/intersect/include forms, source sketch references, linked/lost-link status and explicit detach/reproject repair controls. Projection update and solved-geometry detach regression pass with the core materialization fix.",
+      "remaining": "Atomic source relinking preserving derived curve identities is unavailable; the full lost/split/ambiguous reference corpus remains."
+    },
+    {
+      "id": "MOD-005",
+      "status": "partial",
+      "implemented": "3D-sketch mode toggle, native 3D polyline/spline input and sweep/pipe path forms.",
+      "remaining": "No graphical three-dimensional point manipulator or accepted nonplanar path/frame editing workflow."
+    },
+    {
+      "id": "MOD-006",
+      "status": "partial",
+      "implemented": "Bundled-font sketch text, PNG/JPEG reference-image insertion and native calibration; browser acceptance verifies image scale and text curve identities after cold reload. SVG/DXF exchange is owned by interop.",
+      "remaining": "Text emboss/extrusion and broad image/sketch interchange acceptance are pending. Images are limited to 512 KiB by the command envelope. External font paths are unavailable."
+    },
+    {
+      "id": "MOD-007",
+      "status": "partial",
+      "implemented": "Offset, angled and midplane, cylinder-axis and two-point-axis forms using actual construction commands; construction planes offered for sketches.",
+      "remaining": "Broad dependent construction/reference workflows and coordinate-system equivalence are unaccepted. Advanced construction commands are in the interop panel."
+    },
+    {
+      "id": "MOD-008",
+      "status": "partial",
+      "implemented": "Extrude including profile indices, direction, second side and taper; box/cylinder/sphere/torus with new/join/cut/intersect/auto semantics. Thin extrusion, from/to-object and participant-body inputs are exposed.",
+      "remaining": "The full Boolean/thin/taper/from-to corpus and graphical target picking need further acceptance."
+    },
+    {
+      "id": "MOD-009",
+      "status": "partial",
+      "implemented": "Native revolve, sweep with twist/orientation, and loft with ordered sections and guide rails.",
+      "remaining": "Graphical axis/path/rail selection and full nonplanar/self-intersection acceptance are incomplete."
+    },
+    {
+      "id": "MOD-010",
+      "status": "partial",
+      "implemented": "Simple/drilled/counterbore/countersink hole forms and cosmetic/modeled native thread options, selectable face point population.",
+      "remaining": "Full thread designation, angled drilling and feature edit/reopen corpus is unaccepted."
+    },
+    {
+      "id": "MOD-011",
+      "status": "partial",
+      "implemented": "Native topology edge picking, constant/curvature/variable/chord fillet and chamfer forms with real refusal/fit behavior.",
+      "remaining": "Spline-radius controls, corner blends and all persistent edge-reference cases are unaccepted."
+    },
+    {
+      "id": "MOD-012",
+      "status": "partial",
+      "implemented": "Native shell, draft, pipe, rib, web and coil forms with parameter expressions; coil was manually executed as a real second body.",
+      "remaining": "Full thin-wall/rib/web/coil measured acceptance and downstream manufacturing checks remain."
+    },
+    {
+      "id": "MOD-013",
+      "status": "partial",
+      "implemented": "Rectangular/circular patterns, mirror and body move/copy/scale forms; sketch patterns. Path pattern, align and remove-body forms are available.",
+      "remaining": "Graphical path/instance editing, suppressed pattern instances and full feature/component pattern selection remain."
+    },
+    {
+      "id": "MOD-014",
+      "status": "partial",
+      "implemented": "Multiple native bodies, native body/topology browser, individual measurements, combine and split-body forms; measured two-body history test. Boundary-fill cell inputs use actual engine cells; a measured overlapping-box test produces exactly one 1,000 mm\u00b3 cell with expected bounds.",
+      "remaining": "Graphical boundary cell discovery/selection and the full Boolean robustness corpus remain."
+    },
+    {
+      "id": "MOD-015",
+      "status": "partial",
+      "implemented": "Native boss, lip/groove, snap-fit and rest dialogs plus plastic-rule editing/assignment. Browser and analytic tests verify boss/rest material, editable history and cold reopen.",
+      "remaining": "Full snap/lip/rule engineering acceptance and automated editable design alternatives remain unaccepted; no fit or material-performance claim is made."
+    },
+    {
+      "id": "MOD-016",
+      "status": "partial",
+      "implemented": "Press/pull, face offset, delete/heal, shell and body transforms use real native face/body operations and timeline persistence. Replace-face and align forms are exposed.",
+      "remaining": "Base-feature/history-free mode and fully graphical replace-face/align workflows are incomplete."
+    },
+    {
+      "id": "MOD-017",
+      "status": "owned_by_interop",
+      "implemented": "Canonical surface document support is shared core work; advanced surface forms are owned by the interop panel.",
+      "remaining": "See interop acceptance for create/continuity/thicken. No complete surface parity is claimed here."
+    },
+    {
+      "id": "MOD-018",
+      "status": "owned_by_interop",
+      "implemented": "Surface repair controls and tolerance reporting are delegated to the interop implementation.",
+      "remaining": "See interop evidence; surface-fillet parity is not inferred from other repair commands."
+    },
+    {
+      "id": "MOD-019",
+      "status": "not_implemented",
+      "implemented": "No T-spline sculpting UI or conversion workflow is claimed.",
+      "remaining": "Control-cage editor, subdivision/bridge/crease, self-intersection checks and B-rep conversion."
+    },
+    {
+      "id": "MOD-020",
+      "status": "owned_by_interop",
+      "implemented": "Mesh asset insertion and bounded reconstruction are owned by interop; native mesh representation belongs to core.",
+      "remaining": "See interop tests; broad scan reconstruction is not claimed."
+    },
+    {
+      "id": "MOD-021",
+      "status": "not_implemented",
+      "implemented": "No broad mesh-authoring/repair toolset is claimed by the modeling panel.",
+      "remaining": "Face-group edits, reduction/remeshing, hole/normal/nonmanifold repair, plane cut and shell/combine acceptance."
+    },
+    {
+      "id": "MOD-022",
+      "status": "partial",
+      "implemented": "Native equation/unit parameters, model/user filtering, rename/change/delete, dependency inspection/graph, CSV/JSON import and CSV export; measured inch/mm equation and cycle rejection tests. Human lock/unlock controls save versioned modeling metadata; strict validation preserves native context/checkpoints and refuses agent lock weakening.",
+      "remaining": "Integrated legacy lock mirroring/unlock browser regression depends on the platform Store synchronization patch. Broad rename/import/recompute workflows remain unaccepted."
+    },
+    {
+      "id": "MOD-023",
+      "status": "partial",
+      "implemented": "Native timeline inspection/editing, rename, suppress, reorder, roll-after/end, grouping, dependents and first actual feature errors.",
+      "remaining": "Graphical drag reorder, folder/marker manipulation and the full dependency/rollback repair corpus remain."
+    },
+    {
+      "id": "MOD-024",
+      "status": "partial",
+      "implemented": "Sketch entity multi-select/drag and profile selection; native face/edge filter/browser and certified topology metadata; selections persist in shared native context.",
+      "remaining": "Window/crossing/freeform/paint selection, named saved sets and broad symmetric duplicate/rebuild reference acceptance are incomplete."
+    },
+    {
+      "id": "MOD-025",
+      "status": "partial",
+      "implemented": "Actual native geometry evaluation and body measurements, analytic mass comparisons and explicit operation failures in tests; no fabricated preview geometry.",
+      "remaining": "A comprehensive independent NURBS/tangent/thin-wall robustness/deviation corpus is not supplied by this UI track."
+    },
+    {
+      "id": "MOD-026",
+      "status": "owned_by_interop",
+      "implemented": "Editable immutable CAD assets and import provenance are owned by interop/core.",
+      "remaining": "See interop import/direct-edit/cold-reopen acceptance and format limits."
+    },
+    {
+      "id": "MOD-027",
+      "status": "owned_by_interop",
+      "implemented": "Native authoring persistence uses the canonical document; file format export/import is owned by interop.",
+      "remaining": "See interop unit/name/material/metadata roundtrip evidence and unavailable formats."
+    },
+    {
+      "id": "MOD-028",
+      "status": "partial",
+      "implemented": "All UI native edits use the shared revision/actor command path, explicit failures, persisted sketch context and canonical model; browser suite includes alternating GUI/agent parameter edits and stale revisions.",
+      "remaining": "Performance budgets, cancellation/crash recovery and the complete mixed solid/surface/history 20-edit corpus remain unaccepted."
+    }
   ]
 }
