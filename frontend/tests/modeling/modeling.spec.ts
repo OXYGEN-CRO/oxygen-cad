@@ -165,6 +165,76 @@ test("draw, constrain, reject a conflicting dimension, extrude and cold reopen",
   expect(errors).toEqual([]);
 });
 
+test("individual nested profiles feed two editable features from the same sketch", async ({
+  page,
+  request,
+}) => {
+  await native(request, "sketch.create", {
+    plane: "XY",
+    name: "Reusable regions",
+  });
+  await native(request, "sketch.rectangle.two_point", {
+    p0: [-20, -15],
+    p1: [20, 15],
+  });
+  await native(request, "sketch.circle.center", { center: [0, 0], radius: 5 });
+  await native(request, "sketch.finish");
+  await page.goto("/tests/modeling/fixture.html");
+  await page.getByRole("checkbox", { name: /Profile 0 ·/ }).check();
+  await idle(page);
+  await page
+    .getByRole("button", { name: "Extrude selected profiles", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Profiles (stable curve loops or indices)", {
+      exact: true,
+    }),
+  ).toHaveValue("[0]");
+  await page.getByLabel("Distance", { exact: true }).fill("5 mm");
+  await page
+    .getByRole("button", { name: "Apply extrude", exact: true })
+    .click();
+  await idle(page);
+  const plate = await inspect(request);
+  expect(plate.inspection.bodies).toHaveLength(1);
+  expect(plate.inspection.bodies[0].volume_mm3).toBeCloseTo(
+    (1200 - Math.PI * 25) * 5,
+    0,
+  );
+  await page.getByRole("button", { name: "Sketch", exact: true }).click();
+  await page.getByRole("checkbox", { name: /Profile 0 ·/ }).uncheck();
+  await idle(page);
+  await page.getByRole("checkbox", { name: /Profile 1 ·/ }).check();
+  await idle(page);
+  await page
+    .getByRole("button", { name: "Extrude selected profiles", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Profiles (stable curve loops or indices)", {
+      exact: true,
+    }),
+  ).toHaveValue("[1]");
+  await page.getByLabel("Distance", { exact: true }).fill("10 mm");
+  await page
+    .getByRole("button", { name: "Apply extrude", exact: true })
+    .click();
+  await idle(page);
+  const two = await inspect(request);
+  expect(two.inspection.bodies).toHaveLength(2);
+  expect(
+    two.inspection.bodies.find((b: any) => b.volume_mm3 < 1000).volume_mm3,
+  ).toBeCloseTo(Math.PI * 25 * 10, 0);
+  await page.reload();
+  const reopened = await inspect(request);
+  expect(reopened.sketches).toHaveLength(1);
+  expect(
+    reopened.inspection.timeline.filter(
+      (f: any) => f.type === "ExtrudeFeature",
+    ),
+  ).toHaveLength(2);
+  expect(reopened.inspection.bodies).toHaveLength(2);
+});
+
 test("twenty alternating GUI and agent parameter edits preserve equations and revision conflicts", async ({
   page,
   request,

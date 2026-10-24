@@ -85,8 +85,16 @@ export default function SketchEditor({
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [profileIds, setProfileIds] = useState<number[]>([]);
+  const [selected, setSelected] = useState<string[]>(() =>
+    nativeSelection
+      .filter((s) => ["sketch_curve", "sketch_point"].includes(String(s.type)))
+      .map((s) => String(s.id)),
+  );
+  const [profileIds, setProfileIds] = useState<number[]>(() =>
+    nativeSelection
+      .filter((s) => s.type === "profile" && s.sketch === sketch.id)
+      .map((s) => Number(s.index)),
+  );
   const [clicks, setClicks] = useState<Point2[]>([]);
   const [hover, setHover] = useState<Point2 | null>(null);
   const [drag, setDrag] = useState<{

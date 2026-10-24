@@ -5,7 +5,7 @@ from o3d.domains.modeling import validate, validate_transition
 
 
 def test_parameter_lock_metadata_preserves_native_context_and_sketch_checkpoint():
-    metadata = {"schema_version": 1, "native_context": {"active_sketch": 42, "selection": [{"type": "sketch_curve", "id": "l7"}], "pending_moves": {}}, "sketch_entry": {"document": {"format": 1, "features": [{"id": 42}]}, "context": {"active_sketch": None}}, "parameter_locks": {"width": True}}
+    metadata = {"schema_version": 1, "native_context": {"active_sketch": 42, "selection": [{"type": "sketch_curve", "id": "l7"}], "pending_moves": {}}, "sketch_entry": {"document": {"format": 1, "features": [{"id": 42}]}, "context": {"active_sketch": None}}, "parameter_locks": {"width": True}, "legacy_parameter_map": {"width": "width"}}
     assert validate(metadata) == metadata
     with pytest.raises(ValidationError):
         validate({"parameter_locks": {"width": "false"}})

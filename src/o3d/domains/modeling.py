@@ -13,6 +13,7 @@ class ModelingData(BaseModel):
     native_context: dict[str, Any] = Field(default_factory=dict)
     sketch_entry: dict[str, Any] | None = None
     parameter_locks: dict[str, StrictBool] = Field(default_factory=dict)
+    legacy_parameter_map: dict[str, str] | None = None
 
 
 def validate(data) -> dict:
