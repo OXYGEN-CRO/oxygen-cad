@@ -125,7 +125,7 @@ states otherwise. An STL preview and a STEP solid are different capabilities.
 
 ```sh
 o3d-parts fetch-asset ASSET_UUID /absolute/path/to/downloads
-o3d-parts import-part ASSET_UUID /absolute/path/to/project --expected-revision 3
+o3d-parts import-part ASSET_UUID /absolute/path/to/project 3
 ```
 
 `fetch-asset` uses pinned, allowlisted source repositories, bounds response size,

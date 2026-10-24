@@ -7,7 +7,7 @@ The plugin packages the same instructions that ship with the checkout. It uses t
 | `oxygen-cad-setup` | Runtime/project selection, studio and diagnostics |
 | `oxygen-cad-model` | Revision-checked editing, native-command discovery, briefs and repair |
 | `oxygen-cad-verify` | Current geometry/static-study evidence and standard export |
-| `oxygen-cad-parts` | One-page catalog search and single STEP download with checksum/provenance |
+| `oxygen-cad-parts` | Native catalog search/licensed import first; optional direct API helper with checksum/provenance |
 | `oxygen-cad-drawing` | Basic A3 orthographic PDF with hidden edges and nominal overall dimensions |
 | `oxygen-cad-dxf` | Planar STEP cross-section DXF and limited entity/contour inspection; no unfolding |
 | `oxygen-cad-dfam` | Mesh dimensions/topology, sampled normal chords and six orientation screens |
