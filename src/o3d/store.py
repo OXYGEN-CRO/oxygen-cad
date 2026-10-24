@@ -111,6 +111,10 @@ class Store:
         value = project.model_dump(mode="json")
         entry = {"revision": project.revision, "actor": actor, "summary": summary, "action": action,
                  "time": now(), "sha256": checksum(value)}
+        from .identity import principal_context
+        principal = principal_context.get()
+        if principal:
+            entry["principal"] = principal.public()
         if request_id:
             entry.update(request_id=request_id, request_hash=request_hash)
         commit(self.root, {"project": value, "history": self._history() + [entry],
@@ -162,6 +166,12 @@ class Store:
             return report
 
     def apply(self, command: Command, request_id: str | None = None) -> Project:
+        from .identity import principal_context
+        principal = principal_context.get()
+        if principal:
+            principal.require("edit")
+            if principal.kind == "agent":
+                command = command.model_copy(update={"actor": "agent"})
         with self.lock():
             current = self._load()
             request_hash = checksum(command.model_dump(mode="json"))

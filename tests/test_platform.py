@@ -149,3 +149,127 @@ def test_future_schema_is_rejected_without_rewrite(store):
         store.load()
     assert path.read_bytes() == before
     assert migrate_document({"name": "old"})[0]["schema_version"] == 1
+
+
+def _platform_app(store):
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+    from o3d.domains.platform import mount
+    app = FastAPI()
+    @app.exception_handler(ValueError)
+    async def invalid(_, error):
+        return JSONResponse({"detail": str(error)}, status_code=422)
+    @app.exception_handler(Conflict)
+    async def conflict(_, error):
+        return JSONResponse({"detail": str(error)}, status_code=409)
+    @app.get("/api/project")
+    def inspect():
+        return store.load().model_dump(mode="json")
+    @app.post("/api/commands")
+    def apply(command: Command):
+        return store.apply(command).model_dump(mode="json")
+    mount(app, store, None)
+    return app
+
+
+def test_authenticated_roles_revocation_and_agent_spoofing(store):
+    from fastapi.testclient import TestClient
+    from o3d.identity import Identity
+    from o3d.model import Parameter
+    identity = Identity(store)
+    owner = identity.enable("Owner")
+    admin = identity.authenticate(owner["token"])
+    credentials = {role: identity.issue(admin, role, role) for role in ("viewer", "reader", "editor", "manager")}
+    agent = identity.issue(admin, "Locked agent", "editor", "agent")
+    p = store.load()
+    p.parameters["protected"] = Parameter(value=5, locked=True)
+    store.apply(Command(expected_revision=1, actor="human", project=p))
+    client = TestClient(_platform_app(store))
+    assert client.get("/api/project").status_code == 401
+    proposed = store.load().model_dump(mode="json")
+    proposed["parameters"]["protected"]["value"] = 6
+    body = {"expected_revision": 2, "actor": "human", "project": proposed}
+    for role in ("viewer", "reader"):
+        headers = {"Authorization": "Bearer " + credentials[role]["token"]}
+        assert client.get("/api/project", headers=headers).status_code == 200
+        assert client.post("/api/commands", headers=headers, json=body).status_code == 403
+        assert client.post("/api/platform/identity/issue", headers=headers, json={"name": "escalate", "role": "administrator"}).status_code == 403
+    headers = {"Authorization": "Bearer " + agent["token"]}
+    # The authenticated credential kind wins over an arbitrary human actor label.
+    assert client.post("/api/commands", headers=headers, json=body).status_code == 409
+    headers = {"Authorization": "Bearer " + credentials["editor"]["token"]}
+    assert client.post("/api/commands", headers=headers, json=body).status_code == 200
+    assert store.history()[-1]["principal"]["id"] == credentials["editor"]["principal"]["id"]
+    identity.revoke(admin, credentials["editor"]["principal"]["id"])
+    assert client.get("/api/project", headers=headers).status_code == 403
+    with pytest.raises(ValueError, match="final administrator"):
+        identity.revoke(admin, admin.id)
+    serialized = identity.path.read_text()
+    assert owner["token"] not in serialized and agent["token"] not in serialized
+    assert identity.path.stat().st_mode & 0o777 == 0o600
+
+
+def test_role_export_review_and_scoped_browser_session(store):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from o3d.identity import Identity
+    identity = Identity(store)
+    owner = identity.enable("Owner")
+    admin = identity.authenticate(owner["token"])
+    viewer = identity.issue(admin, "Viewer", "viewer")
+    reader = identity.issue(admin, "Reader", "reader")
+    outer = FastAPI()
+    outer.mount("/p/project", _platform_app(store))
+    client = TestClient(outer)
+    assert client.get("/p/project/api/project").status_code == 401
+    assert client.post("/p/project/api/platform/session", json={"token": viewer["token"]}).status_code == 200
+    assert client.get("/p/project/api/project").status_code == 200
+    assert client.get("/p/project/api/platform/portable").status_code == 403
+    assert client.post("/p/project/api/platform/reviews", json={"revision": 1, "text": "approved"}).status_code == 403
+    assert client.post("/p/project/api/platform/session", json={"token": reader["token"]}).status_code == 200
+    assert client.get("/p/project/api/platform/portable").status_code == 200
+    assert client.post("/p/project/api/platform/comments", json={"revision": 1, "text": "Please verify mounting clearance"}).status_code == 200
+    assert client.post("/p/project/api/platform/session", json={"token": owner["token"]}).status_code == 200
+    assert client.post("/p/project/api/platform/reviews", json={"revision": 1, "text": "Approved", "decision": "approved"}).status_code == 200
+    store.apply(Command(expected_revision=1, actor="human", project=store.load().model_copy(update={"name": "changed"})))
+    reviews = client.get("/p/project/api/platform/reviews").json()
+    assert reviews["reviews"][0]["state"] == "stale"
+
+
+def test_three_way_reconcile_preserves_both_edits_and_reports_conflicts(store):
+    from o3d.collaboration import Collaboration
+    from o3d.model import Parameter
+    base = store.load()
+    base.parameters["L"] = Parameter(value=80)
+    store.apply(Command(expected_revision=1, actor="human", project=base))
+    base = store.load()
+    offline = base.model_copy(deep=True)
+    offline.name = "Offline title"
+    online = base.model_copy(deep=True)
+    online.parameters["L"].value += 3
+    store.apply(Command(expected_revision=2, actor="human", project=online))
+    collaboration = Collaboration(store)
+    merged = collaboration.reconcile(2, offline.model_dump(mode="json"))
+    assert merged["conflicts"] == []
+    assert merged["project"]["name"] == "Offline title"
+    assert merged["project"]["parameters"]["L"]["value"] == online.parameters["L"].value
+    offline.parameters["L"].value += 8
+    conflict = collaboration.reconcile(2, offline.model_dump(mode="json"))
+    assert conflict["project"] is None
+    assert conflict["conflicts"][0]["path"] == "/parameters/L/value"
+    resolved = collaboration.reconcile(2, offline.model_dump(mode="json"), {"/parameters/L/value": "proposed"})
+    assert not resolved["conflicts"]
+    assert resolved["project"]["parameters"]["L"]["value"] == offline.parameters["L"].value
+    # Merge proposes a validated model; applying remains a revision-checked command.
+    assert store.load().revision == 3
+
+
+def test_server_draft_survives_restart(store):
+    from o3d.domains.platform import execute
+    candidate = store.load().model_copy(update={"name": "Unsaved offline work"})
+    payload = {"id": "window-1", "base_revision": 1, "project": candidate.model_dump(mode="json")}
+    execute(store, store.load(), "draft_save", payload)
+    reopened = Store(store.root)
+    draft = execute(reopened, reopened.load(), "draft_load", {"id": "window-1"})
+    assert draft["project"]["name"] == "Unsaved offline work"
+    assert reopened.load().revision == 1
