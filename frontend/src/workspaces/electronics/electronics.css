@@ -86,6 +86,10 @@
 .electronics-panel .eda-component {
   cursor: grab;
 }
+.electronics-panel .eda-component .eda-silk {
+  pointer-events: all;
+  fill: transparent;
+}
 .electronics-panel .eda-component.selected .eda-silk {
   stroke: var(--text);
   stroke-width: 0.25;
