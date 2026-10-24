@@ -253,7 +253,7 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
         result = {}
         from ..native_document import opened_native
         with opened_native(project, store=store) as session:
-            for name, command in {"components": "component.list", "joints": "joint.list", "origins": "joint.inspect", "contact": "contact.list", "motion": "motion.list", "explode": "explode.list", "config": "config.table"}.items():
+            for name, command in {"components": "component.list", "joints": "joint.list", "origins": "joint.inspect", "contact": "contact.list", "motion": "motion.list", "explode": "explode.list", "config": "config.table", "links": "component.links"}.items():
                 _cancel(cancel)
                 result[name] = session.execute(command)
         explicit = [o["id"] for o in (project.native_document or {}).get("occurrences", []) if o.get("grounded")]

@@ -51,6 +51,9 @@ type Summary = {
   explode?: { views?: { id: number; name: string }[] };
   config?: { rows?: { name: string }[]; active?: string };
   anchors?: { explicit: number[]; implicit: number[]; warning?: string };
+  links?: {
+    links?: { component: number; name: string; path: string; found: boolean }[];
+  };
 };
 type Report = JsonObject & {
   result?: JsonObject;
@@ -108,6 +111,7 @@ export default function AssembliesPanel(props: DomainPanelProps) {
   const [partNumber, setPartNumber] = useState("");
   const [partRevision, setPartRevision] = useState("");
   const [description, setDescription] = useState("");
+  const [sourceId, setSourceId] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [advanced, setAdvanced] = useState(0);
   const [parameters, setParameters] = useState(json(operations[0].params));
@@ -136,6 +140,21 @@ export default function AssembliesPanel(props: DomainPanelProps) {
   );
   const poses = (props.domainData.poses || []) as { name: string }[];
   const savedReports = (props.domainData.reports || []) as Report[];
+  const hostProject = props.project as unknown as {
+    domains?: Record<string, JsonObject>;
+  };
+  const sources = (
+    (hostProject.domains?.interop?.assets || []) as {
+      id: string;
+      name: string;
+      format: string;
+      sha256: string;
+    }[]
+  ).filter((asset) => ["solidcraft", "json"].includes(asset.format));
+  const source = sources.find((asset) => asset.id === sourceId);
+  const linked = summary.links?.links?.find(
+    (link) => link.component === component?.id,
+  );
   const stale =
     report?.native_key &&
     summary.native_key &&
@@ -226,6 +245,26 @@ export default function AssembliesPanel(props: DomainPanelProps) {
       ...props.domainData,
       ...patch,
     });
+  }
+  async function uploadSource(file: File) {
+    if (file.size > 50 * 1024 * 1024)
+      throw new Error("Native source designs are limited to 50 MiB");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 8192)
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+    const reply = await props.runDomain("interop", "import", {
+      name: file.name,
+      content_base64: btoa(binary),
+      units: "file",
+      register_only: true,
+    });
+    const result = reply.result as { asset?: { id: string } } | undefined;
+    if (!result?.asset?.id)
+      throw new Error(
+        "Native source upload did not return an immutable asset identity",
+      );
+    setSourceId(result.asset.id);
   }
   function selectionControl() {
     return (
@@ -470,6 +509,100 @@ export default function AssembliesPanel(props: DomainPanelProps) {
               placements. Nested definitions remain shared. Grounding is
               relative to the parent; world pinning requires a root relation.
             </p>
+            <details>
+              <summary>Linked source designs</summary>
+              <div className="assembly-linked-source">
+                <label>
+                  Upload native source
+                  <Input
+                    aria-label="Upload native source"
+                    type="file"
+                    accept=".solidcraft,.json"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void work(() => uploadSource(file));
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                <label>
+                  Source revision
+                  <SelectControl
+                    aria-label="Native source revision"
+                    value={sourceId}
+                    onChange={(event) => setSourceId(event.target.value)}
+                  >
+                    <option value="">Choose an imported source revision</option>
+                    {sources.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name} · {asset.sha256.slice(0, 8)}
+                      </option>
+                    ))}
+                  </SelectControl>
+                </label>
+                <div className="assembly-actions">
+                  <Button
+                    disabled={!source}
+                    onClick={() =>
+                      void work(() =>
+                        native("component.insert_design", {
+                          asset_id: sourceId,
+                          name: source?.name.replace(
+                            /\.(solidcraft|json)$/i,
+                            "",
+                          ),
+                          parent: occurrence?.component || 0,
+                          reuse: true,
+                        }),
+                      )
+                    }
+                  >
+                    Insert linked component
+                  </Button>
+                  <Button
+                    disabled={!source || !linked}
+                    onClick={() =>
+                      void work(() =>
+                        native("component.relink", {
+                          component: component?.id,
+                          asset_id: sourceId,
+                        }),
+                      )
+                    }
+                  >
+                    Update selected linked definition
+                  </Button>
+                  <Button
+                    disabled={!linked}
+                    onClick={() =>
+                      void work(() =>
+                        native("component.break_link", {
+                          component: component?.id,
+                        }),
+                      )
+                    }
+                  >
+                    Break selected link
+                  </Button>
+                </div>
+                {linked && (
+                  <p className="assembly-subtle">
+                    {linked.name} ·{" "}
+                    {linked.found
+                      ? "source available"
+                      : "source missing; embedded geometry retained"}
+                    <br />
+                    {linked.path}
+                  </p>
+                )}
+                <p className="assembly-subtle">
+                  Each upload keeps immutable source bytes. Select and apply a
+                  reviewed revision to update all shared instances. Unresolved
+                  external dependencies must be embedded before importing a
+                  native design.
+                </p>
+              </div>
+            </details>
           </>
         )}
         {tab === "Joints" && (

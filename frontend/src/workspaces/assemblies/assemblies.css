@@ -6,6 +6,12 @@
   color: var(--text);
   font-size: 12px;
 }
+.assembly-linked-source {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+}
 .assembly-panel h2 {
   font-size: 14px;
   margin: 0 0 4px;
