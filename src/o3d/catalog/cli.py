@@ -45,7 +45,7 @@ def ingest(provider: str, max_parts: Annotated[int | None, typer.Option(min=1)] 
 
 
 @app.command()
-def search(q: str = "", category: str | None = None, provider: str | None = None,
+def search(q: Annotated[str, typer.Argument()] = "", category: str | None = None, provider: str | None = None,
            cad: bool = False, downloadable: bool = False, hybrid: bool = False,
            limit: Annotated[int, typer.Option(min=1, max=100)] = 20,
            filters: Path | None = None):

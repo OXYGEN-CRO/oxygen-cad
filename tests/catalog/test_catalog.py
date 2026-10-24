@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from typer.testing import CliRunner
 
 from o3d.catalog.api import create_app
 from o3d.catalog.assets import fetch_asset
@@ -157,6 +158,15 @@ def test_api_discovery_validation_and_missing_part(catalog):
     assert client.post("/v1/search", json={"limit": 100000}).status_code == 422
     assert client.post("/v1/search", json={"numeric": [{"key": "torque", "unit": "N*m", "min": 10}]}).json()["total"] == 0
     assert "/v1/bom/check" in client.get("/openapi.json").json()["paths"]
+
+
+def test_cli_search_accepts_documented_positional_query(catalog, monkeypatch):
+    from o3d.catalog.cli import app
+    monkeypatch.setenv("O3D_CATALOG_DATABASE_URL", os.environ["O3D_CATALOG_TEST_DATABASE_URL"])
+    insert(catalog)
+    result = CliRunner().invoke(app, ["search", "servo", "--limit", "1"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["total"] == 1
 
 
 def test_failed_page_resume_replays_idempotently(catalog):

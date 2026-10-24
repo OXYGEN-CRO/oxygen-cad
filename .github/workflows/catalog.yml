@@ -15,7 +15,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test-only
         ports: ['5432:5432']
-        options: --health-cmd 'pg_isready -U postgres' --health-interval 5s --health-timeout 3s --health-retries 20
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,3 +26,15 @@ jobs:
         env:
           PYTHONPATH: src
           O3D_CATALOG_TEST_DATABASE_URL: postgresql://postgres:test-only@127.0.0.1:5432/oxygen_parts_test
+      - name: Compose runtime smoke test
+        env:
+          O3D_CATALOG_PASSWORD: ci-only-not-a-production-secret
+        run: |
+          docker compose -f catalog.compose.yaml up -d --build --wait
+          curl --fail http://localhost:8844/health
+          docker compose -f catalog.compose.yaml exec -T catalog python -m o3d.catalog status
+      - name: Stop disposable catalog
+        if: always()
+        env:
+          O3D_CATALOG_PASSWORD: ci-only-not-a-production-secret
+        run: docker compose -f catalog.compose.yaml down -v

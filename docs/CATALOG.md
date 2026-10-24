@@ -237,7 +237,7 @@ export O3D_CATALOG_TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost/oxyge
 PYTHONPATH=src pytest -q tests/catalog
 ```
 
-Tests refuse to clear databases without an `_test` suffix. The 16 initial cases
+Tests refuse to clear databases without an `_test` suffix. The 17 initial cases
 exercise real Postgres filtering/ranking, hybrid constraints, source identity,
 idempotence, interrupted-page recovery, policy enforcement, metadata invalidation,
 license/checksum handling, BOM gaps, API validation and object-path safety.
