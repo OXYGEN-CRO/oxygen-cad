@@ -245,6 +245,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       <label>
         Saved scene
         <SelectControl
+          aria-label="Saved scene"
           value={scene.name}
           onChange={(e) => {
             setTime(0);
@@ -300,6 +301,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
         <label>
           Standard view
           <SelectControl
+            aria-label="Standard view"
             defaultValue="iso"
             onChange={(e) => {
               const poses: Record<string, number[]> = {
@@ -325,6 +327,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
         <label>
           Projection
           <SelectControl
+            aria-label="Projection"
             value={scene.camera.fov ? "perspective" : "orthographic"}
             onChange={(e) =>
               change({
@@ -360,6 +363,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
         <label>
           Visual style
           <SelectControl
+            aria-label="Visual style"
             value={scene.style}
             onChange={(e) =>
               change({ style: e.target.value as Scene["style"] })
@@ -383,6 +387,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
         <label>
           Appearance target
           <SelectControl
+            aria-label="Appearance target"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           >
@@ -528,6 +533,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
             <label>
               Texture projection
               <SelectControl
+                aria-label="Texture projection"
                 value={look.texture.projection}
                 onChange={(e) =>
                   appearance({
@@ -728,6 +734,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
               <label>
                 Light type
                 <SelectControl
+                  aria-label={`Light ${i+1} type`}
                   value={light.kind}
                   onChange={(e) => patch({ kind: e.target.value as any })}
                 >
@@ -837,6 +844,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
         <label>
           Render backend
           <SelectControl
+            aria-label="Render backend"
             value={scene.renderer}
             onChange={(e) =>
               change({
@@ -1006,6 +1014,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
             <label>
               Storyboard
               <SelectControl
+                aria-label="Storyboard"
                 value={boardIndex}
                 onChange={(e) => {
                   setPlaying(false);
@@ -1124,6 +1133,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
             <label>
               Publication format
               <SelectControl
+                aria-label="Publication format"
                 value={movieFormat}
                 onChange={(e) => setMovieFormat(e.target.value)}
               >
