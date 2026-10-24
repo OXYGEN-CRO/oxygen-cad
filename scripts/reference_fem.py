@@ -138,8 +138,9 @@ def run(request):
             for dof in basis.get_dofs(facets=region(f'temperature_{i}')).all():
                 if int(dof) in prescribed and prescribed[int(dof)]!=boundary['temperature_c']:raise ValueError('Incompatible prescribed temperatures')
                 prescribed[int(dof)]=boundary['temperature_c']
-        if not prescribed:raise ValueError('Thermal reference requires explicit prescribed-temperature faces')
-        fixed=np.array(sorted(prescribed));known=np.zeros(basis.N)
+        convection=study.get('convection',[]);radiation=study.get('radiation',[])
+        if not prescribed and not convection and not radiation:raise ValueError('Thermal reference requires temperature-based heat rejection')
+        fixed=np.array(sorted(prescribed),dtype=int);known=np.zeros(basis.N)
         for d,t in prescribed.items():known[d]=t
         for i,source in enumerate(study['heat_sources']):
             fb=facet(f'heat_{i}');area=float(asm(unit_area,fb));areas[f'heat_{i}']=area
@@ -147,12 +148,71 @@ def run(request):
             @LinearForm
             def power(v,w):return flux*v
             force+=asm(power,fb)
-        values=solve(*condense(stiffness,force,x=known,D=fixed))
-        residual=stiffness @ values-force
-        scale=max(float(np.sum(np.abs(force))),float(np.sum(np.abs(residual[fixed]))),1e-12)
+        if study.get('internal_heat_w') is not None:
+            volume=float(asm(unit_area,basis));generation=study['internal_heat_w']*1000/volume
+            @LinearForm
+            def internal(v,w):return generation*v
+            force+=asm(internal,basis)
+        source_force=force.copy();exchange=[]
+        for kind,boundaries in [('convection',convection),('radiation',radiation)]:
+            for i,boundary in enumerate(boundaries):
+                fb=FacetBasis(mesh,element,facets=region(f'{kind}_{i}'),intorder=14)
+                ambient=boundary['ambient_temperature_c']
+                if kind=='convection':
+                    coefficient=boundary['coefficient_w_m2_k']*1e-3
+                    @BilinearForm
+                    def robin(u,v,w):return coefficient*u*v
+                    @LinearForm
+                    def environment(v,w):return coefficient*ambient*v
+                    stiffness=stiffness+asm(robin,fb);force+=asm(environment,fb)
+                else:
+                    from scipy.constants import Stefan_Boltzmann
+                    coefficient=boundary['emissivity']*Stefan_Boltzmann*1e-3
+                exchange.append((kind,fb,coefficient,ambient))
+        free=np.setdiff1d(np.arange(basis.N),fixed)
+        def equations(values,tangent=False):
+            residual=stiffness @ values-force;matrix=stiffness.copy() if tangent else None
+            for kind,fb,c,ambient in exchange:
+                if kind!='radiation':continue
+                field=fb.interpolate(values)
+                if np.min(field)+273.15<=0:raise ValueError('Reference radiation reaches nonpositive absolute temperature')
+                @LinearForm
+                def radiative(v,w):return c*((w.temperature+273.15)**4-(ambient+273.15)**4)*v
+                residual+=asm(radiative,fb,temperature=field)
+                if tangent:
+                    @BilinearForm
+                    def derivative(u,v,w):return 4*c*(w.temperature+273.15)**3*u*v
+                    matrix=matrix+asm(derivative,fb,temperature=field)
+            return residual,matrix
+        if radiation:
+            from scipy.sparse.linalg import spsolve
+            seeds=list(prescribed.values())+[b['ambient_temperature_c'] for b in convection+radiation]
+            values=np.full(basis.N,float(np.mean(seeds)))
+            values[fixed]=known[fixed]
+            for iteration in range(80):
+                residual,tangent=equations(values,True)
+                if np.linalg.norm(residual[free])<1e-10*max(np.linalg.norm(force),1e-12):break
+                delta=np.zeros(basis.N);delta[free]=spsolve(tangent[free][:,free].tocsc(),-residual[free])
+                accepted=False
+                for fraction in (1.,.5,.25,.125,.0625,.03125,.015625,.0078125,.00390625,.001953125,.0009765625):
+                    candidate=values+fraction*delta
+                    if candidate.min()+273.15<=0:continue
+                    trial,_=equations(candidate)
+                    if np.linalg.norm(trial[free])<np.linalg.norm(residual[free]):values=candidate;accepted=True;break
+                if not accepted:raise RuntimeError('Independent radiation Newton line search failed')
+            else:raise RuntimeError('Independent radiation Newton solve did not converge')
+        else:values=solve(*condense(stiffness,force,x=known,D=fixed))
+        residual,_=equations(values)
+        rejected=0.
+        for kind,fb,c,ambient in exchange:
+            @Functional
+            def out(w):return c*(w.temperature-ambient) if kind=='convection' else c*((w.temperature+273.15)**4-(ambient+273.15)**4)
+            rejected+=float(asm(out,fb,temperature=fb.interpolate(values)))
+        scale=max(float(np.sum(np.abs(source_force))),float(np.sum(np.abs(residual[fixed]))),abs(rejected),1e-12)
         result={'temperature_c':{n:float(values[d[0]]) for n,d in dofs.items()},
-                'equivalent_heat_load_n_mm_s':{n:float(force[d[0]]) for n,d in dofs.items()},
-                'heat_balance_error':float(abs(force.sum()+residual[fixed].sum())/scale)}
+                'equivalent_heat_load_n_mm_s':{n:float(source_force[d[0]]) for n,d in dofs.items()},
+                'heat_rejected_w':rejected/1000,'prescribed_heat_w':float(residual[fixed].sum())/1000,
+                'heat_balance_error':float(abs(source_force.sum()+residual[fixed].sum()-rejected)/scale)}
     free=np.setdiff1d(np.arange(basis.N),fixed)
     if study['type']!='modal':
         equation_error=float(np.linalg.norm(residual[free])/max(np.linalg.norm(force),np.linalg.norm(stiffness @ values),1e-12))

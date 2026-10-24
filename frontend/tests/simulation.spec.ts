@@ -172,6 +172,95 @@ test("thermal solve, temperature field, energy balance and stale edit", async ({
   expect(errors).toEqual([]);
 });
 
+test("sourced convection, radiation and internal heat save and solve without a thermostat", async ({
+  page,
+  request,
+}) => {
+  await fixture(request, true);
+  const current = await (await request.get("/api/project")).json();
+  current.study.temperatures = [];
+  current.study.heat_sources = [];
+  current.study.convection = [
+    {
+      face: "part:xmax",
+      coefficient_w_m2_k: 25,
+      ambient_temperature_c: 20,
+      source: "Synthetic browser film fixture",
+    },
+  ];
+  current.study.radiation = [
+    {
+      face: "part:xmax",
+      emissivity: 0.8,
+      ambient_temperature_c: 20,
+      source: "Synthetic browser gray diffuse fixture",
+    },
+  ];
+  const applied = await request.post("/api/commands", {
+    data: {
+      expected_revision: current.revision,
+      actor: "human",
+      project: current,
+    },
+  });
+  expect(applied.ok(), await applied.text()).toBeTruthy();
+  await study(page);
+  await page.getByLabel("Film coefficient 1", { exact: true }).fill("30");
+  await page
+    .getByLabel("Convection source 1", { exact: true })
+    .fill("Synthetic h=30 verification condition, not calibrated airflow");
+  await page.getByLabel("Emissivity 1", { exact: true }).fill("0.7");
+  await page
+    .getByRole("button", { name: "Add internal heat", exact: true })
+    .click();
+  await page.getByLabel("Internal heat power", { exact: true }).fill("0.02");
+  await page
+    .getByLabel("Internal heat source", { exact: true })
+    .fill("Synthetic uniform generation for browser verification");
+  await page.locator(".assumptions input").check();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Run study", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Run study", exact: true }).click();
+  await expect(
+    page.getByText("Heat to surroundings", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  const state = await (await request.get("/api/state")).json();
+  expect(state.analysis.state).toBe("passed");
+  expect(state.analysis.input_heat_w).toBeCloseTo(0.02, 7);
+  expect(state.analysis.heat_rejected_w).toBeCloseTo(0.02, 5);
+  expect(state.analysis.heat_balance_error).toBeLessThan(0.002);
+  expect(state.project.study.temperatures).toHaveLength(0);
+  expect(state.project.study.convection[0].coefficient_w_m2_k).toBe(30);
+  await page
+    .getByRole("button", { name: "View temperature", exact: true })
+    .click();
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-ready",
+    "true",
+  );
+  await page.screenshot({
+    path: "test-results/study-ambient-exchange.png",
+    fullPage: true,
+  });
+  await page.reload();
+  await study(page);
+  await expect(
+    page.getByLabel("Internal heat power", { exact: true }),
+  ).toHaveValue("0.02");
+  await page
+    .getByLabel("Surroundings temperature 1", { exact: true })
+    .fill("25");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get("/api/state")).json()).analysis_state,
+    )
+    .toBe("stale");
+});
+
 test("named studies preserve independent loads, results and comparison", async ({
   page,
   request,

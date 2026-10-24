@@ -55,7 +55,9 @@ def prepare_geometry(store, project):
     regions, aliases, identities = [], {}, {}
     groups = [("fixed", project.study.fixed_faces), ("load", [f.face for f in project.study.forces]),
               ("temperature", [v.face for v in project.study.temperatures]),
-              ("heat", [v.face for v in project.study.heat_sources])]
+              ("heat", [v.face for v in project.study.heat_sources]),
+              ("convection", [v.face for v in project.study.convection]),
+              ("radiation", [v.face for v in project.study.radiation])]
     for prefix, names in groups:
         for index, name in enumerate(names):
             face = resolve_face(shape, name)

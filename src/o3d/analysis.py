@@ -20,7 +20,7 @@ from .analysis_mesh import exterior_triangles, generate_mesh, prepare_geometry
 from .model import digest, geometry_key, study_key
 from .store import now, write_json
 
-ADAPTER_VERSION = "calculix-studies-v5"
+ADAPTER_VERSION = "calculix-studies-v6"
 LABELS = {"linear_static": "Static stress", "modal": "Modal frequencies", "buckling": "Structural buckling",
           "thermal": "Steady thermal", "thermal_stress": "Thermal stress", "nonlinear_static": "Nonlinear static stress",
           "quasistatic_event": "Quasi-static event", "dynamic_event": "Dynamic event", "shape_optimization": "Shape optimization",
@@ -36,8 +36,9 @@ def capabilities():
                          "solver": "CalculiX" if key in IMPLEMENTED else None,
                          "physical_validation": "not_performed"} for key, label in LABELS.items()],
             "meshers": ["netgen", "gmsh"],
+            "thermal_boundaries": ["prescribed_temperature", "surface_heat", "uniform_internal_heat", "prescribed_convection", "prescribed_radiation"],
             "unsupported": ["assemblies/contact", "anisotropic constitutive laws", "shells/beams",
-                            "damage/fracture", "convection/radiation", "preloaded modal analysis"]}
+                            "damage/fracture", "cavity radiation/airflow CFD", "preloaded modal analysis"]}
 
 
 def validate_study(project):
@@ -60,9 +61,11 @@ def validate_study(project):
     if study.type in THERMAL:
         if material is not None and material.thermal_conductivity_w_m_k is None:
             errors.append("Specify thermal conductivity and its data source")
-        if not study.temperatures:
-            errors.append("Select at least one prescribed-temperature face for steady heat rejection")
-    elif study.temperatures or study.heat_sources:
+        if not (study.temperatures or study.convection or study.radiation):
+            errors.append("Select a prescribed-temperature, convection or radiation boundary for steady heat rejection")
+        if study.internal_heat_w is not None and not study.internal_heat_source:
+            errors.append("Specify the source and conditions for internal heat power")
+    elif study.temperatures or study.heat_sources or study.convection or study.radiation or study.internal_heat_w is not None:
         errors.append("This mechanical study does not accept thermal boundary conditions")
     if study.type == "thermal_stress":
         if material is not None and material.thermal_expansion_per_k is None:
@@ -75,6 +78,8 @@ def validate_study(project):
     thermal_names = [v.face for v in study.temperatures] + [v.face for v in study.heat_sources]
     if len(thermal_names) != len(set(thermal_names)):
         errors.append("Temperature and heat-source faces must be distinct and unique")
+    for kind, boundaries in [('convection', study.convection), ('radiation', study.radiation)]:
+        if len({b.face for b in boundaries}) != len(boundaries):errors.append(f"Duplicate {kind} face; combine the boundary conditions explicitly")
     if not study.assumptions_confirmed:
         errors.append("Review and confirm the selected study's modeling assumptions")
     if study.type in ("modal", "buckling") and study.stress_probe_mm is not None:
@@ -124,6 +129,10 @@ def thermal_boundaries(mesh, study):
             flux[n] = flux.get(n, 0) + value
     if set(prescribed).intersection(flux):
         raise ValueError("A heat-source region overlaps prescribed-temperature nodes")
+    if study.internal_heat_w is not None:
+        from .thermal_exchange import internal_heat_loads
+        body, _ = internal_heat_loads(mesh, study.internal_heat_w)
+        for n, value in body.items():flux[n] = flux.get(n, 0)+value
     return prescribed, flux
 
 
@@ -175,14 +184,22 @@ def write_deck(path, mesh, project, thermal=False, temperatures=None):
             lines += [f"*EXPANSION,ZERO={study.reference_temperature_c:.12g}", f"{material.thermal_expansion_per_k:.12g}"]
     lines += ["*SOLID SECTION,ELSET=EALL,MATERIAL=MAT"]
     if thermal:
+        from .thermal_exchange import exchange_deck, STEFAN_BOLTZMANN_W_M2_K4
         prescribed, flux = thermal_boundaries(mesh, study)
-        lines += set_lines("THERMAL_FIXED", prescribed)
-        lines += ["*STEP", "*HEAT TRANSFER,STEADY STATE", "1.,1.", "*BOUNDARY"]
-        lines += [f"{n},11,11,{t:.12g}" for n,t in sorted(prescribed.items())]
+        if prescribed:lines += set_lines("THERMAL_FIXED", prescribed)
+        if study.radiation:
+            lines += [f"*PHYSICAL CONSTANTS,ABSOLUTE ZERO=-273.15,STEFAN BOLTZMANN={STEFAN_BOLTZMANN_W_M2_K4*1e-3:.12g}"]
+        seeds = list(prescribed.values())+[b.ambient_temperature_c for b in study.convection+study.radiation]
+        lines += ['*INITIAL CONDITIONS,TYPE=TEMPERATURE', f'ALLNODES,{sum(seeds)/len(seeds):.12g}']
+        lines += ["*STEP,INC=200", "*HEAT TRANSFER,STEADY STATE", "0.1,1.,1e-8,0.1" if study.radiation else "1.,1."]
+        if prescribed:
+            lines += ["*BOUNDARY"]+[f"{n},11,11,{t:.12g}" for n,t in sorted(prescribed.items())]
         if flux:
-            lines += ["*CFLUX"] + [f"{n},11,{v:.12g}" for n,v in sorted(flux.items()) if abs(v)>1e-14]
-        lines += ["*NODE PRINT,NSET=ALLNODES", "NT", "*NODE PRINT,NSET=THERMAL_FIXED", "RFL",
-                  "*NODE FILE", "NT,RFL", "*EL FILE", "HFL", "*END STEP"]
+            lines += ["*CFLUX"] + [f"{n},11,{v:.12g}" for n,v in sorted(flux.items()) if v != 0]
+        lines += exchange_deck(mesh, study)
+        lines += ["*NODE PRINT,NSET=ALLNODES", "NT"]
+        if prescribed:lines += ["*NODE PRINT,NSET=THERMAL_FIXED", "RFL"]
+        lines += ["*NODE FILE", "NT,RFL", "*EL FILE", "HFL", "*END STEP"]
         path.write_text("\n".join(lines)+"\n")
         return prescribed, flux
     fixed, forces = load_boundary(mesh, study)
@@ -316,7 +333,7 @@ def solver_identity():
     files = [Path(__file__), Path(__file__).with_name("solver.py"), Path(__file__).with_name("model.py"), Path(__file__).with_name("analysis_mesh.py"),
              Path(__file__).with_name("mesh_worker.py"), Path(__file__).with_name("gmsh_worker.py"),
              Path(__file__).with_name("mesh_quality_worker.py"),Path(__file__).with_name("quadratic.py"),
-             Path(__file__).with_name("mode_tracking.py")]
+             Path(__file__).with_name("mode_tracking.py"),Path(__file__).with_name("thermal_exchange.py")]
     manifest = {p.name: _binary_hash(str(p),p.stat().st_mtime_ns,p.stat().st_size) for p in files}
     for name in ("mesh-requirements.lock", "requirements.lock"):
         lock = Path(__file__).resolve().parents[2]/name
@@ -513,6 +530,7 @@ def simulate(store, project, cancel=None):
                "solver":identity,"regions":portable_transfer,
                "geometry_sha256":hashlib.sha256((geometry/"part.step").read_bytes()).hexdigest()})
     previous,iterations,converged = None,[],False
+    previous_thermal_scale = None
     previous_eigen = None
     start = time.monotonic()
     warnings = ["Numerical results apply to the recorded model and conditions; physical validation has not been performed."]
@@ -529,24 +547,56 @@ def simulate(store, project, cancel=None):
                  "stress_convention":"extrapolated/averaged nodal von Mises; screening field"}
         metrics,observed,balanced = {},[],True
         mode_tracking = None
+        thermal_scale = None
         temperature = None
         if project.study.type in THERMAL:
+            from .thermal_exchange import heat_exchange
             (prescribed,flux),frames = run_solver(run,mesh,project,"thermal",cancel,thermal=True)
             temperature = parse_scalar_dat(run/"thermal.dat","temperatures")
-            heat_reactions = parse_scalar_dat(run/"thermal.dat","heat generation")
+            heat_reactions = parse_scalar_dat(run/"thermal.dat","heat generation") if prescribed else {}
             if set(temperature)!=set(map(int,mesh["nodes"])) or not set(prescribed).issubset(heat_reactions):
                 raise RuntimeError("Incomplete thermal field or boundary heat-flow output")
-            net = sum(flux.values())+sum(heat_reactions.values())
-            scale = max(sum(abs(v) for v in flux.values()),sum(abs(v) for v in heat_reactions.values()),1e-12)
+            last_temperature = [f for f in frames if f['name']=='NDTEMP']
+            if not last_temperature or not math.isclose(last_temperature[-1]['time'],1.,rel_tol=1e-8,abs_tol=1e-8):
+                raise RuntimeError('Thermal solver did not return the completed steady load step')
+            if any(not math.isclose(temperature[n],t,rel_tol=2e-6,abs_tol=2e-5) for n,t in prescribed.items()):
+                raise RuntimeError('Thermal output does not satisfy the prescribed final temperatures')
+            if min(temperature.values()) < -273.15-1e-6:raise RuntimeError('Thermal output contains nonphysical absolute temperatures')
+            exchange = heat_exchange(mesh, project.study, temperature)
+            nodal_exchange = exchange.pop('nodal_power_out_w')
+            raw_heat_reactions = heat_reactions
+            # RFL reports conductive nodal heat flow at temperature constraints,
+            # including no subtraction of an applied concentrated nodal source.
+            # The external thermostat also supplies any fixed-node surface loss.
+            heat_reactions = {n:raw_heat_reactions[n]-flux.get(n,0)+1000*nodal_exchange.get(n,0) for n in prescribed}
+            out = exchange['convection_w']+exchange['radiation_w']
+            input_heat = sum(flux.values())/1000
+            thermostat = sum(heat_reactions.values())/1000
+            net = input_heat+thermostat-out
+            scale = max(sum(abs(s.power_w) for s in project.study.heat_sources)+abs(project.study.internal_heat_w or 0),
+                        sum(abs(v) for v in heat_reactions.values())/1000,
+                        sum(r['absolute_exchange_w'] for r in exchange['boundaries']),1e-9)
             error = abs(net)/scale
             point = project.study.probe_point_mm
             probe = float(interpolate_probe(mesh,temperature,point)) if point is not None else max(temperature.values())
             metrics.update({"max_temperature_c":max(temperature.values()),"min_temperature_c":min(temperature.values()),
-                            "probe_temperature_c":probe,"heat_balance_error":error,
+                            "probe_temperature_c":probe,"heat_balance_error":error,"heat_balance_scale_w":scale,
+                            "input_heat_w":input_heat,"prescribed_heat_w":thermostat,"heat_rejected_w":out,"thermal_exchange":exchange,
                             "heat_reactions_w":{n:v/1000 for n,v in heat_reactions.items()}})
+            write_json(run/'heat-balance.json', {'input_heat_w':input_heat,'prescribed_heat_w':thermostat,'exchange':exchange,
+                                               'raw_prescribed_conductive_flow_w':{n:v/1000 for n,v in raw_heat_reactions.items()},
+                                               'applied_heat_on_prescribed_w':{n:flux.get(n,0)/1000 for n in prescribed},
+                                               'exchange_on_prescribed_w':{n:nodal_exchange.get(n,0) for n in prescribed},
+                                               'relative_imbalance':error,'scale_w':scale})
             field["temperature_c"] = temperature
-            observed.append(probe+273.15)
-            balanced = error<=.01
+            references = [b.temperature_c for b in project.study.temperatures]+[b.ambient_temperature_c for b in project.study.convection+project.study.radiation]
+            reference = sum(references)/len(references)
+            thermal_quantities = [probe-reference,max(temperature.values())-reference,min(temperature.values())-reference]
+            thermal_scale = max(max(map(abs,thermal_quantities)),max(temperature.values())-min(temperature.values()),1e-6)
+            metrics.update({'temperature_reference_c':reference,'probe_temperature_rise_k':probe-reference,
+                            'thermal_convergence_scale_k':thermal_scale})
+            observed.extend(thermal_quantities)
+            balanced = error<=.01 and exchange['quadrature_passed']
         if project.study.type in ("modal","buckling"):
             from .mode_tracking import computed_mode_count, track_modes
             _,frames = run_solver(run,mesh,project,"analysis",cancel)
@@ -588,6 +638,8 @@ def simulate(store, project, cancel=None):
             raise RuntimeError("Refinements returned different observation histories; convergence cannot be established")
         scales=metrics.get("convergence_scales",[0]*len(observed))
         deltas = [abs(a-b)/max(abs(a),abs(b),scale*1e-6,1e-12) for a,b,scale in zip(observed,previous,scales)] if previous is not None else None
+        if deltas is not None and thermal_scale is not None:
+            deltas[:3] = [abs(a-b)/max(thermal_scale,previous_thermal_scale) for a,b in zip(observed[:3],previous[:3])]
         if mode_tracking is not None and "quantity_changes" in mode_tracking:
             deltas = mode_tracking["quantity_changes"]
         refinement = not iterations or (len(mesh["nodes"])>iterations[-1]["nodes"] and len(mesh["elements"])>iterations[-1]["elements"]
@@ -602,6 +654,7 @@ def simulate(store, project, cancel=None):
         write_json(run/"normalized-field.json",field)
         write_json(run/"metrics.json",iterations[-1])
         previous = observed
+        previous_thermal_scale = thermal_scale
         if converged and i >= min(2,project.study.refinement_steps-1):
             break
     findings=[]
@@ -633,6 +686,8 @@ def simulate(store, project, cancel=None):
         if mode_tracking is not None and not mode_tracking["passed"]:
             warnings.append("Mode-shape tracking is inconclusive: " + mode_tracking.get("reason", "low correlation, quadrature sensitivity or a repeated/crossing family cut by the requested mode window; inspect mode-tracking.json and increase the number of requested modes if the window cuts a family."))
     if project.study.type=="buckling":warnings.append("Ideal linear eigenvalue buckling does not predict imperfect nonlinear collapse.")
+    if project.study.type in THERMAL and (project.study.convection or project.study.radiation):
+        warnings.append('Surface heat exchange uses the supplied constant film/emissivity and prescribed surroundings; no airflow, cavity view-factor or measured heat-transfer calibration is performed.')
     if project.study.type=="nonlinear_static":
         warnings.append("Quasi-static load stepping with isotropic hardening and optional large deformation; no contact, damage, rate effects or cyclic plasticity model.")
         if metrics.get("plastic_curve_range_exceeded"):

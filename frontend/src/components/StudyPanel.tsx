@@ -58,7 +58,10 @@ export function StudyPanel({
     state.geometry_state === "current"
       ? selection.id
       : null;
-  const addBoundary = (kind: "fixed" | "force" | "temperature" | "heat") => {
+  const addBoundary = (
+    kind:
+      "fixed" | "force" | "temperature" | "heat" | "convection" | "radiation",
+  ) => {
     if (!face) return;
     edit((p) => {
       const s = p.study;
@@ -73,6 +76,20 @@ export function StudyPanel({
         s.temperatures.push({ face, temperature_c: null });
       if (kind === "heat" && !s.heat_sources.some((v) => v.face === face))
         s.heat_sources.push({ face, power_w: null });
+      if (kind === "convection" && !s.convection.some((v) => v.face === face))
+        s.convection.push({
+          face,
+          coefficient_w_m2_k: null,
+          ambient_temperature_c: null,
+          source: "",
+        });
+      if (kind === "radiation" && !s.radiation.some((v) => v.face === face))
+        s.radiation.push({
+          face,
+          emissivity: null,
+          ambient_temperature_c: null,
+          source: "",
+        });
       s.assumptions_confirmed = false;
     });
   };
@@ -137,6 +154,10 @@ export function StudyPanel({
                 forces: [],
                 temperatures: [],
                 heat_sources: [],
+                convection: [],
+                radiation: [],
+                internal_heat_w: null,
+                internal_heat_source: null,
                 assumptions_confirmed: false,
               };
               p.active_study_id = id;
@@ -202,6 +223,10 @@ export function StudyPanel({
               if (!["thermal", "thermal_stress"].includes(p.study.type)) {
                 p.study.temperatures = [];
                 p.study.heat_sources = [];
+                p.study.convection = [];
+                p.study.radiation = [];
+                p.study.internal_heat_w = null;
+                p.study.internal_heat_source = null;
               }
             })
           }
@@ -240,6 +265,12 @@ export function StudyPanel({
                   Set temperature
                 </Button>
                 <Button onClick={() => addBoundary("heat")}>Apply heat</Button>
+                <Button onClick={() => addBoundary("convection")}>
+                  Add convection
+                </Button>
+                <Button onClick={() => addBoundary("radiation")}>
+                  Add radiation
+                </Button>
               </>
             )}
           </div>
@@ -466,9 +497,14 @@ export function StudyPanel({
       {thermal && (
         <>
           <div className="section-heading">THERMAL BOUNDARIES</div>
-          {!study.temperatures.length && (
-            <p className="empty-note">Select a face and set its temperature.</p>
-          )}
+          {!study.temperatures.length &&
+            !study.convection.length &&
+            !study.radiation.length && (
+              <p className="empty-note">
+                Select a face for temperature, convection or radiation heat
+                rejection.
+              </p>
+            )}
           {study.temperatures.map((v, i) => (
             <div className="load-card" key={v.face}>
               <div>
@@ -513,6 +549,127 @@ export function StudyPanel({
               />
             </div>
           ))}
+          {study.convection.map((v, i) => (
+            <div className="load-card" key={`film-${v.face}`}>
+              <div>
+                <code>{v.face}</code>
+                <Button
+                  title="Remove convection"
+                  onClick={() => edit((p) => p.study.convection.splice(i, 1))}
+                >
+                  <X size={13} />
+                </Button>
+              </div>
+              <Field
+                label={`Film coefficient ${i + 1}`}
+                type="number"
+                unit="W/(m² K)"
+                value={v.coefficient_w_m2_k}
+                onChange={(n: number) =>
+                  edit((p) => (p.study.convection[i].coefficient_w_m2_k = n))
+                }
+              />
+              <Field
+                label={`Fluid temperature ${i + 1}`}
+                type="number"
+                unit="°C"
+                value={v.ambient_temperature_c}
+                onChange={(n: number) =>
+                  edit((p) => (p.study.convection[i].ambient_temperature_c = n))
+                }
+              />
+              <Field
+                label={`Convection source ${i + 1}`}
+                value={v.source}
+                onChange={(s: string) =>
+                  edit((p) => (p.study.convection[i].source = s))
+                }
+              />
+            </div>
+          ))}
+          {study.radiation.map((v, i) => (
+            <div className="load-card" key={`radiation-${v.face}`}>
+              <div>
+                <code>{v.face}</code>
+                <Button
+                  title="Remove radiation"
+                  onClick={() => edit((p) => p.study.radiation.splice(i, 1))}
+                >
+                  <X size={13} />
+                </Button>
+              </div>
+              <Field
+                label={`Emissivity ${i + 1}`}
+                type="number"
+                value={v.emissivity}
+                onChange={(n: number) =>
+                  edit((p) => (p.study.radiation[i].emissivity = n))
+                }
+              />
+              <Field
+                label={`Surroundings temperature ${i + 1}`}
+                type="number"
+                unit="°C"
+                value={v.ambient_temperature_c}
+                onChange={(n: number) =>
+                  edit((p) => (p.study.radiation[i].ambient_temperature_c = n))
+                }
+              />
+              <Field
+                label={`Radiation source ${i + 1}`}
+                value={v.source}
+                onChange={(s: string) =>
+                  edit((p) => (p.study.radiation[i].source = s))
+                }
+              />
+            </div>
+          ))}
+          {study.internal_heat_w != null ||
+          study.internal_heat_source != null ? (
+            <div className="load-card">
+              <div>
+                <span>Uniform internal generation</span>
+                <Button
+                  title="Remove internal heat"
+                  onClick={() =>
+                    edit((p) => {
+                      p.study.internal_heat_w = null;
+                      p.study.internal_heat_source = null;
+                    })
+                  }
+                >
+                  <X size={13} />
+                </Button>
+              </div>
+              <Field
+                label="Internal heat power"
+                type="number"
+                unit="W"
+                value={study.internal_heat_w}
+                onChange={(n: number) =>
+                  edit((p) => (p.study.internal_heat_w = n))
+                }
+              />
+              <Field
+                label="Internal heat source"
+                value={study.internal_heat_source}
+                onChange={(s: string) =>
+                  edit((p) => (p.study.internal_heat_source = s))
+                }
+              />
+            </div>
+          ) : (
+            <Button
+              onClick={() =>
+                edit((p) => {
+                  p.study.internal_heat_source = "";
+                  p.study.assumptions_confirmed = false;
+                })
+              }
+            >
+              Add internal heat
+            </Button>
+          )}
         </>
       )}
       <div className="section-heading">NUMERICAL SETTINGS</div>
@@ -681,7 +838,7 @@ export function StudyPanel({
         />
         <span>
           {thermal
-            ? "I have reviewed the material, heat sources and temperature boundaries. Steady conduction and constant isotropic properties apply."
+            ? "I have reviewed the material, heat sources and environment. Steady conduction, constant isotropic properties and supplied film/emissivity apply. Radiation assumes unobstructed uniform surroundings."
             : eigen
               ? "I have reviewed the material, supports and load case. Linear eigenmodes are idealized and have arbitrary amplitudes."
               : study.type === "nonlinear_static"
@@ -751,6 +908,8 @@ export function StudyPanel({
           )}
           {metric("Maximum temperature", result.max_temperature_c, "°C")}
           {metric("Minimum temperature", result.min_temperature_c, "°C")}
+          {metric("Heat input", result.input_heat_w, "W")}
+          {metric("Heat to surroundings", result.heat_rejected_w, "W")}
           {(result.frequencies_hz ?? result.buckling_factors ?? []).map(
             (v: number, i: number) =>
               metric(

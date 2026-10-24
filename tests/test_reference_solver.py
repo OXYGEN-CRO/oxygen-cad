@@ -138,3 +138,48 @@ def test_modal_fields_against_independent_stiffness_mass_and_eigensolve(tmp_path
     assert metrics['quadrature_sensitivity']<.02,json.dumps(report,indent=2)
     assert agreement>.995,json.dumps(report,indent=2)
     assert metrics['eigen_residual']<1e-7
+
+
+@pytest.mark.parametrize('case',['convection-netgen','radiation-gmsh','internal-gmsh'])
+def test_ambient_heat_exchange_against_independent_nonlinear_weak_form(tmp_path,beam,case):
+    from o3d.model import ConvectionBoundary,RadiationBoundary
+    p=beam.model_copy(deep=True);p.study.type='thermal';p.study.forces=[];p.study.fixed_faces=[]
+    p.study.stress_probe_mm=None;p.study.mesh_size_mm=4;p.study.mesher='netgen' if 'netgen' in case else 'gmsh';p.requirements=[]
+    p.material.thermal_conductivity_w_m_k=20
+    p.study.heat_sources=[HeatSource(face='part:xmin',power_w=.02)]
+    if case.startswith('radiation'):
+        p.study.radiation=[RadiationBoundary(face=f,emissivity=.8,ambient_temperature_c=20,source='Independent synthetic radiation fixture') for f in ['part:xmax','part:ymax']]
+    else:
+        p.study.convection=[ConvectionBoundary(face='part:xmax',coefficient_w_m2_k=25,ambient_temperature_c=20,source='Independent synthetic Robin fixture')]
+    if case.startswith('internal'):
+        p.study.heat_sources=[];p.study.internal_heat_w=.02;p.study.internal_heat_source='Independent uniform generation fixture'
+        # Include an essential boundary alongside convection to verify external
+        # thermostat power when source/exchange nodal terms meet a constraint.
+        p.study.temperatures=[TemperatureBoundary(face='part:xmin',temperature_c=20)]
+    store=Store(tmp_path/case);store.init(p);calculated=simulate(store,p)
+    assert calculated['state']=='passed',calculated['warnings']
+    mesh=json.loads(store.artifact(calculated['artifacts']['mesh_0/mesh.json']).read_text())
+    field=json.loads(store.artifact(calculated['artifacts']['mesh_0/normalized-field.json']).read_text())
+    transfer=json.loads(store.artifact(calculated['artifacts']['region_map']).read_text())
+    request={'mesh':mesh,'study':p.study.model_dump(mode='json'),'material':p.material.model_dump(mode='json'),'aliases':transfer['aliases']}
+    directory=tmp_path/'exchange-reference';directory.mkdir();results=[]
+    for order in (2,6):
+        request['quadrature_order']=order;source=directory/f'input-{order}.json';source.write_text(json.dumps(request))
+        output=directory/f'output-{order}.json'
+        run_process([REFERENCE,ROOT/'scripts/reference_fem.py',source,output],directory,directory/f'order-{order}.log',timeout=180)
+        results.append(json.loads(output.read_text()))
+    ids=sorted(map(int,mesh['nodes']));first,higher=results
+    actual=np.array([field['temperature_c'][str(n)] for n in ids]);reference=np.array([first['field']['temperature_c'][str(n)] for n in ids])
+    high=np.array([higher['field']['temperature_c'][str(n)] for n in ids]);scale=max(float(np.max(np.abs(actual-20))),1e-6)
+    metrics={'temperature_rise_relative_difference':float(np.max(np.abs(actual-reference))/scale),
+             'quadrature_sensitivity':float(np.max(np.abs(high-reference))/scale),
+             'reference_heat_balance_error':first['field']['heat_balance_error'],
+             'reference_equation_residual':first['equation_residual']}
+    report={'case':case,'metrics':metrics,'reference_software':first['software'],'calculix':calculated['solver_identity'],
+            'scope':'Independent nonlinear surface residual/tangent, Robin matrix, internal generation and conduction; same idealization, no physical calibration'}
+    target=Path(os.environ.get('O3D_REFERENCE_REPORT_DIR',str(directory)));target.mkdir(parents=True,exist_ok=True)
+    (target/f'exchange-{case}.json').write_text(json.dumps(report,indent=2)+'\n')
+    assert metrics['temperature_rise_relative_difference']<.002,json.dumps(report,indent=2)
+    assert metrics['quadrature_sensitivity']<.02,json.dumps(report,indent=2)
+    assert metrics['reference_heat_balance_error']<1e-6
+    assert metrics['reference_equation_residual']<1e-7

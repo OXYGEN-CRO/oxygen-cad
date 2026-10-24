@@ -161,7 +161,7 @@ def engine_stdio():
 @app.command()
 def init(ctx: typer.Context, template: Path | None = None, json_output: bool = typer.Option(False, "--json")):
     if template:
-        if str(template) in ("bracket", "cantilever", "modal", "buckling", "thermal", "thermal-stress", "nonlinear", "plastic-unload"):
+        if str(template) in ("bracket", "cantilever", "modal", "buckling", "thermal", "ambient-thermal", "thermal-stress", "nonlinear", "plastic-unload"):
             template = Path(__file__).resolve().parents[2] / "examples" / f"{template}.json"
         project = Project.model_validate_json(template.read_text())
     else:

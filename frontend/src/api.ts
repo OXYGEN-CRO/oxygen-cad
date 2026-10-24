@@ -47,6 +47,8 @@ export type Study = Omit<
   | "probe_point_mm"
   | "temperatures"
   | "heat_sources"
+  | "convection"
+  | "radiation"
 > & {
   fixed_faces: string[];
   forces: { face: string; vector_n: number[] }[];
@@ -57,6 +59,18 @@ export type Study = Omit<
   probe_point_mm: number[] | null;
   temperatures: { face: string; temperature_c: number | null }[];
   heat_sources: { face: string; power_w: number | null }[];
+  convection: {
+    face: string;
+    coefficient_w_m2_k: number | null;
+    ambient_temperature_c: number | null;
+    source: string;
+  }[];
+  radiation: {
+    face: string;
+    emissivity: number | null;
+    ambient_temperature_c: number | null;
+    source: string;
+  }[];
   assumptions_confirmed: boolean;
 };
 export type Project = Omit<

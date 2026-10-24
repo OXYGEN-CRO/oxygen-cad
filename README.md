@@ -114,7 +114,7 @@ For a combined editable handoff, run `./o3d handoff create --section-z 1.5 --jso
 - **Reference geometry:** content-addressed STEP imports with editable placement and visibility.
 - **Review:** orbit/zoom, face selection, measurements between surface points, section view, exact dimensions, agent selection context, and PNG rendering.
 - **Verification:** solid validity, connectedness, dimensions, mass with supplied density, reference interference/clearance, and an independent exported-mesh audit.
-- **Simulation:** experimental real CalculiX static, modal, buckling, steady conduction and sequential thermal-stress studies; isolated Netgen/Gmsh meshing, explicit material/boundary inputs, refinement, balance checks, temperature/mode/stress/displacement fields and reproducible analysis artifacts. See [capabilities, evidence and parity ledger](docs/SIMULATION.md).
+- **Simulation:** experimental real CalculiX static, modal, buckling, steady thermal and sequential thermal-stress studies; sourced convection/radiation and internal heat, isolated Netgen/Gmsh meshing, explicit inputs, refinement, balance checks, temperature/mode/stress/displacement fields and reproducible analysis artifacts. See [capabilities, evidence and parity ledger](docs/SIMULATION.md).
 - **Handoff:** STEP, STL, project source, BOM CSV, and HTML/JSON engineering report in a revision-linked ZIP.
 - **Local operation:** background jobs, cancellation, worker timeouts, recoverable job records, and explicit stale-result handling.
 

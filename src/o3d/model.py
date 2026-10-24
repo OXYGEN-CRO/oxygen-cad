@@ -156,11 +156,18 @@ class Material(Model):
 class Requirement(Model):
     id: Identifier
     kind: Literal["max_mass", "max_dimension", "min_clearance", "max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress"]
-    value: float = Field(gt=0)
+    value: float
     axis: Literal["X", "Y", "Z"] = "X"
     reference: str | None = None
     enabled: bool = True
     study_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def physical_limit(self):
+        if self.kind == "max_temperature":
+            if self.value < -273.15:raise ValueError("Temperature limits cannot be below absolute zero")
+        elif self.value <= 0:raise ValueError("This requirement limit must be positive")
+        return self
 
 
 class Force(Model):
@@ -176,6 +183,20 @@ class TemperatureBoundary(Model):
 class HeatSource(Model):
     face: str
     power_w: float
+
+
+class ConvectionBoundary(Model):
+    face: str
+    coefficient_w_m2_k: float = Field(gt=0)
+    ambient_temperature_c: float = Field(gt=-273.15)
+    source: str = Field(min_length=1, pattern=r"\S")
+
+
+class RadiationBoundary(Model):
+    face: str
+    emissivity: float = Field(gt=0, le=1)
+    ambient_temperature_c: float = Field(gt=-273.15)
+    source: str = Field(min_length=1, pattern=r"\S")
 
 
 StudyType = Literal["linear_static", "modal", "buckling", "thermal", "thermal_stress", "nonlinear_static",
@@ -195,6 +216,10 @@ class Study(Model):
     forces: list[Force] = Field(default_factory=list)
     temperatures: list[TemperatureBoundary] = Field(default_factory=list)
     heat_sources: list[HeatSource] = Field(default_factory=list)
+    convection: list[ConvectionBoundary] = Field(default_factory=list, max_length=100)
+    radiation: list[RadiationBoundary] = Field(default_factory=list, max_length=100)
+    internal_heat_w: float | None = None
+    internal_heat_source: str | None = Field(default=None, min_length=1, pattern=r"\S")
     reference_temperature_c: float | None = Field(default=None, ge=-273.15)
     mode_count: int = Field(default=6, ge=1, le=20)
     mesher: Literal["netgen", "gmsh"] = "netgen"

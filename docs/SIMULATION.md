@@ -14,7 +14,7 @@ adapter. Existing projects default to `linear_static`; added schema fields have
 defaults and do not require rewriting the user's source document by hand.
 
 Numerical examples are available through `init --template modal`, `buckling`,
-`thermal`, `thermal-stress`, `nonlinear` and `plastic-unload` in a new project, as well as the existing `cantilever`.
+`thermal`, `ambient-thermal`, `thermal-stress`, `nonlinear` and `plastic-unload` in a new project, as well as the existing `cantilever`.
 Their values are explicit analytical test inputs, not certified production data.
 The prepared [physical correlation protocol](PHYSICAL-VALIDATION.md) records what
 must be measured before claiming physical validation.
@@ -24,7 +24,7 @@ must be measured before claiming physical validation.
 | `linear_static` | Experimental, executable | Cantilever displacement/stress, refinement and force/moment balance; small-deformation isotropic solid |
 | `modal` | Experimental, executable | Cantilever frequencies compared with beam theory through both meshers; unloaded fixed-base modes only |
 | `buckling` | Experimental, executable | Fixed-free column compared with Euler load; ideal eigenvalue analysis, not imperfect nonlinear collapse |
-| `thermal` | Experimental, executable | Prescribed temperatures and total surface heat power; conduction/probe/heat balance checked through both meshers |
+| `thermal` | Experimental, executable | Temperature, surface/internal power, sourced convection and prescribed-environment radiation; conduction/nonlinear/heat-balance checks through both meshers |
 | `thermal_stress` | Experimental, executable | Temperature solve followed by mechanical solve on the same mesh; thermal-expansion reference test |
 | `nonlinear_static` | Experimental, executable subset | Large deformation or isotropic plastic hardening, prescribed load history, adaptive increments, full-path output; elastica and synthetic plastic unload references; no contact/damage |
 | `quasistatic_event` | Not implemented | Event adapter, contact, energy and mass-scaling sensitivity |
@@ -37,7 +37,7 @@ Not-implemented studies are explicitly unavailable in the manifest and disabled 
 the studio selector; the CLI refuses them rather than returning synthetic results.
 The six current adapters support one connected solid, planar boundary regions and
 quadratic tetrahedra. Assemblies, bolts/contact, shells/beams, anisotropy, calibrated
-printed-material laws, contact/damage, convection/radiation and preloaded modes remain outside this
+printed-material laws, contact/damage, cavity radiation/airflow CFD and preloaded modes remain outside this
 implementation. They are still part of the target where required.
 
 ## Saved studies and comparisons
@@ -76,8 +76,11 @@ These source claims are retained, not authenticated or converted to a certificat
   Poisson ratio and density in g/cm³. Modal analysis rejects unused forces.
 - Thermal: `temperatures[]` contains a face and temperature in °C;
   `heat_sources[]` contains a face and total power in W. Conductivity is W/(m K).
-  A prescribed-temperature region is required. Flux and temperature constraints
-  sharing nodes refuse, as do incompatible temperatures at a shared node.
+  Supply at least one prescribed-temperature, convection or radiation region.
+  Surface heat-power and temperature constraints sharing nodes refuse, as do
+  incompatible temperatures at a shared node. Uniform body generation and
+  surface exchange can meet temperature constraints; their nodal contributions
+  are included in the external thermostat power rather than dropped.
 - Thermal stress additionally requires thermal expansion in 1/K and an explicitly
   supplied stress-free reference temperature. Temperature fields transfer node for
   node to the subsequent mechanical solve.
@@ -115,6 +118,62 @@ These source claims are retained, not authenticated or converted to a certificat
 The UI keeps missing new material/temperature/power inputs blank. An empty field
 does not become a guessed production property. Forces added from a face start at
 zero and must be specified before a mechanical solve can run.
+
+## Heat generation and environment boundaries
+
+`convection[]` requires `face`, positive `coefficient_w_m2_k`,
+`ambient_temperature_c` above absolute zero and a nonblank `source` describing
+the data/operating conditions. `radiation[]` requires `face`, positive `emissivity`
+at most one, surroundings temperature and its source. The radiation model is a
+gray diffuse surface exchanging with unobstructed uniform surroundings at unit
+view factor. Coefficients/environment temperatures are never guessed. No cavity
+view factors, shadowing, fluid motion, fan curve, boiling or calibration is solved.
+Convection and radiation can share a face, as can surface heating and exchange.
+Overlapping duplicate conditions of the same kind refuse, including distinct
+selectors resolving to the same actual mesh faces.
+
+`internal_heat_w` is total uniform generation within the one connected solid,
+with an accompanying `internal_heat_source`. `null` disables it; negative power
+represents an explicitly supplied cooling term. Positive Duffy/Gauss4 volume
+quadrature integrates the C3D10 shape functions times the cubic geometry Jacobian.
+Consistent nodal heat loads preserve total power and first moments, including
+legitimate negative corner weights. No equal nodal split is used.
+
+The deck uses actual exterior-element face labels for `*FILM` and `*RADIATE`.
+Film coefficients convert by `1e-3` into N/(s mm K); the Stefan-Boltzmann value
+5.670374419e-8 W/(m² K⁴) converts to5.670374419e-11 in the deck's units.
+`*PHYSICAL CONSTANTS` sets Celsius absolute zero to-273.15. Radiation uses
+adaptive nonlinear steady load increments; a derived initial-temperature guess
+does not replace any environmental input. The final temperature frame must be
+at completed load-step time1, with every prescribed temperature satisfied.
+
+Independent Gauss6/Gauss8 physical-surface integration evaluates signed heat to
+the surroundings from the actual temperature field. A boundary can supply heat
+when it is warmer than the solid. Integration sensitivity must be below1e-4
+relative to absolute boundary exchange. Global heat balance is
+`applied power + external thermostat power - heat to surroundings = 0`.
+At prescribed-temperature nodes CalculiX RFL is conductive nodal flow; external
+thermostat power additionally subtracts applied nodal sources and adds surface
+exchange there. Raw flows and both corrections remain in `heat-balance.json`.
+Balance must be within1% and the exchange integration check must pass.
+
+Thermal refinement compares fixed-probe, maximum and minimum temperature rises
+relative to the supplied temperature/environment reference. The changes are
+scaled by the actual thermal variation (with a1e-6 K numerical floor), never by
+absolute Kelvin temperature. Small heating errors cannot hide behind a large
+absolute temperature. Kelvin is used inside the fourth-power radiation law;
+negative Celsius results are valid. Source, coefficient, environment, generation
+and material edits invalidate the affected studies and their exports.
+
+The study panel edits these inputs, records provenance, renders temperature and
+reports input/rejected power. `ambient-thermal` is an explicit synthetic example;
+it starts with assumptions unconfirmed. `tests/test_thermal_exchange.py` covers
+analytical convection/radiation/combined/cold/internal/thermostat cases, curved
+quadratic integration, reaction accounting, thermal expansion, overlap and
+incomplete-step refusal. Three standalone scikit-fem comparisons independently
+assemble Robin matrices, internal source vectors and nonlinear radiative
+residuals/tangents. These are numerical checks on the supplied idealization;
+they do not establish measured heat-transfer coefficients or electronics CFD.
 
 The deck conventions follow the [CalculiX 2.23 manual](https://www.dhondt.de/ccx_2.23.htm.tar.bz2), including `*PLASTIC`, `*AMPLITUDE`, `*STATIC` and `*TIME POINTS`. Large deformation alone does not establish that a material model is valid at arbitrary large strain.
 
@@ -321,6 +380,10 @@ actual computed fields and exposed correlation evidence.
 - [ ] Assembly load paths, connectors/contact, material frames and anisotropic/process
   datasets, nonlinear laws and failure criteria.
 - [x] Nonlinear single-solid large-deformation/plastic-hardening slice, full load-path evidence and numerical reference cases.
+- [x] Single-solid internal generation, prescribed convection/radiation, consistent
+  heat accounting, rise-scaled convergence and independent thermal comparisons.
+- [ ] Thermal assembly conductance, cavity/occlusion radiation, variable material
+  and boundary laws, airflow/CHT and measured heat-transfer calibration.
 - [ ] The remaining five study branches and missing nonlinear contact/material capabilities in the table, each with its own evidence.
 - [ ] MuJoCo/system-model actuator loads, frame-consistent transfer into FEA and
   measured actuator/contact calibration; rigid-body motion is not stress analysis.

@@ -402,6 +402,39 @@
       "title": "BriefLink",
       "type": "object"
     },
+    "ConvectionBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "title": "Face",
+          "type": "string"
+        },
+        "coefficient_w_m2_k": {
+          "exclusiveMinimum": 0,
+          "title": "Coefficient W M2 K",
+          "type": "number"
+        },
+        "ambient_temperature_c": {
+          "exclusiveMinimum": -273.15,
+          "title": "Ambient Temperature C",
+          "type": "number"
+        },
+        "source": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "face",
+        "coefficient_w_m2_k",
+        "ambient_temperature_c",
+        "source"
+      ],
+      "title": "ConvectionBoundary",
+      "type": "object"
+    },
     "EdgeTreatment": {
       "additionalProperties": false,
       "properties": {
@@ -1576,6 +1609,40 @@
       "title": "Quantity",
       "type": "object"
     },
+    "RadiationBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "title": "Face",
+          "type": "string"
+        },
+        "emissivity": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Emissivity",
+          "type": "number"
+        },
+        "ambient_temperature_c": {
+          "exclusiveMinimum": -273.15,
+          "title": "Ambient Temperature C",
+          "type": "number"
+        },
+        "source": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "face",
+        "emissivity",
+        "ambient_temperature_c",
+        "source"
+      ],
+      "title": "RadiationBoundary",
+      "type": "object"
+    },
     "Rating": {
       "additionalProperties": false,
       "properties": {
@@ -1743,7 +1810,6 @@
           "type": "string"
         },
         "value": {
-          "exclusiveMinimum": 0,
           "title": "Value",
           "type": "number"
         },
@@ -1909,6 +1975,48 @@
           },
           "title": "Heat Sources",
           "type": "array"
+        },
+        "convection": {
+          "items": {
+            "$ref": "#/$defs/ConvectionBoundary"
+          },
+          "maxItems": 100,
+          "title": "Convection",
+          "type": "array"
+        },
+        "radiation": {
+          "items": {
+            "$ref": "#/$defs/RadiationBoundary"
+          },
+          "maxItems": 100,
+          "title": "Radiation",
+          "type": "array"
+        },
+        "internal_heat_w": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Internal Heat W"
+        },
+        "internal_heat_source": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Internal Heat Source"
         },
         "reference_temperature_c": {
           "anyOf": [

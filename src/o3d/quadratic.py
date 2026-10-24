@@ -89,18 +89,17 @@ def locate_probe(mesh,point):
     raise ValueError("The named probe could not be located inside the analysis mesh; choose an interior point away from idealized supports")
 
 
-def surface_integrals(mesh,triangles):
-    """Integrate quadratic triangle shape functions and physical first moments.
+def surface_quadrature(mesh,triangles,order=4):
+    """Quadratic triangle values and positive physical quadrature measures."""
+    if order not in (4,6,8):raise ValueError("Surface quadrature order must be 4, 6 or 8")
 
-    Tensor-product Gauss4 under the Duffy square-to-triangle map. For planar
-    C3D10 boundary faces the geometry determinant is quadratic, so this integrates
-    shape*area and coordinate*area exactly up to floating-point quadrature error.
-    Curved (nonplanar) surfaces are not an advertised load-boundary capability.
-    """
+    # Positive tensor quadrature under a Duffy square-to-triangle map. For
+    # planar faces the surface Jacobian is quadratic; order4 integrates the
+    # consistent quadratic load exactly. Higher orders handle T^4 radiation.
     nodes={int(n):np.asarray(p,dtype=float) for n,p in mesh["nodes"].items()}
     ids=np.asarray(triangles,dtype=np.int64)
     xyz=np.array([[nodes[int(n)] for n in tri] for tri in ids])
-    roots,gauss=np.polynomial.legendre.leggauss(4)
+    roots,gauss=np.polynomial.legendre.leggauss(order)
     roots=(roots+1)/2;gauss=gauss/2
     weights=[];gradients=[];integration=[]
     d=np.array([[-1.,-1.],[1.,0.],[0.,1.]])
@@ -114,7 +113,15 @@ def surface_integrals(mesh,triangles):
     local=xyz-xyz[:,0,None,:]
     jacobian=np.einsum('tni,qnj->tqij',local,gradients)
     area_elements=np.linalg.norm(np.cross(jacobian[:,:,:,0],jacobian[:,:,:,1]),axis=2)
-    integrated=np.einsum('qn,tq,q->tn',weights,area_elements,np.asarray(integration))
+    measures=area_elements*np.asarray(integration)[None,:]
+    if not np.isfinite(measures).all() or np.any(measures<=0):raise ValueError("Nonpositive or nonfinite surface quadrature measure")
+    return ids,xyz,weights,measures
+
+
+def surface_integrals(mesh,triangles):
+    """Integrate consistent quadratic shape loads, area and first moments."""
+    ids,xyz,weights,measures=surface_quadrature(mesh,triangles)
+    integrated=np.einsum('qn,tq->tn',weights,measures)
     # Suppress quadrature roundoff at zero-weight nodes, per face rather than
     # relative to other loads. Legitimate curved-face corner weights remain.
     integrated[np.abs(integrated)<4e-15*np.sum(np.abs(integrated),axis=1)[:,None]]=0
