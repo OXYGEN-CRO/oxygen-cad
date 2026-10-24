@@ -11,6 +11,25 @@ from o3d.solver import simulate
 
 
 @pytest.mark.parametrize("mesher", ["netgen", "gmsh"])
+def test_static_displacement_and_nonsingular_stress_against_theory(store, mesher):
+    p=store.load()
+    p.study.mesher=mesher
+    p.study.convergence_tolerance=.02
+    result=simulate(store,p)
+    inertia=10*4**3/12
+    expected_displacement=10*80**3/(3*200000*inertia)
+    expected_stress=10*(80-40)*1.5/inertia
+    assert result["max_displacement_mm"]==pytest.approx(expected_displacement,rel=.02)
+    assert result["iterations"][-1]["stress_probe_mpa"]==pytest.approx(expected_stress,rel=.05)
+    assert len(result["iterations"])==3
+    assert result["force_balance_error"]<.01
+    assert result["moment_balance_error"]<.01
+    mapping=json.loads(store.artifact(result["artifacts"]["region_map"]).read_text())
+    assert mapping["aliases"]["fixed_0"]!=mapping["aliases"]["load_0"]
+    assert all("bounds" in region and "normal" in region for region in mapping["regions"])
+
+
+@pytest.mark.parametrize("mesher", ["netgen", "gmsh"])
 def test_modal_frequency_against_cantilever_theory(store, mesher):
     p = store.load()
     p.study.type = "modal"

@@ -13,6 +13,12 @@ full parity or real-world reliability.
 adapter. Existing projects default to `linear_static`; added schema fields have
 defaults and do not require rewriting the user's source document by hand.
 
+Numerical examples are available through `init --template modal`, `buckling`,
+`thermal` and `thermal-stress` in a new project, as well as the existing `cantilever`.
+Their values are explicit analytical test inputs, not certified production data.
+The prepared [physical correlation protocol](PHYSICAL-VALIDATION.md) records what
+must be measured before claiming physical validation.
+
 | Study type | Implementation | Evidence / remaining limits |
 |---|---|---|
 | `linear_static` | Experimental, executable | Cantilever displacement/stress, refinement and force/moment balance; small-deformation isotropic solid |

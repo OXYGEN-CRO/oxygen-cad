@@ -14,7 +14,11 @@ test.afterEach(async ({ request }) => {
   if (!originalProject) return;
   const current = await (await request.get("/api/project")).json();
   const response = await request.post("/api/commands", {
-    data: { expected_revision: current.revision, actor: "human", project: originalProject },
+    data: {
+      expected_revision: current.revision,
+      actor: "human",
+      project: originalProject,
+    },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
 });
@@ -80,6 +84,9 @@ test("modal setup, actual modes, mode field and restart persistence", async ({
   expect(state.analysis.frequencies_hz[0]).toBeGreaterThan(490);
   expect(state.analysis.frequencies_hz[0]).toBeLessThan(530);
   expect(state.analysis.physical_validation).toBe("not_performed");
+  await expect(
+    page.getByRole("button", { name: "Run study", exact: true }),
+  ).toBeEnabled();
   await page.getByRole("button", { name: "View mode", exact: true }).click();
   await page.getByLabel("Mode number").selectOption("1");
   await page.getByLabel("Deformation scale").press("ArrowRight");
@@ -90,6 +97,7 @@ test("modal setup, actual modes, mode field and restart persistence", async ({
   await expect(
     page.getByText("Mode shape · relative amplitude", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Fit model", exact: true }).click();
   await page.screenshot({
     path: "test-results/study-modal.png",
     fullPage: true,
@@ -125,6 +133,9 @@ test("thermal solve, temperature field, energy balance and stale edit", async ({
   const state = await (await request.get("/api/state")).json();
   expect(state.analysis.max_temperature_c).toBeCloseTo(100, 0);
   expect(state.analysis.heat_balance_error).toBeLessThan(0.01);
+  await expect(
+    page.getByRole("button", { name: "Run study", exact: true }),
+  ).toBeEnabled();
   await page
     .getByRole("button", { name: "View temperature", exact: true })
     .click();

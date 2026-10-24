@@ -49,3 +49,17 @@ Mesh convergence is reported for displacement and, when supplied, the named stre
 The existing studio now has complete neutral dark/light themes, a persistent sun/moon switch, quiet field focus and a Radix project-tools menu. The OXYGEN reference was inspected read-only; the CAD styling is an original neutral adaptation using open-source primitives.
 
 All nine browser flows passed on the final production assets against a disposable fixture at port 19516 (49.6 seconds). They cover both themes across four views and 320/390/768/1024/1512px, actual WebGL clear-color changes, renderer identity, preference persistence, unsaved input preservation, pointer/keyboard focus without an outer halo, menu arrow keys/Escape/focus return, sidebar navigation, native editing/export, revision conflicts and a real Netgen/CalculiX study. All 29 backend tests passed (38.85 seconds); production build, formatting and whitespace checks passed. Final live read-only screenshots show dark/light property panels and the light mobile menu, with zero runtime errors or page overflow. No acceptance test edited the live working design. Physical macOS/Safari, human visual acceptance and extended-session usability remain unclaimed.
+
+## Mechanical and thermal study expansion (2026-10-24)
+
+The integrated source passes 49 backend tests (61.84 seconds); 14 optional database-backed catalog cases were skipped because no disposable PostgreSQL test database was configured. Eleven browser flows pass together (1.1 minutes), including actual modal and thermal solves, mode/temperature rendering, saved settings, result invalidation, native-command edits, revision protection, themes and release. Frontend production build, TypeScript, formatting and authored-source whitespace checks pass.
+
+Numerical references include cantilever static displacement within 2% and a nonsingular stress probe within 5% through both Netgen and Gmsh, modal frequency against beam theory, Euler fixed-free buckling, one-watt conduction/probe/heat balance through both meshers, and sequential thermal expansion. An actual CLI thermal example initializes, solves to 100 °C with heat-balance error below 1e-12, and exports a release. Input-package paths, exact STEP, meshes, decks, raw outputs and normalized fields are inspected in release ZIP tests.
+
+Earlier worktree runs exposed a worker import-path issue and browser fixture assumptions. Workers now load the same application source revision as their parent; new numerical browser tests restore the disposable project, and existing tests accept already-current cached geometry. The passing results above are from the corrected integrated source, not the earlier runs.
+
+Prepared physical correlation protocol: [PHYSICAL-VALIDATION.md](PHYSICAL-VALIDATION.md). No physical specimen, external solver comparison, Windows/macOS execution or full Fusion parity is established. [SIMULATION.md](SIMULATION.md) retains every remaining branch and validation requirement.
+
+![Modal result](analysis-modal.png)
+
+![Temperature result](analysis-thermal.png)

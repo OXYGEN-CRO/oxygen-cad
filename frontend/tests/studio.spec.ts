@@ -251,7 +251,9 @@ test("a real study runs through the browser and exposes current field results", 
     ).ok(),
   ).toBeTruthy();
   await page.goto("/");
-  await page.getByRole("button", { name: "Build model", exact: true }).click();
+  await expect(page.locator("canvas")).toBeVisible();
+  const build = page.getByRole("button", { name: "Build model", exact: true });
+  if (await build.isVisible()) await build.click();
   await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
     { timeout: 30000 },
   );
