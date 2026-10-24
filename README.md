@@ -59,6 +59,12 @@ Use `--agent claude` for `.claude/skills`, or `--agent portable` for `.agents/sk
 
 ## Discover off-the-shelf components
 
+For custom-part production, the [manufacturing catalog](docs/MANUFACTURING.md)
+adds sourced provider capabilities, process/material constraints and quote handoffs.
+Public SendCutSend, Laserhub and ARK feeds can be ingested directly. Community JLC
+snapshots support component discovery while official API approval is pending;
+source dates and unknown availability remain explicit.
+
 The optional [parts catalog](docs/CATALOG.md) adds PostgreSQL/pgvector discovery,
 provider ingestion, sourced specifications, CAD assets and purchased/custom BOM
 planning. Agents can search through a JSON CLI or REST/OpenAPI and import a

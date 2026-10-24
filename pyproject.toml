@@ -20,7 +20,7 @@ o3d = "o3d.cli:app"
 o3d-parts = "o3d.catalog.cli:main"
 
 [tool.setuptools.package-data]
-"o3d.catalog" = ["schema.sql"]
+"o3d.catalog" = ["schema.sql", "manufacturing_schema.sql", "component_snapshot.sql"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

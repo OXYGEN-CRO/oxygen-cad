@@ -32,6 +32,10 @@ def initialize():
     with database() as catalog:
         result = catalog.migrate()
         register(catalog)
+        from .manufacturing import ManufacturingCatalog
+        result["manufacturing"] = ManufacturingCatalog(catalog).migrate()
+        from .component_snapshot import ComponentSnapshot
+        result["components"] = ComponentSnapshot(catalog).migrate()
         emit(result)
 
 
@@ -105,6 +109,10 @@ def serve(port: int = 8844, host: str = "127.0.0.1"):
     import uvicorn
     from .api import create_app
     uvicorn.run(create_app(), host=host, port=port)
+
+
+from .manufacturing_cli import app as supply_app
+app.add_typer(supply_app, name="supply")
 
 
 def main():

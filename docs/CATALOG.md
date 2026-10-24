@@ -1,5 +1,10 @@
 # Parts catalog for coding agents
 
+The catalog now also supports [manufacturing providers and real public feeds](MANUFACTURING.md),
+including custom-part capability/material search, quote handoffs and community
+JLC component snapshots. The sections below describe the original CAD dataset;
+their first-seed counts do not include the newer supply datasets.
+
 PostgreSQL holds component identity, specifications, supplier links, provenance,
 CAD references and embeddings. A content-addressed object store holds immutable
 source responses and downloaded files. The initial implementation uses local
