@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "domain": "electronics",
+  "updated": "2026-10-24",
+  "summary": "Genuine editable EDA increment, not full Fusion parity. All rows remain partial or missing until their complete acceptance gates pass.",
+  "implementation": [
+    "src/o3d/domains/electronics.py",
+    "src/o3d/domains/eda/schema.py",
+    "src/o3d/domains/eda/checks.py",
+    "src/o3d/domains/eda/router.py",
+    "src/o3d/domains/eda/kicad.py",
+    "src/o3d/domains/eda/workers.py",
+    "frontend/src/workspaces/electronics/Panel.tsx"
+  ],
+  "executed_tests": [
+    {
+      "command": "PYTHONPATH=$PWD/src:/tmp/oxygen-eda-verification .venv/bin/python -m pytest -q tests/test_electronics.py",
+      "result": "22 passed; two Gerbonara parser warnings about G90 header position",
+      "tools": {
+        "kicad-cli": "9.0.2",
+        "ngspice": "44.2",
+        "gerbonara": "1.5.0 (temporary test-only Apache-2.0 dependency)"
+      }
+    },
+    {
+      "command": "cd frontend && npm run build",
+      "result": "TypeScript and Vite build passed; host mounting verified separately"
+    }
+  ],
+  "rows": [
+    {
+      "id": "E01",
+      "status": "partial",
+      "implemented": "Explicit components, pin membership, wires, net inspection and SVG placement/value editing",
+      "remaining": "Rich junction/label/power-symbol UX and save/reopen host acceptance",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E02",
+      "status": "partial",
+      "implemented": "Scoped hierarchical sheets/ports, buses and deterministic module cloning",
+      "remaining": "Rich hierarchy/bus editor and external schematic closure",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E03",
+      "status": "partial",
+      "implemented": "Typed bounded edits and layout-only wire adjustment",
+      "remaining": "Advanced schematic automation and conflict-merge UX",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E04",
+      "status": "partial",
+      "implemented": "Shared component IDs across schematic/board selection, retained placements on edits",
+      "remaining": "Reviewed package/netlist annotation diffs and external back-annotation",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E05",
+      "status": "partial",
+      "implemented": "Pinned library triplets, provenance, pin/pad identities and bottom transforms",
+      "remaining": "Actual 3D asset resolution and external library browser",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E06",
+      "status": "partial",
+      "implemented": "Editable pins/pads and dimensioned SOIC generator",
+      "remaining": "Full graphical symbol/footprint editor and qualified package catalogue",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E07",
+      "status": "partial",
+      "implemented": "Library change preview, pin/pad/rating compatibility gate",
+      "remaining": "Supplier adapters, full replacement constraint system and team registry",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E08",
+      "status": "partial",
+      "implemented": "Stable-ID ERC for unconnected pins, power and output conflicts; hash-bound waivers",
+      "remaining": "Independent external schematic ERC and comprehensive electrical compatibility matrix",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E09",
+      "status": "partial",
+      "implemented": "Explicit SPICE pin ordering, semiconductor terminal roles and hashed inline model closure",
+      "remaining": "Vendor model compatibility qualification and model editor UI",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E10",
+      "status": "partial",
+      "implemented": "Real ngspice OP/DC/AC/transient, trace data, browser plots and source invalidation",
+      "remaining": "Broader model/analysis qualification and requirement assertions",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E11",
+      "status": "partial",
+      "implemented": "Physical stackup, thickness sum and via technology/layer validation",
+      "remaining": "Advanced material/process models and supplier qualification",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E12",
+      "status": "partial",
+      "implemented": "Polygon outline/cutouts, PTH/NPTH and slots in source/KiCad/Gerber/drill output",
+      "remaining": "Rounded/curved contours and independently measured STEP topology",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E13",
+      "status": "partial",
+      "implemented": "Pad/mask/paste geometry, keepout and unfilled net-owned zone declarations",
+      "remaining": "Qualified plane fill, thermal connectivity and island detection; unfilled zones block DRC",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E14",
+      "status": "partial",
+      "implemented": "Footprint move/rotation/side/locks, numeric pin transforms and ratsnest",
+      "remaining": "Alignment tools and qualified 3D model placement",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E15",
+      "status": "partial",
+      "implemented": "Manual trace/ripup plus bounded clearance-safe walkaround routing and via source editing",
+      "remaining": "Shove, live via gestures, interactive repair and congested-route qualification",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E16",
+      "status": "partial",
+      "implemented": "Named pair length/gap/width/skew checks with explicit planar-length limit",
+      "remaining": "Differential route authoring, meander tuning and barrel-aware lengths",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E17",
+      "status": "partial",
+      "implemented": "Deterministic pair-of-terminal quick route preserves manual copper/locks",
+      "remaining": "Global autoroute, BGA fanout and multicircuit route qualification",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E18",
+      "status": "partial",
+      "implemented": "Prioritized scoped local rules, stable findings, actual copper connectivity and independent KiCad DRC",
+      "remaining": "All live route rule families, curved copper and schematic parity",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E19",
+      "status": "partial",
+      "implemented": "Attributed user process limits, drill/ring/mask-web checks and revision-bound waivers",
+      "remaining": "Reviewed supplier profiles, silk checks and independent supplier DFM",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E20",
+      "status": "partial",
+      "implemented": "Explicit board ownership, outline source and ECAD-MCAD numeric identity bridge",
+      "remaining": "Native occurrence updates and reviewed bidirectional diffs",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E21",
+      "status": "partial",
+      "implemented": "Pin/pad 3D transforms, missing/declared-unresolved model state and real KiCad STEP worker",
+      "remaining": "Canonical native geometry synchronization and model asset closure",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E22",
+      "status": "missing",
+      "implemented": "No multiboard clearance implementation",
+      "remaining": "Linked multiboard occurrences, exact enclosure collisions and invalidation acceptance",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E23",
+      "status": "partial",
+      "implemented": "Complete bijective connector pin maps with mismatched-net ERC diagnostics",
+      "remaining": "Keyed mechanical mating/access verification and actual model fit",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E24",
+      "status": "partial",
+      "implemented": "Authored harness polylines, gauges, insulation, slack, measured lengths and bend checks",
+      "remaining": "Obstacle-aware routing, bundles/splices, moving-endpoint updates and terminal qualification",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E25",
+      "status": "partial",
+      "implemented": "Actual KiCad Gerber/Excellon exports; independent parser checks cutouts/units/layers/widths/rotations/slots",
+      "remaining": "Broader golden boards, manufacturing preview and supplier acceptance",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E26",
+      "status": "partial",
+      "implemented": "Electrical grouped BOM and origin/side/rotation placement with DNP variants",
+      "remaining": "Assembler-specific profiles, qualified MPN assets and complete substitute population rules",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E27",
+      "status": "partial",
+      "implemented": "Revision/hash-linked electrical source, rule/check/artifact release closure and blocked-state gate",
+      "remaining": "Byte reproducibility, assembly/drill drawings and reusable CAM profile UI",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E28",
+      "status": "partial",
+      "implemented": "Editable KiCad board import with original-source closure, preview/loss report and guarded adoption",
+      "remaining": "Hierarchical KiCad project/schematic/library closure and EAGLE adapter",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E29",
+      "status": "missing",
+      "implemented": "Unsupported external formats fail explicitly",
+      "remaining": "Controlled Altium import and semantic roundtrip qualification",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    },
+    {
+      "id": "E30",
+      "status": "partial",
+      "implemented": "Versioned JSON, typed edits, source hashes, transition lock hook and shared panel callbacks",
+      "remaining": "Host Store/job/undo/CLI integration acceptance and durable external compiler merge",
+      "evidence": [
+        "tests/test_electronics.py",
+        "docs/parity/electronics.md"
+      ]
+    }
+  ]
+}

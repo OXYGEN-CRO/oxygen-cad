@@ -1,0 +1,46 @@
+# Electrical authoring and independent tools
+
+This increment introduces an editable electrical source under `Project.domains.electronics`, schema version 1, with millimetres/degrees throughout. It does not establish complete Fusion electronics parity. The adjacent JSON register tracks each requirement separately, including missing capabilities.
+
+`src/o3d/domains/electronics.py` exposes `validate`, `validate_transition` and `execute`. Imports are lightweight. Mutations return a validated `data` candidate and `changed: true`; the host must apply it through Store using the job's original expected revision and authenticated actor. The host must call `validate_transition` for whole-project and direct domain saves as well as jobs. This prevents bypassing component, placement and copper locks. `expected_source_hash` provides an additional optional guard for externally prepared candidates. Check/solver/export results contain revision and source hash; previous results are stale after edits.
+
+## Authoritative source
+
+- Stable component, sheet, pin, pad, net, wire, footprint-placement, track, via, contour-hole and rule identities.
+- Named sheets with acyclic hierarchy, explicit parent/local port equivalence, scoped nets, enumerated buses and repeatable module instantiation. Global names merge only when explicitly marked global.
+- Electrical connectivity comes from explicit pin membership. Graphical wire crossings and endpoints do not silently connect pins. Wire endpoints must belong to their declared net.
+- Version-pinned libraries connect symbol pins to footprint pads, MPN/manufacturer, source/licence, ratings, optional inline SPICE mapping and optional declared 3D asset identity. Missing parts/models remain explicit. Library substitution previews changes and rejects remapped pins/pads or reduced ratings.
+- Parametric SOIC generation uses explicit attributed dimensions. Built-in examples are original illustrative geometry, not qualified purchasable parts or manufacturer libraries.
+- Alternating physical copper/dielectric layers, through/blind/buried/microvia ranges, explicit board outline/cutouts, holes and axis-aligned slots, placements and locks, tracks, zones/keepouts, priorities/scopes, pairs and population variants.
+
+Board XY coordinates are stored directly. A bottom placement reflects footprint-local X, then applies counterclockwise rotation. Board-local top is positive Z; bottom is Z=0. A board transform uses translation followed by Euler XYZ degrees. Independent KiCad manufacturing export reverses Y in Gerber/Excellon output. Original Oxygen placement CSV keeps source XY minus declared origin, with an explicit bottom-side convention. The assembler must agree its rotation profile before production.
+
+A board `Hole.slot` is the vector from the first drill centre (`at`) to the second centre. A footprint `Pad.slot` is a symmetric drill-centre span about the pad centre. Both preserve drill diameter separately from slot length. Plated board holes have an explicit annular ring.
+
+## Operations
+
+`example`, `inspect`, `edit`, `instantiate`, `package`, `library_diff`, `substitute`, `route`, `erc`, `drc`, `mcad`, `harness`, `assembly`, `simulate`, `kicad_drc`, `fabrication`, `release`, `export_step`, `export`, `import`.
+
+`edit` accepts bounded explicit changes: `{collection, action: upsert|remove|set, id, value}`. Collections include schematic/library/net entities and `board.placements`, `board.tracks`, `board.vias`, `board.holes`, `board.zones`, `board.stackup`. Whole outline/cutouts, origin/transform, process and ownership fields use `set`. The complete resulting document is validated before persistence. An agent cannot modify or remove locked entities.
+
+`route` connects two explicitly identified pins on one net/layer with deterministic bounded A*. Its exact planar clearance predicate includes pad/track copper, keepouts, board edges/cutouts and holes. It preserves existing routes and placements. It supports walkaround routing, not shove, global autorouting, BGA fanout or pair tuning. Failure/cancellation leaves the source unchanged. The final DRC still reports remaining unconnected nets.
+
+The local ERC checks unconnected required pins, forbidden no-connect wiring, driven-output conflict, missing power drivers and single-pin nets. DRC checks the enumerated geometry/rules, actual copper-touch connectivity across layers through pads/vias, widths, clearance, edges/cutouts, drill/annular constraints, mask web and planar pair lengths/gap/skew. Waivers retain author, reason, revision and source hash; source edits invalidate them. Copper zone declarations remain unfilled and block local DRC. Silk and supplier-specific DFM are not implemented.
+
+`mcad` provides board/component/pad identities and numeric transforms, with optional user-declared model bounds. Declared models remain `declared_unresolved`; this report does not prove asset closure or native geometry synchronization. Native CAD owns actual geometric occurrences. Multiboard collision/clearance and reviewed bidirectional mechanical edits remain unimplemented. Connector mating checks compare explicit complete pin maps and net identity. Harness reports measure authored 3D polylines/slack and bend radii; obstacle routing and crimp qualification remain unimplemented.
+
+## Executed engines and formats
+
+KiCad CLI 9.0.2 and ngspice 44.2 were executed during implementation. Executables resolve from trusted host PATH, never project-defined command paths. Workers use argv without a shell, isolated cache directories, process-group cancellation, time/output bounds and explicit unavailable/failure states. They do not install tools. Tool logs and immutable source inputs remain downloadable artifacts.
+
+SPICE runs OP, bounded DC sweep, AC and transient analyses. Every device requires an explicit model/pin ordering; semiconductors additionally require terminal roles and attributed inline model text with matching SHA-256. External includes and interpreter/control commands inside model text are rejected. Only finite actual ngspice output is marked solved. The browser plots real trace rows and shows raw data.
+
+Editable Oxygen JSON retains the entire source exactly. The KiCad board adapter exports actual pads, copper, layers, plated/unplated drills/slots, zones and closed outline/cutouts. It retains Oxygen component/pin/pad identity metadata as standard footprint properties. KiCad board import previews a loss report and preserves immutable original content before adoption. It reconstructs actual pin/net membership and physical geometry; schematic hierarchy, original graphics, custom project rules, unsupported arcs/pads and external models are explicitly reported. External net/track/dielectric IDs are translated. The Oxygen JSON source package is the lossless identity boundary. EAGLE, hierarchical KiCad schematic and Altium imports are rejected as unsupported.
+
+Manufacturing workers call the real KiCad CLI for four or more copper layers plus masks, paste, outline and separate PTH/NPTH Excellon files. Gerber units/layer inventory are checked before export completion; software findings block a ready release. Electrical BOM and placement exports exclude DNP components and include explicit variant/value, source IDs, MPN and missing-identity flags. Exports remain review artifacts, not fabrication approval. No physical board has been fabricated or brought up here.
+
+## Verification and licences
+
+`PYTHONPATH=$PWD/src:/tmp/oxygen-eda-verification .venv/bin/python -m pytest -q tests/test_electronics.py` executed 22 tests successfully. Real solver tests compare OP/DC values, RC cutoff gain and transient time constant against analytic references. Real KiCad checks detect unconnected terminals. Gerbonara 1.5.0 independently parses actual exported Gerbers and Excellon: all outline and cutout segments, NPTH/PTH counts, slot length/diameter, 0.37 mm inner-layer trace width, and bottom-side rotated pad centres/extents. The parser emits a harmless warning about KiCad's G90 statement position; geometry parses correctly. Frontend TypeScript/build passed. Browser host integration is verified separately by the parent integration track.
+
+Runtime dependencies are installed separately: KiCad program GPL-3.0-or-later, ngspice package licences as shipped upstream. No KiCad library assets or manufacturer SPICE models are bundled. Gerbonara 1.5.0 (Apache-2.0) was installed in an isolated temporary verification directory only; it is optional test tooling, not a runtime dependency. The code and example footprint geometry added here are original repository code under the repository licence. User-supplied libraries and models retain their own source/licence metadata.

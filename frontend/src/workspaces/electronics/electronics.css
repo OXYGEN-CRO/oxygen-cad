@@ -1,0 +1,235 @@
+.electronics-panel {
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  height: 100%;
+  overflow: auto;
+}
+.electronics-panel .eda-toolbar,
+.electronics-panel .eda-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.electronics-panel .eda-tabs {
+  border-bottom: 1px solid var(--border-bright);
+  padding-bottom: 8px;
+}
+.electronics-panel .eda-tabs button[aria-selected="true"],
+.electronics-panel button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  border-color: var(--border-bright);
+}
+.electronics-panel h2,
+.electronics-panel h3,
+.electronics-panel p {
+  margin: 0;
+}
+.electronics-panel h2 {
+  font-size: 16px;
+}
+.electronics-panel h3 {
+  font-size: 13px;
+}
+.electronics-panel p,
+.electronics-panel small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.electronics-panel .eda-status {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.electronics-panel .eda-status.stale {
+  color: var(--warning);
+}
+.electronics-panel .eda-error {
+  color: var(--danger);
+}
+.electronics-panel .eda-editor {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(210px, 280px);
+  gap: 14px;
+}
+.electronics-panel svg.eda-canvas {
+  width: 100%;
+  height: 420px;
+  min-height: 240px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-card);
+  background: var(--viewport-bg);
+  touch-action: none;
+}
+.electronics-panel .eda-grid {
+  stroke: var(--viewport-grid);
+  stroke-width: 0.035;
+}
+.electronics-panel .eda-outline {
+  fill: var(--success-wash);
+  stroke: var(--text-secondary);
+  stroke-width: 0.15;
+  fill-rule: evenodd;
+}
+.electronics-panel .eda-silk {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 0.12;
+}
+.electronics-panel .eda-component {
+  cursor: grab;
+}
+.electronics-panel .eda-component.selected .eda-silk {
+  stroke: var(--text);
+  stroke-width: 0.25;
+}
+.electronics-panel .eda-pin {
+  cursor: crosshair;
+  fill: var(--surface-raised);
+  stroke: var(--text-secondary);
+  stroke-width: 0.16;
+}
+.electronics-panel .eda-pin.connected {
+  fill: var(--success);
+}
+.electronics-panel .eda-pin.highlight {
+  fill: var(--warning);
+  stroke: var(--warning);
+}
+.electronics-panel .eda-label {
+  fill: var(--text);
+  font-size: 1.5px;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+.electronics-panel .eda-pin-label {
+  fill: var(--text-secondary);
+  font-size: 0.95px;
+  pointer-events: none;
+}
+.electronics-panel .eda-wire {
+  fill: none;
+  stroke: var(--success);
+  stroke-width: 0.18;
+}
+.electronics-panel .eda-track {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+.electronics-panel .eda-ratsnest {
+  stroke: var(--text-muted);
+  stroke-width: 0.06;
+  stroke-dasharray: 0.6 0.6;
+  pointer-events: none;
+}
+.electronics-panel .eda-copper-top {
+  fill: var(--warning);
+  stroke: var(--warning);
+}
+.electronics-panel .eda-copper-bottom {
+  fill: var(--text-muted);
+  stroke: var(--text-muted);
+}
+.electronics-panel .eda-properties,
+.electronics-panel .eda-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.electronics-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.electronics-panel .eda-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.electronics-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+.electronics-panel th,
+.electronics-panel td {
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+.electronics-panel textarea {
+  min-height: 200px;
+  resize: vertical;
+  background: var(--surface-inset);
+  color: var(--text);
+  font: 11px/1.5 var(--font-mono);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.electronics-panel .eda-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+.electronics-panel .eda-finding {
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.electronics-panel .eda-finding button {
+  text-align: left;
+  white-space: normal;
+  height: auto;
+}
+.electronics-panel .eda-summary {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.electronics-panel .eda-plot {
+  background: var(--surface-inset);
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--border);
+}
+.electronics-panel .eda-artifacts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.electronics-panel a {
+  color: var(--text);
+}
+@media (max-width: 850px) {
+  .electronics-panel .eda-editor {
+    grid-template-columns: 1fr;
+  }
+  .electronics-panel svg.eda-canvas {
+    height: 320px;
+  }
+}

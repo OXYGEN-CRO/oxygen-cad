@@ -1,0 +1,621 @@
+{
+  "schema_version": 1,
+  "units": "mm",
+  "name": "Four-layer RC sensor test board",
+  "library": [
+    {
+      "id": "voltage",
+      "version": "1",
+      "name": "Voltage source fixture",
+      "manufacturer": "",
+      "mpn": "",
+      "source": "Oxygen original demonstration geometry; not a qualified purchasable part",
+      "licence": "MIT",
+      "voltage_rating": null,
+      "current_rating": null,
+      "pins": [
+        {
+          "id": "p1",
+          "number": "1",
+          "name": "+",
+          "electrical": "power_out",
+          "at": [
+            -3.0,
+            0.0
+          ]
+        },
+        {
+          "id": "p2",
+          "number": "2",
+          "name": "-",
+          "electrical": "passive",
+          "at": [
+            3.0,
+            0.0
+          ]
+        }
+      ],
+      "pads": [
+        {
+          "id": "pad1",
+          "pin_id": "p1",
+          "number": "1",
+          "at": [
+            -2.0,
+            0.0
+          ],
+          "size": [
+            1.5,
+            1.5
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        },
+        {
+          "id": "pad2",
+          "pin_id": "p2",
+          "number": "2",
+          "at": [
+            2.0,
+            0.0
+          ],
+          "size": [
+            1.5,
+            1.5
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        }
+      ],
+      "body_size": [
+        4.0,
+        1.5
+      ],
+      "courtyard": [],
+      "model3d": null,
+      "spice": {
+        "kind": "V",
+        "pin_order": [
+          "p1",
+          "p2"
+        ],
+        "terminal_roles": {},
+        "value": "",
+        "model_name": "",
+        "model_text": "",
+        "source": "",
+        "sha256": ""
+      }
+    },
+    {
+      "id": "resistor",
+      "version": "1",
+      "name": "Original two-pad resistor",
+      "manufacturer": "",
+      "mpn": "",
+      "source": "Oxygen original demonstration geometry; not a qualified purchasable part",
+      "licence": "MIT",
+      "voltage_rating": null,
+      "current_rating": null,
+      "pins": [
+        {
+          "id": "p1",
+          "number": "1",
+          "name": "+",
+          "electrical": "passive",
+          "at": [
+            -3.0,
+            0.0
+          ]
+        },
+        {
+          "id": "p2",
+          "number": "2",
+          "name": "-",
+          "electrical": "passive",
+          "at": [
+            3.0,
+            0.0
+          ]
+        }
+      ],
+      "pads": [
+        {
+          "id": "pad1",
+          "pin_id": "p1",
+          "number": "1",
+          "at": [
+            -1.5,
+            0.0
+          ],
+          "size": [
+            1.2,
+            1.4
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        },
+        {
+          "id": "pad2",
+          "pin_id": "p2",
+          "number": "2",
+          "at": [
+            1.5,
+            0.0
+          ],
+          "size": [
+            1.2,
+            1.4
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        }
+      ],
+      "body_size": [
+        3.0,
+        1.5
+      ],
+      "courtyard": [],
+      "model3d": null,
+      "spice": {
+        "kind": "R",
+        "pin_order": [
+          "p1",
+          "p2"
+        ],
+        "terminal_roles": {},
+        "value": "",
+        "model_name": "",
+        "model_text": "",
+        "source": "",
+        "sha256": ""
+      }
+    },
+    {
+      "id": "capacitor",
+      "version": "1",
+      "name": "Original two-pad capacitor",
+      "manufacturer": "",
+      "mpn": "",
+      "source": "Oxygen original demonstration geometry; not a qualified purchasable part",
+      "licence": "MIT",
+      "voltage_rating": null,
+      "current_rating": null,
+      "pins": [
+        {
+          "id": "p1",
+          "number": "1",
+          "name": "+",
+          "electrical": "passive",
+          "at": [
+            -3.0,
+            0.0
+          ]
+        },
+        {
+          "id": "p2",
+          "number": "2",
+          "name": "-",
+          "electrical": "passive",
+          "at": [
+            3.0,
+            0.0
+          ]
+        }
+      ],
+      "pads": [
+        {
+          "id": "pad1",
+          "pin_id": "p1",
+          "number": "1",
+          "at": [
+            -1.5,
+            0.0
+          ],
+          "size": [
+            1.2,
+            1.4
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        },
+        {
+          "id": "pad2",
+          "pin_id": "p2",
+          "number": "2",
+          "at": [
+            1.5,
+            0.0
+          ],
+          "size": [
+            1.2,
+            1.4
+          ],
+          "shape": "rect",
+          "kind": "smd",
+          "rotation": 0.0,
+          "drill": 0.0,
+          "slot": null,
+          "layers": [
+            "F.Cu"
+          ],
+          "mask_margin": 0.05,
+          "paste_margin": 0.0
+        }
+      ],
+      "body_size": [
+        3.0,
+        1.5
+      ],
+      "courtyard": [],
+      "model3d": null,
+      "spice": {
+        "kind": "C",
+        "pin_order": [
+          "p1",
+          "p2"
+        ],
+        "terminal_roles": {},
+        "value": "",
+        "model_name": "",
+        "model_text": "",
+        "source": "",
+        "sha256": ""
+      }
+    }
+  ],
+  "sheets": [
+    {
+      "id": "root",
+      "name": "Main",
+      "parent_id": null,
+      "ports": []
+    }
+  ],
+  "components": [
+    {
+      "id": "v1",
+      "sheet_id": "root",
+      "library_id": "voltage",
+      "library_version": "1",
+      "reference": "V1",
+      "value": "5",
+      "at": [
+        10.0,
+        10.0
+      ],
+      "rotation": 0.0,
+      "locked": false
+    },
+    {
+      "id": "r1",
+      "sheet_id": "root",
+      "library_id": "resistor",
+      "library_version": "1",
+      "reference": "R1",
+      "value": "1k",
+      "at": [
+        25.0,
+        10.0
+      ],
+      "rotation": 0.0,
+      "locked": false
+    },
+    {
+      "id": "c1",
+      "sheet_id": "root",
+      "library_id": "capacitor",
+      "library_version": "1",
+      "reference": "C1",
+      "value": "1u",
+      "at": [
+        40.0,
+        10.0
+      ],
+      "rotation": 0.0,
+      "locked": false
+    }
+  ],
+  "nets": [
+    {
+      "id": "vin",
+      "sheet_id": "root",
+      "name": "VIN",
+      "global_name": false,
+      "members": [
+        {
+          "component_id": "v1",
+          "pin_id": "p1"
+        },
+        {
+          "component_id": "r1",
+          "pin_id": "p1"
+        }
+      ]
+    },
+    {
+      "id": "vout",
+      "sheet_id": "root",
+      "name": "OUT",
+      "global_name": false,
+      "members": [
+        {
+          "component_id": "r1",
+          "pin_id": "p2"
+        },
+        {
+          "component_id": "c1",
+          "pin_id": "p1"
+        }
+      ]
+    },
+    {
+      "id": "gnd",
+      "sheet_id": "root",
+      "name": "GND",
+      "global_name": true,
+      "members": [
+        {
+          "component_id": "v1",
+          "pin_id": "p2"
+        },
+        {
+          "component_id": "c1",
+          "pin_id": "p2"
+        }
+      ]
+    }
+  ],
+  "buses": [],
+  "wires": [],
+  "no_connect": [],
+  "board": {
+    "id": "board",
+    "outline": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        40.0,
+        0.0
+      ],
+      [
+        40.0,
+        30.0
+      ],
+      [
+        0.0,
+        30.0
+      ]
+    ],
+    "cutouts": [
+      [
+        [
+          20.0,
+          20.0
+        ],
+        [
+          24.0,
+          20.0
+        ],
+        [
+          24.0,
+          24.0
+        ],
+        [
+          20.0,
+          24.0
+        ]
+      ]
+    ],
+    "holes": [
+      {
+        "id": "mount1",
+        "at": [
+          3.0,
+          3.0
+        ],
+        "diameter": 1.2,
+        "plated": false,
+        "annular_ring": 0.15,
+        "slot": null
+      },
+      {
+        "id": "mount2",
+        "at": [
+          37.0,
+          27.0
+        ],
+        "diameter": 1.2,
+        "plated": false,
+        "annular_ring": 0.15,
+        "slot": null
+      },
+      {
+        "id": "slot",
+        "at": [
+          8.0,
+          25.0
+        ],
+        "diameter": 1.0,
+        "plated": true,
+        "annular_ring": 0.15,
+        "slot": [
+          2.0,
+          0.0
+        ]
+      }
+    ],
+    "stackup": [
+      {
+        "id": "F.Cu",
+        "kind": "copper",
+        "thickness": 0.035,
+        "material": "",
+        "epsilon_r": null
+      },
+      {
+        "id": "prepreg1",
+        "kind": "dielectric",
+        "thickness": 0.2,
+        "material": "FR4",
+        "epsilon_r": 4.5
+      },
+      {
+        "id": "In1.Cu",
+        "kind": "copper",
+        "thickness": 0.035,
+        "material": "",
+        "epsilon_r": null
+      },
+      {
+        "id": "core",
+        "kind": "dielectric",
+        "thickness": 1.06,
+        "material": "FR4",
+        "epsilon_r": 4.5
+      },
+      {
+        "id": "In2.Cu",
+        "kind": "copper",
+        "thickness": 0.035,
+        "material": "",
+        "epsilon_r": null
+      },
+      {
+        "id": "prepreg2",
+        "kind": "dielectric",
+        "thickness": 0.2,
+        "material": "FR4",
+        "epsilon_r": 4.5
+      },
+      {
+        "id": "B.Cu",
+        "kind": "copper",
+        "thickness": 0.035,
+        "material": "",
+        "epsilon_r": null
+      }
+    ],
+    "placements": [
+      {
+        "id": "pv1",
+        "component_id": "v1",
+        "at": [
+          8.0,
+          10.0
+        ],
+        "side": "top",
+        "rotation": 0.0,
+        "locked": false
+      },
+      {
+        "id": "pr1",
+        "component_id": "r1",
+        "at": [
+          18.0,
+          10.0
+        ],
+        "side": "top",
+        "rotation": 0.0,
+        "locked": false
+      },
+      {
+        "id": "pc1",
+        "component_id": "c1",
+        "at": [
+          28.0,
+          10.0
+        ],
+        "side": "bottom",
+        "rotation": 90.0,
+        "locked": false
+      }
+    ],
+    "tracks": [],
+    "vias": [],
+    "zones": [],
+    "origin": [
+      0.0,
+      0.0
+    ],
+    "outline_owner": "ecad",
+    "mechanical_occurrence_id": null,
+    "transform": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "rules": [],
+  "process": {
+    "name": "User-defined process (not supplier-certified)",
+    "source": "User-entered design constraints",
+    "captured": "",
+    "min_width": 0.2,
+    "clearance": 0.2,
+    "min_drill": 0.3,
+    "annular_ring": 0.15,
+    "edge_clearance": 0.25,
+    "mask_web": 0.1
+  },
+  "differential_pairs": [],
+  "variants": [
+    {
+      "id": "no_cap",
+      "name": "DNP capacitor",
+      "dnp": [
+        "c1"
+      ],
+      "values": {}
+    }
+  ],
+  "waivers": [],
+  "mates": [],
+  "harness": [],
+  "provenance": []
+}
