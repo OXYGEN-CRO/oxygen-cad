@@ -165,6 +165,100 @@ def face_metadata(shape):
     return output
 
 
+def associate_native_faces(body, descriptors):
+    """Attach native pick IDs only to uniquely verified planar STEP faces.
+
+    Native triangle face numbers and STEP traversal order are independent. Match
+    directed plane, area and centroid, then compare the complete trimmed planar
+    footprints. Curved/ambiguous/unverifiable patches deliberately get no alias.
+    """
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    from shapely.errors import GEOSException
+
+    distance_tolerance = 1e-6  # mm; stricter than the subsequent Netgen transfer.
+    angular_tolerance = 1e-7
+    mesh = body.get("mesh") or {}
+    points = np.asarray(mesh.get("positions", []), dtype=float)
+    triangles = mesh.get("triangles", [])
+    face_ids = mesh.get("tri_face", [])
+    issues, groups = [], {}
+    if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all() or len(face_ids) != len(triangles):
+        body["face_association_issues"] = [{"reason": "Native mesh has no verifiable face identities"}]
+        return
+    for triangle, face_id in zip(triangles, face_ids):
+        groups.setdefault(face_id, []).append(triangle)
+
+    def footprint(vertices, indices, origin, normal):
+        if len(indices) > 50_000:
+            raise ValueError("Planar face association exceeds its triangle budget")
+        tangent = np.cross(normal, np.eye(3)[np.argmin(np.abs(normal))])
+        tangent /= np.linalg.norm(tangent)
+        other = np.cross(normal, tangent)
+        projected = (vertices - origin) @ np.array([tangent, other]).T
+        polygons = [Polygon(projected[t]) for t in indices]
+        if any(not p.is_valid or p.area <= 0 for p in polygons):
+            raise ValueError("Degenerate planar triangle footprint")
+        merged = unary_union(polygons)
+        if not merged.is_valid or merged.is_empty:
+            raise ValueError("Invalid planar triangle footprint")
+        # Overlapping triangles must not balance missing area elsewhere.
+        if abs(sum(p.area for p in polygons) - merged.area) > max(1e-6, merged.area * 1e-8):
+            raise ValueError("Overlapping native face triangles")
+        return merged
+
+    candidates = {}
+    for face_id, indices in groups.items():
+        pick_id = f"{body['id']}:face:{face_id}"
+        try:
+            indices = np.asarray(indices)
+            if indices.ndim != 2 or indices.shape[1] != 3 or not np.issubdtype(indices.dtype, np.integer) or np.any(indices < 0) or np.any(indices >= len(points)):
+                raise ValueError("Invalid native triangle connectivity")
+            patch = points[indices]
+            crosses = np.cross(patch[:, 1] - patch[:, 0], patch[:, 2] - patch[:, 0])
+            sizes = np.linalg.norm(crosses, axis=1)
+            if np.any(sizes <= 1e-12):
+                raise ValueError("Degenerate native face triangles")
+            area = float(sizes.sum() / 2)
+            center = np.average(patch.mean(axis=1), axis=0, weights=sizes)
+            normal = crosses.sum(axis=0)
+            normal_size = np.linalg.norm(normal)
+            if normal_size <= 1e-12:
+                raise ValueError("Native patch has no directed planar normal")
+            normal /= normal_size
+            if not np.isfinite(normal).all() or np.max(np.linalg.norm(crosses / sizes[:, None] - normal, axis=1)) > angular_tolerance:
+                raise ValueError("Native patch is not a directed planar face")
+            matches = []
+            for index, face in enumerate(descriptors):
+                if face["kind"] != "PLANE" or face.get("normal") is None:
+                    continue
+                area_tolerance = max(1e-6, face["area_mm2"] * 1e-8)
+                exact_center, exact_normal = np.asarray(face["center"]), np.asarray(face["normal"])
+                if abs(face["area_mm2"] - area) > area_tolerance or np.linalg.norm(exact_center - center) > distance_tolerance or np.linalg.norm(exact_normal - normal) > angular_tolerance:
+                    continue
+                if np.max(np.abs((patch.reshape(-1, 3) - exact_center) @ exact_normal)) > distance_tolerance:
+                    continue
+                native = footprint(points, indices, exact_center, exact_normal)
+                exact = footprint(np.asarray(face["vertices"]), np.asarray(face["triangles"]), exact_center, exact_normal)
+                if native.symmetric_difference(exact).area <= area_tolerance and native.boundary.hausdorff_distance(exact.boundary) <= distance_tolerance:
+                    matches.append(index)
+            candidates[pick_id] = matches
+        except (ValueError, GEOSException) as error:
+            issues.append({"native_face_id": pick_id, "reason": str(error)})
+    # A unique forward candidate is insufficient if another native patch claims it.
+    uses = {}
+    for matches in candidates.values():
+        for index in matches:
+            uses[index] = uses.get(index, 0) + 1
+    for pick_id, matches in candidates.items():
+        if len(matches) == 1 and uses[matches[0]] == 1:
+            face = descriptors[matches[0]]
+            face["aliases"] = list(dict.fromkeys([*face.get("aliases", []), pick_id]))
+        else:
+            issues.append({"native_face_id": pick_id, "reason": "No unique verified planar STEP face"})
+    body["face_association_issues"] = issues
+
+
 def load_reference(store: Store, reference):
     path = store.root / reference.file
     if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != reference.sha256:
@@ -206,6 +300,7 @@ def build(store: Store, project: Project):
             body["faces"] = face_metadata(body_shape)
             for face in body["faces"]:
                 face["body_id"] = body["id"]
+            associate_native_faces(body, body["faces"])
             body["artifacts"] = {"step": f"builds/{key}/{independent['step']}"}
         write_json(destination / "scene.json", scene)
         artifacts["scene"] = f"builds/{key}/scene.json"

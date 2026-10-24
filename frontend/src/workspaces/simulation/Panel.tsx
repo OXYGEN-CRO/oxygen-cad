@@ -169,12 +169,21 @@ export default function SimulationPanel(props: DomainPanelProps) {
       throw new Error("Select a CAD face in the viewport first.");
     const m = draft.models.find((x) => x.id === study?.model_id)!;
     const face = props.selection.face as Row;
+    const matchingBodies = sceneBodies.filter((b) =>
+      b.faces?.some(
+        (f: Row) =>
+          f.id === props.selection!.id ||
+          f.aliases?.includes(props.selection!.id),
+      ),
+    );
     const bodyId =
       face.body_id ??
-      sceneBodies.find((b) =>
-        b.faces?.some((f: Row) => f.id === props.selection!.id),
-      )?.id ??
-      "part";
+      (matchingBodies.length === 1 ? matchingBodies[0].id : undefined) ??
+      (sceneBodies.length === 0 ? "part" : undefined);
+    if (!bodyId)
+      throw new Error(
+        "The selected face has no unique CAD body; select it again after rebuilding.",
+      );
     if (!m.body_ids.includes(bodyId))
       throw new Error(
         "The selected face belongs to a body outside this analysis model.",

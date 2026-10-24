@@ -9,7 +9,8 @@ export type DisplayField =
   | "temperature"
   | "mode"
   | "plastic_strain";
-export const projectPrefix = window.location.pathname.match(/^\/p\/[a-zA-Z0-9_-]+(?=\/|$)/)?.[0] ?? "";
+export const projectPrefix =
+  window.location.pathname.match(/^\/p\/[a-zA-Z0-9_-]+(?=\/|$)/)?.[0] ?? "";
 export async function api(path: string, options: RequestInit = {}) {
   const response = await fetch(`${projectPrefix}/api/${path}`, options);
   if (!response.ok) {
@@ -77,6 +78,7 @@ export type Project = Omit<
 };
 export type Face = {
   id: string;
+  body_id?: string;
   signature: string;
   kind: string;
   area_mm2: number;

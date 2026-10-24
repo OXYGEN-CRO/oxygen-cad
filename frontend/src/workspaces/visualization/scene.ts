@@ -208,7 +208,8 @@ export function sampleScene(
 }
 
 export function nativeFaces(body: NativeBody): Face[] {
-  if (body.mesh?.faces) return body.mesh.faces;
+  if (body.mesh?.faces)
+    return body.mesh.faces.map((face) => ({ ...face, body_id: body.id }));
   const mesh = body.mesh;
   if (!mesh?.positions || !mesh.triangles) return [];
   const groups = new Map<number, number[][]>();
@@ -245,6 +246,7 @@ export function nativeFaces(body: NativeBody): Face[] {
     const norm = Math.hypot(...normal);
     return {
       id: `${body.id}:face:${id}`,
+      body_id: body.id,
       signature: `${body.id}:face:${id}`,
       kind: "native",
       area_mm2: area,
