@@ -14,8 +14,8 @@
   ],
   "executed_tests": [
     {
-      "command": "PYTHONPATH=$PWD/src:/tmp/oxygen-eda-verification .venv/bin/python -m pytest -q tests/test_electronics.py",
-      "result": "22 passed; two Gerbonara parser warnings about G90 header position",
+      "command": "PYTHONPATH=$PWD/src:/tmp/oxygen-eda-verification .venv/bin/python -m pytest -q tests/test_electronics.py --basetemp /tmp/oxygen-eda-tests",
+      "result": "24 passed; two harmless Gerbonara G90 header-position warnings",
       "tools": {
         "kicad-cli": "9.0.2",
         "ngspice": "44.2",
@@ -291,8 +291,8 @@
     {
       "id": "E27",
       "status": "partial",
-      "implemented": "Revision/hash-linked electrical source, rule/check/artifact release closure and blocked-state gate",
-      "remaining": "Byte reproducibility, assembly/drill drawings and reusable CAM profile UI",
+      "implemented": "Byte-reproducible ZIP, timestamp-only normalization with raw originals, hash manifest, source/library/rule/check closure and dimensioned assembly/drill SVGs",
+      "remaining": "Reusable CAM profile UI, richer manufacturing drawings and supplier release acceptance",
       "evidence": [
         "tests/test_electronics.py",
         "docs/parity/electronics.md"

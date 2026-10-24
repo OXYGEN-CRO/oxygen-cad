@@ -13,7 +13,7 @@ import tempfile
 import time
 import zipfile
 from .schema import digest
-from .checks import erc, drc, mcad, flattened
+from .checks import erc, drc, mcad, flattened, net_map, pad_polygon, pad_world, rotate
 from .kicad import export_board
 
 
@@ -52,7 +52,7 @@ def folder(store,doc,operation):
 
 
 def artifacts(store,path):
-    return [{'name':p.name,'path':str(p.relative_to(store.cache)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in sorted(path.rglob('*')) if p.is_file()]
+    return [{'name':str(p.relative_to(path)) if 'external-tool-originals' in p.parts else p.name,'path':str(p.relative_to(store.cache)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in sorted(path.rglob('*')) if p.is_file()]
 
 
 def assembly(doc,variant_id=None):
@@ -79,6 +79,38 @@ def csv_text(rows):
     stream=io.StringIO();writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows);return stream.getvalue()
 
 
+def drawing(doc,side,variant=None):
+    """Original dimensioned 1:1 SVG assembly/drill drawing, in source XY mm."""
+    from xml.sax.saxutils import escape
+    board=doc.board;xs=[p[0] for p in board.outline];ys=[p[1] for p in board.outline]
+    xmin,xmax,ymin,ymax=min(xs),max(xs),min(ys),max(ys)
+    width,height=xmax-xmin+20,ymax-ymin+24
+    out=[f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}mm" height="{height}mm" viewBox="{xmin-10} {ymin-10} {width} {height}">', '<g fill="none" stroke="black" stroke-width="0.1">']
+    for contour in [board.outline]+board.cutouts:out.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in contour)+'"/>')
+    for h in board.holes:
+        if h.slot:out.append(f'<line x1="{h.at[0]}" y1="{h.at[1]}" x2="{h.at[0]+h.slot[0]}" y2="{h.at[1]+h.slot[1]}" stroke-width="{h.diameter}" stroke-linecap="round"/>')
+        else:out.append(f'<circle cx="{h.at[0]}" cy="{h.at[1]}" r="{h.diameter/2}"/>')
+    populated={p['component_id'] for p in assembly(doc,variant)['positions']};comps={c.id:c for c in doc.components};parts={(p.id,p.version):p for p in doc.library}
+    for place in board.placements:
+        if place.component_id not in populated or (side!='drill' and place.side!=side):continue
+        c=comps[place.component_id];part=parts[c.library_id,c.library_version]
+        for pad in part.pads:
+            if side=='drill' and pad.kind=='smd':continue
+            if side=='drill':
+                center=pad_world(pad,place)
+                if pad.slot:
+                    span=rotate(pad.slot,pad.rotation);span=(span[0]*(-1 if place.side=='bottom' else 1),span[1]);span=rotate(span,place.rotation)
+                    out.append(f'<line x1="{center[0]-span[0]/2}" y1="{center[1]-span[1]/2}" x2="{center[0]+span[0]/2}" y2="{center[1]+span[1]/2}" stroke-width="{pad.drill}" stroke-linecap="round"/>')
+                else:out.append(f'<circle cx="{center[0]}" cy="{center[1]}" r="{pad.drill/2}"/>')
+            else:
+                poly=pad_polygon(pad,place)
+                out.append('<polygon points="'+' '.join(f'{x:.6f},{y:.6f}' for x,y in poly)+'"/>')
+        out.append(f'<text x="{place.at[0]}" y="{place.at[1]-2}" stroke="none" fill="black" font-size="1.5" text-anchor="middle">{escape(c.reference)}</text>')
+    title=f'{doc.name} | {side} | {variant or "base"} | {xmax-xmin:g} x {ymax-ymin:g} mm | {sum(l.thickness for l in board.stackup):g} mm thick'
+    out += ['</g>',f'<text x="{xmin}" y="{ymax+6}" font-size="1.3">{escape(title)}</text>',f'<text x="{xmin}" y="{ymax+9}" font-size="1.1">Source {digest(doc)[:16]} | Source XY; bottom assembly viewed from top. Scale 1:1 at physical SVG size.</text>','</svg>']
+    return '\n'.join(out)+'\n'
+
+
 def write_sources(doc,path,variant=None):
     (path/'source.oxygen-eda.json').write_text(doc.model_dump_json(indent=2)+'\n')
     (path/'board.kicad_pcb').write_text(export_board(doc))
@@ -86,8 +118,47 @@ def write_sources(doc,path,variant=None):
     (path/'bom.csv').write_text(csv_text(a['bom']));(path/'positions.csv').write_text(csv_text(a['positions']))
     (path/'assembly.json').write_text(json.dumps(a,indent=2)+'\n')
     (path/'mcad.json').write_text(json.dumps(mcad(doc),indent=2)+'\n')
+    for side in ('top','bottom','drill'):(path/(side+'-drawing.svg')).write_text(drawing(doc,side,variant))
     for kind,fn in [('erc',erc),('drc',drc)]: (path/(kind+'.json')).write_text(json.dumps(fn(doc),indent=2)+'\n')
     return a
+
+
+def verify_fabrication(out,copper,path):
+    """Check actual X2 functions; do not trust generated job metadata alone."""
+    functions={};normalizations=[]
+    for layer in copper:
+        file=out/('board-'+layer.replace('.','_')+'.gbr')
+        if not file.is_file():raise RuntimeError(f'Missing copper output {layer}')
+        match=re.search(r'%TF.FileFunction,([^*]+)\*%',file.read_text())
+        expected=f'Copper,L{copper.index(layer)+1},'+('Top' if layer=='F.Cu' else 'Bot' if layer=='B.Cu' else 'Inr')
+        if not match or match.group(1)!=expected:raise RuntimeError(f'Gerber X2 layer mapping mismatch for {layer}: expected {expected}')
+        functions[file.name]=expected
+    job=out/'board-job.gbrjob'
+    if job.exists():
+        data=json.loads(job.read_text())
+        for entry in data.get('FilesAttributes',[]):
+            name=entry.get('Path');expected=functions.get(name)
+            if expected and entry.get('FileFunction')!=expected:
+                normalizations.append({'file':job.name,'entry':name,'field':'FileFunction','before':entry.get('FileFunction'),'after':expected,'reason':'Normalized to independently checked actual Gerber X2 layer header'})
+                entry['FileFunction']=expected
+        if normalizations:
+            original=path/'external-tool-originals';original.mkdir(exist_ok=True);shutil.copy2(job,original/job.name)
+            job.write_text(json.dumps(data,indent=2,sort_keys=True)+'\n')
+    return {'copper_file_functions':functions,'normalizations':normalizations}
+
+
+def normalized_metadata(file):
+    """Normalize timestamps only, never geometry or electrical values."""
+    text=file.read_text();epoch='2020-01-01T00:00:00+00:00'
+    if file.name=='kicad-drc.json' or file.suffix=='.gbrjob':
+        data=json.loads(text)
+        if file.name=='kicad-drc.json':data['date']=epoch
+        else:data.get('Header',{})['CreationDate']=epoch
+        return (json.dumps(data,sort_keys=True,indent=2)+'\n').encode()
+    if file.suffix in ('.gbr','.drl'):
+        text=re.sub(r'(TF\.CreationDate,)[^*\r\n]+',lambda m:m.group(1)+epoch,text)
+        text=re.sub(r'(?<=date )\d{4}-\d\d-\d\d[T ][0-9:+-]+','2020-01-01T00:00:00+00:00',text)
+    return text.encode()
 
 
 def kicad(store,doc,operation,payload,cancel=None):
@@ -113,18 +184,29 @@ def kicad(store,doc,operation,payload,cancel=None):
     if len(gerbers)!=len(layers) or not drills:raise RuntimeError('KiCad fabrication output inventory does not match requested layer set')
     if any('%MOMM*%' not in p.read_text() for p in gerbers):raise RuntimeError('Unexpected Gerber unit declaration')
     if any('METRIC' not in p.read_text() for p in drills):raise RuntimeError('Unexpected Excellon unit declaration')
+    verification=verify_fabrication(out,copper,path)
     output=path/'kicad-drc.json';run([tool,'pcb','drc','--format','json','--output',output,source],path,cancel)
     checked=json.loads(output.read_text());local_erc=erc(doc);local_drc=drc(doc)
     violations=checked.get('violations',[])+checked.get('unconnected_items',[])
     gate=not violations and local_erc['state']=='passed' and local_drc['state']=='passed'
-    manifest={'schema_version':1,'source_hash':digest(doc),'variant':variant or 'base','tool':{'name':'kicad-cli','version':version,'licence':'GPL-3.0-or-later; external process, no libraries bundled'},'layers':layers,'units':'mm','origin':doc.board.origin,'contours':1+len(doc.board.cutouts),'review_state':'checks_passed' if gate else 'blocked_by_findings','limitations':['Supplier DFM, physical assembly/bring-up and unresolved component-model licences are outside this software gate.'],'files':artifacts(store,path)}
+    files=[p for p in sorted(path.rglob('*')) if p.is_file() and not p.name.startswith('tool-') and 'external-tool-originals' not in p.parts]
+    if operation=='release':
+        original=path/'external-tool-originals';original.mkdir(exist_ok=True)
+        for file in files:
+            content=normalized_metadata(file)
+            if content!=file.read_bytes():
+                target=original/file.relative_to(path);target.parent.mkdir(parents=True,exist_ok=True)
+                if not target.exists():shutil.copy2(file,target)
+                file.write_bytes(content)
+    records=[{'path':str(p.relative_to(path)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in files]
+    manifest={'schema_version':1,'source_hash':digest(doc),'variant':variant or 'base','tool':{'name':'kicad-cli','version':version,'licence':'GPL-3.0-or-later; external process, no libraries bundled'},'layers':layers,'units':'mm','origin':doc.board.origin,'contours':1+len(doc.board.cutouts),'verification':verification,'timestamp_policy':'2020-01-01 UTC metadata epoch for reproducible release; raw tool timestamps retained outside ZIP' if operation=='release' else 'actual tool timestamps','review_state':'checks_passed' if gate else 'blocked_by_findings','limitations':['Supplier DFM, physical assembly/bring-up and unresolved component-model licences are outside this software gate.'],'files':records}
     (path/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     if operation=='release':
         # Reproducible ZIP timestamps/order/permissions; no volatile tool logs in release.
         bundle=path/'release.zip'
         with zipfile.ZipFile(bundle,'w',compression=zipfile.ZIP_DEFLATED) as z:
             for file in sorted(path.rglob('*')):
-                if not file.is_file() or file==bundle or file.name.startswith('tool-'):continue
+                if not file.is_file() or file==bundle or file.name.startswith('tool-') or 'external-tool-originals' in file.parts:continue
                 info=zipfile.ZipInfo(str(file.relative_to(path)),date_time=(2020,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;z.writestr(info,file.read_bytes())
     return {'state':'exported' if operation=='fabrication' else 'ready' if gate else 'blocked','source_hash':digest(doc),'tool_version':version,'manifest':manifest,'artifacts':artifacts(store,path)}
 
@@ -134,9 +216,15 @@ NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
 
 def spice_deck(doc,payload):
-    aliases,pins=__import__('o3d.domains.eda.checks',fromlist=['net_map']).net_map(doc)
-    nets=flattened(doc);nodes={n['id']:('0' if any(name.strip().upper() in ('0','GND') for name in n['name'].split('/')) else 'n'+str(i+1)) for i,n in enumerate(nets)}
-    if '0' not in nodes.values():raise ValueError('Simulation requires an explicit GND/0 net')
+    aliases,pins=net_map(doc)
+    nets=flattened(doc)
+    candidates=[n['id'] for n in nets if any(name.strip().upper() in ('0','GND') for name in n['name'].split('/'))]
+    if payload.get('ground_net'):
+        if payload['ground_net'] not in aliases:raise ValueError('Simulation ground_net must reference an existing net')
+        ground=aliases[payload['ground_net']]
+    elif len(candidates)==1:ground=candidates[0]
+    else:raise ValueError('Simulation requires one unambiguous GND/0 net or an explicit ground_net ID; scoped grounds are not silently merged')
+    nodes={n['id']:('0' if n['id']==ground else 'n'+str(i+1)) for i,n in enumerate(nets)}
     lookup={n['id']:nodes[n['id']] for n in nets}
     for n in nets:
         for original in n['source_net_ids']:lookup[original]=nodes[n['id']]

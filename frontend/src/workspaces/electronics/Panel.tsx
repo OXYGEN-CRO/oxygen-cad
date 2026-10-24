@@ -209,6 +209,7 @@ export default function ElectronicsPanel(props: DomainPanelProps) {
     if (obj) {
       obj.at = location(event);
       d.moved = true;
+      current.current = next;
       setDoc(next);
     }
   }
@@ -784,7 +785,7 @@ export default function ElectronicsPanel(props: DomainPanelProps) {
                                         ? p.size[0] / 2
                                         : 0.08
                                     }
-                                    transform={`rotate(${loc.rotation + p.rotation} ${pos.join(" ")})`}
+                                    transform={`rotate(${loc.rotation + (board && "side" in loc && loc.side === "bottom" ? -p.rotation : p.rotation)} ${pos.join(" ")})`}
                                     className={cls}
                                   />
                                 ) : (

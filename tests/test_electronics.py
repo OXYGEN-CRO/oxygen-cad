@@ -238,3 +238,34 @@ def test_manufacturing_independent_gerbonara_parses_cutouts_drills_widths_layers
     # A 1.2 x 1.4 pad rotated 90deg has 1.4 x 1.2 manufacturing extents.
     bounds=flashes[0].bounding_box();assert bounds[1][0]-bounds[0][0]==pytest.approx(1.4);assert bounds[1][1]-bounds[0][1]==pytest.approx(1.2)
     assert len([o for o in top.objects if hasattr(o,'x') and o.attrs.get('.P',('',))[0] in ('V1','R1')])==4
+
+
+def test_spice_does_not_short_distinct_scoped_grounds(design):
+    design.nets.append(Net(id='isolated_ground',sheet_id='root',name='GND'))
+    with pytest.raises(ValueError,match='unambiguous'):spice_deck(design,{'probes':['vout']})
+    deck,meta=spice_deck(design,{'probes':['vout'],'ground_net':'gnd'})
+    assert meta['nodes']['gnd']=='0' and meta['nodes']['isolated_ground']!='0'
+
+
+@pytest.mark.skipif(not shutil.which('kicad-cli'),reason='Real KiCad executable required')
+def test_release_reproducibility_checked_layer_job_drawing_dimensions_and_hashes(design,workspace):
+    import zipfile
+    import xml.etree.ElementTree as xml
+    from o3d.domains.eda.workers import normalized_metadata
+    source=workspace.cache/'source.oxygen-eda.json';source.parent.mkdir(parents=True,exist_ok=True);source.write_text('{"provenance":[{"date":"2026-10-24"}]}')
+    assert normalized_metadata(source)==source.read_bytes()  # user provenance is immutable
+    first=kicad(workspace,design,'release',{});second=kicad(workspace,design,'release',{})
+    def package(result):return workspace.cache/next(a['path'] for a in result['artifacts'] if a['name']=='release.zip')
+    a,b=package(first),package(second)
+    assert a.read_bytes()==b.read_bytes()
+    with zipfile.ZipFile(a) as bundle:
+        manifest=json.loads(bundle.read('manifest.json'))
+        assert manifest['source_hash']==digest(design)
+        for item in manifest['files']:assert hashlib.sha256(bundle.read(item['path'])).hexdigest()==item['sha256']
+        job=json.loads(bundle.read('fabrication/board-job.gbrjob'))
+        functions={item['Path']:item['FileFunction'] for item in job['FilesAttributes']}
+        assert functions['board-In1_Cu.gbr']=='Copper,L2,Inr';assert functions['board-In2_Cu.gbr']=='Copper,L3,Inr'
+        assert manifest['verification']['copper_file_functions']['board-B_Cu.gbr']=='Copper,L4,Bot'
+        drawing=xml.fromstring(bundle.read('top-drawing.svg'));assert drawing.attrib['width']=='60.0mm' or drawing.attrib['width']=='60mm'
+        assert len(drawing.findall('.//{http://www.w3.org/2000/svg}polygon'))>=6
+        assert not any('external-tool-originals' in name or 'tool-' in name for name in bundle.namelist())

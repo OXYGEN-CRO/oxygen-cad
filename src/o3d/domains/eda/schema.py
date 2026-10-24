@@ -425,12 +425,20 @@ class Document(Model):
         for item in self.board.placements:
             if item.component_id not in components:
                 raise ValueError('Footprint references an unknown component')
+            c=components[item.component_id]
+            copper={l.id for l in self.board.stackup if l.kind=='copper'}
+            for pad in lib[c.library_id,c.library_version].pads:
+                if pad.kind!='npth' and (not pad.layers or any(l!='*.Cu' and l not in copper for l in pad.layers)):
+                    raise ValueError('Placed pad must reference available copper layers')
         for item in self.board.tracks + self.board.vias + self.board.zones:
             if item.net_id is not None and item.net_id not in nets:
                 raise ValueError('Copper references an unknown net')
         for pair in self.differential_pairs:
             if pair.positive not in nets or pair.negative not in nets or pair.positive == pair.negative:
                 raise ValueError('Differential pair requires two different existing nets')
+        for rule in self.rules:
+            if not set(rule.net_ids)<=set(nets) or not set(rule.layers)<={l.id for l in self.board.stackup if l.kind=='copper'}:
+                raise ValueError('Scoped rule references an unknown net or copper layer')
         for variant in self.variants:
             if not set(variant.dnp + list(variant.values)) <= set(components):
                 raise ValueError('Variant references an unknown component')

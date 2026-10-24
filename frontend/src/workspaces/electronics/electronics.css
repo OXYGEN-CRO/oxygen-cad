@@ -233,3 +233,19 @@
     height: 320px;
   }
 }
+.electronics-panel {
+  container-type: inline-size;
+}
+.electronics-panel pre {
+  max-width: 100%;
+  overflow: auto;
+  font: 11px/1.5 var(--font-mono);
+}
+@container (max-width: 680px) {
+  .electronics-panel .eda-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .electronics-panel svg.eda-canvas {
+    height: 320px;
+  }
+}
