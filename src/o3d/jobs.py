@@ -23,7 +23,36 @@ class Jobs:
                 job.state = "failed"
                 job.message = "Application restarted before job completed; resubmit to retry"
                 job.finished_at = now()
-                write_json(path, job.model_dump())
+                self._save(job)
+            else:
+                self._write_summary(job)
+
+    @staticmethod
+    def _summary(job):
+        """Polling metadata; dense results remain available through get()."""
+        value = job.model_dump(exclude={"result"})
+        result = job.result
+        value["result"] = None if result is None else {
+            key: item for key, item in result.items()
+            if item is None or isinstance(item, (bool, int, float))
+            or (isinstance(item, str) and len(item) <= 4096)
+        }
+        if result is not None:
+            for key in ("artifacts", "artifact_hashes"):
+                if isinstance(result.get(key), dict):
+                    value["result"][key] = {
+                        name: path for name, path in result[key].items()
+                        if isinstance(path, str) and len(path) <= 4096
+                    }
+        return value
+
+    def _write_summary(self, job):
+        write_json(self.path(job.id) / "summary.json", self._summary(job))
+
+    def _save(self, job):
+        # Publish detail before advertising its completed state to polling clients.
+        write_json(self.path(job.id) / "job.json", job.model_dump())
+        self._write_summary(job)
 
     def path(self, job_id):
         if not job_id.isalnum() or len(job_id) != 32:
@@ -37,7 +66,7 @@ class Jobs:
         job = Job(id=uuid.uuid4().hex, kind=kind, revision=project.revision, created_at=now(),
                   study_id=project.active_study_id if kind == "simulate" else None)
         path = self.path(job.id)
-        write_json(path / "job.json", job.model_dump())
+        self._save(job)
         write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json"), "workspace": request})
         self.cancellations[job.id] = Event()
         self.pool.submit(self._execute, job)
@@ -57,7 +86,13 @@ class Jobs:
         return Job.model_validate_json((self.path(job_id) / "job.json").read_text())
 
     def list(self):
-        return sorted([Job.model_validate_json(p.read_text()).model_dump() for p in (self.store.cache / "jobs").glob("*/job.json")], key=lambda v: v["created_at"], reverse=True)[:30]
+        values = []
+        for path in (self.store.cache / "jobs").glob("*/job.json"):
+            summary = path.with_name("summary.json")
+            # Missing during an initial write or for older cached jobs.
+            values.append(json.loads(summary.read_text()) if summary.exists()
+                          else self._summary(Job.model_validate_json(path.read_text())))
+        return sorted(values, key=lambda value: value["created_at"], reverse=True)[:30]
 
     def cancel(self, job_id):
         job = self.get(job_id)
@@ -73,7 +108,7 @@ class Jobs:
             if cancel.is_set():
                 raise Cancelled("Job cancelled before starting")
             job.state, job.started_at = "running", now()
-            write_json(path / "job.json", job.model_dump())
+            self._save(job)
             run_process([sys.executable, "-m", "o3d.worker", path / "request.json", path / "result.json"], path, path / "worker.log", cancel, timeout=1800 if job.kind == "domain" else (900 if job.kind == "simulate" else 180))
             with self.mutex:
                 if cancel.is_set():
@@ -94,7 +129,7 @@ class Jobs:
             job.state, job.message = "failed", str(error)
         finally:
             job.finished_at = now()
-            write_json(path / "job.json", job.model_dump())
+            self._save(job)
             self.cancellations.pop(job.id, None)
 
     def close(self):
