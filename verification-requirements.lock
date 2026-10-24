@@ -1,0 +1,3 @@
+# Optional independent FEM checker; install into an existing pinned CAD/scientific runtime.
+# pip install --no-deps --require-hashes -r verification-requirements.lock
+scikit-fem==12.0.2 --hash=sha256:34cd891f80072c0c1eb759a2371e82f0eeec91ff7c08acab96d27b6edbbe1b05

@@ -16,3 +16,11 @@ def store(tmp_path, beam):
     result = Store(tmp_path / "project")
     result.init(beam)
     return result
+
+
+@pytest.fixture
+def mesh_families():
+    import runpy
+    # Load the standalone fixture inventory by file, including when pytest is
+    # launched as a console script without the repository root on sys.path.
+    return runpy.run_path(str(ROOT/"scripts/qualify_mesh.py"))["fixtures"]()

@@ -10,6 +10,41 @@ from .model import geometry_key
 from .store import write_json
 
 
+def face_probe(face):
+    """A CAD-owned point, stable across remeshing and inside the trimmed face."""
+    from .geometry import vector
+    center=face.center()
+    if face.is_inside(center,tolerance=1e-8):return vector(center),"CAD face mass centroid"
+    vertices,triangles=face.tessellate(max(np.sqrt(face.area)*.005,1e-5))
+    candidates=[]
+    for triangle in triangles:
+        points=np.array([vector(vertices[i]) for i in triangle])
+        area=np.linalg.norm(np.cross(points[1]-points[0],points[2]-points[0]))/2
+        point=points.mean(0)
+        if area>0 and face.is_inside(tuple(point),tolerance=1e-8):candidates.append((-area,*point))
+    if not candidates:raise ValueError("Cannot choose a CAD-interior default probe; specify an explicit material point")
+    selected=min(candidates)
+    return list(selected[1:]),"Largest CAD tessellation patch interior (face centroid lies outside its trimmed region)"
+
+
+def solid_probe(shape):
+    import build123d as bd
+    from .geometry import vector,signature
+    solids=list(shape.solids())
+    if len(solids)!=1:raise ValueError("Default solid probe requires one solid")
+    solid=solids[0];center=solid.center()
+    if solid.is_inside(center,tolerance=1e-8):return vector(center),"CAD solid mass centroid"
+    faces=list(solid.faces());box=solid.bounding_box()
+    scale=min(v for v in np.asarray(vector(box.max))-vector(box.min) if v>0)
+    for face in sorted((f for f in faces if f.geom_type==bd.GeomType.PLANE),key=lambda f:(-f.area,signature(f))):
+        point,_=face_probe(face);normal=np.asarray(vector(face.normal_at(tuple(point))))
+        for fraction in (.1,.03,.01,.003,.001,.0003,.0001,.00003,.00001):
+            candidate=np.asarray(point)-normal*scale*fraction
+            if solid.is_inside(tuple(candidate),tolerance=1e-8) and min(f.distance_to(bd.Vertex(*candidate)) for f in faces)>max(scale*1e-8,1e-7):
+                return candidate.tolist(),"CAD interior offset from largest planar patch (solid centroid lies outside material)"
+    raise ValueError("Cannot choose a CAD-interior default probe; specify an explicit material point")
+
+
 def prepare_geometry(store, project):
     import build123d as bd
     from .geometry import build, resolve_face, signature, vector
@@ -31,12 +66,18 @@ def prepare_geometry(store, project):
                 key = f"region_{len(regions)}"
                 identities[identity] = key
                 box = face.bounding_box()
+                probe,method=face_probe(face)
                 regions.append({"name": key, "selection": name, "signature": identity,
                                 "center": vector(face.center()), "area": face.area,
-                                "normal": vector(face.normal_at()), "bounds": [vector(box.min), vector(box.max)]})
+                                "normal": vector(face.normal_at()), "bounds": [vector(box.min), vector(box.max)],
+                                "representative_point_mm":probe,"representative_point_method":method})
             aliases[f"{prefix}_{index}"] = identities[identity]
+    default,method=(None,None)
+    if project.study.type=="thermal_stress" and not project.study.forces and project.study.probe_point_mm is None:
+        default,method=solid_probe(shape)
     return {"step": str((folder / "part.step").resolve()), "regions": regions, "aliases": aliases,
-            "expected_volume_mm3": shape.volume, "geometry_key": geometry_key(project), "units": "mm"}
+            "expected_volume_mm3": shape.volume, "geometry_key": geometry_key(project), "units": "mm",
+            "default_probe_mm":default,"default_probe_method":method}
 
 
 def validate_mesh(mesh, expected_volume=None, max_nodes=200000, curved_audit=None):

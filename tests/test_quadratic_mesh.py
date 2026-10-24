@@ -178,3 +178,39 @@ def test_mesher_binary_change_invalidates_study_without_changing_geometry(store,
     assert solver_identity()['mesher_runtime_files']['lib/libgmsh.so.4.15']
     library.write_bytes(b'changed library fixture')
     assert study_key(p)!=before and geometry_key(p)==geometry
+
+
+def test_default_cad_probes_stay_in_material_when_mass_centroids_lie_in_holes():
+    import build123d as bd
+    from o3d.analysis_mesh import face_probe,solid_probe
+    shape=bd.Cylinder(8,40)-bd.Cylinder(6,40)
+    cap=next(f for f in shape.faces() if f.geom_type==bd.GeomType.PLANE)
+    assert not cap.is_inside(cap.center()) and not shape.is_inside(shape.center())
+    point,method=face_probe(cap)
+    assert cap.is_inside(point) and 6<np.linalg.norm(point[:2])<8
+    assert 'patch' in method.lower()
+    point,method=solid_probe(shape)
+    assert shape.is_inside(point) and 6<np.linalg.norm(point[:2])<8
+    assert abs(point[2])<20
+    assert 'interior offset' in method
+
+
+def test_hollow_thermal_stress_keeps_one_cad_interior_probe_across_remeshing(tmp_path,beam,mesh_families):
+    from o3d.model import TemperatureBoundary,HeatSource
+    from o3d.store import Store
+    from o3d.solver import simulate
+    p=mesh_families['tube'];p.material=beam.material.model_copy(deep=True)
+    p.material.thermal_conductivity_w_m_k=20;p.material.thermal_expansion_per_k=12e-6
+    p.study.type='thermal_stress';p.study.forces=[];p.study.probe_point_mm=None
+    p.study.reference_temperature_c=0;p.study.assumptions_confirmed=True
+    p.study.temperatures=[TemperatureBoundary(face='part:xmin',temperature_c=0)]
+    p.study.heat_sources=[HeatSource(face='part:xmax',power_w=1)]
+    store=Store(tmp_path/'hollow');store.init(p);result=simulate(store,p)
+    probes=[i['displacement_probe_mm'] for i in result['iterations']]
+    assert all(v==probes[0] for v in probes)
+    assert 6<np.linalg.norm(probes[0][1:])<8
+    assert 'interior offset' in result['displacement_probe_method']
+    field=json.loads(store.artifact(result['field_artifact']).read_text())
+    extension=max(v[0] for v in field['displacements'].values())
+    assert extension==pytest.approx(12e-6*result['max_temperature_c']/2*40,rel=.03)
+    assert result['force_balance_error']<.01 and result['moment_balance_error']<.01

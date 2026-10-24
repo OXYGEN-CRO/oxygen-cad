@@ -333,13 +333,17 @@ def mechanical_result(run, mesh, project, frames, boundary, transfer, data=None,
     moment_error = float(np.linalg.norm(applied_moment+reacted_moment)/moment_scale)
     maximum = max(float(np.linalg.norm(v)) for v in displacement.values())
     selected_probe = project.study.probe_point_mm
+    probe_method="User-specified physical point"
     if selected_probe is None:
         load = next((r for r in transfer["regions"] if r["name"]==transfer["aliases"].get("load_0")),None)
-        selected_probe = load["center"] if load else np.mean(np.array(list(nodes.values())),axis=0).tolist()
+        selected_probe = load["representative_point_mm"] if load else transfer["default_probe_mm"]
+        probe_method=load["representative_point_method"] if load else transfer["default_probe_method"]
+        if selected_probe is None:raise ValueError("Specify a geometric probe point; a mesh-dependent average is not a stable convergence quantity")
     probe = float(np.linalg.norm(interpolate_probe(mesh,displacement,selected_probe)))
     stress_probe = float(interpolate_probe(mesh,stress,project.study.stress_probe_mm)) if project.study.stress_probe_mm else None
     metrics = {"max_displacement_mm": maximum,"max_stress_mpa":max(stress.values()),
                "probe_displacement_mm":probe,"displacement_probe_mm":selected_probe,"stress_probe_mpa":stress_probe,
+               "displacement_probe_method":probe_method,
                "force_balance_error":force_error,"moment_balance_error":moment_error,
                "displacement_to_extent_ratio":maximum/max(length,1e-12)}
     field = {"displacements":displacement,"stress_mpa":stress}
