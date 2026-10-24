@@ -137,6 +137,23 @@ def nonlinear_output_times(study):
     return result
 
 
+def nonlinear_solver_step(study):
+    """Keep output sampling independent from conservative reversal integration."""
+    size = 1 / study.nonlinear_increments
+    ramps = [(b.time-a.time, b.factor-a.factor) for a, b in zip(study.load_path, study.load_path[1:])
+             if b.factor != a.factor]
+    for (duration, change), (next_duration, next_change) in zip(ramps, ramps[1:]):
+        if (change > 0) != (next_change > 0):
+            # Plastic loading and elastic unloading have different tangents.
+            # A coarse reversal can generate runaway Newton predictions before
+            # automatic cutback. Use at least 20 subdivisions per adjacent ramp,
+            # and refine further with the requested increments so temporal
+            # sensitivity checks still change the numerical integration steps.
+            subdivisions = max(20, 5 * study.nonlinear_increments)
+            size = min(size, duration / subdivisions, next_duration / subdivisions)
+    return size
+
+
 def write_deck(path, mesh, project, thermal=False, temperatures=None):
     from .solver import load_boundary
     study, material = project.study, project.material
@@ -193,7 +210,7 @@ def write_deck(path, mesh, project, thermal=False, temperatures=None):
     else:
         lines += ["*STATIC"]
         if study.type == "nonlinear_static":
-            size=1/study.nonlinear_increments
+            size=nonlinear_solver_step(study)
             lines += [f"{size:.12g},1.,1.e-6,{size:.12g}"]
     if forces and study.type != "modal":
         lines += ["*CLOAD,AMPLITUDE=LOADPATH" if study.type == "nonlinear_static" else "*CLOAD"]

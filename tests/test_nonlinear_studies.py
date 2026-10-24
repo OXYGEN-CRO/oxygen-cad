@@ -1,6 +1,7 @@
 """Real nonlinear solver checks against independent reference equations."""
 import json
 from pathlib import Path
+import re
 
 import numpy as np
 import pytest
@@ -68,6 +69,11 @@ def test_plastic_load_unload_peak_residual_step_sensitivity_and_exports(store):
     assert refined["max_displacement_mm"]==pytest.approx(result["max_displacement_mm"],rel=.01)
     assert refined["final_max_displacement_mm"]==pytest.approx(result["final_max_displacement_mm"],rel=.01)
     assert len(refined["increments"])==8
+    def largest_accepted_step(current_result):
+        status = store.artifact(current_result["artifacts"]["mesh_2/analysis.sta"]).read_text()
+        rows = [line.split() for line in status.splitlines()]
+        return max(float(row[6]) for row in rows if len(row) == 7 and row[0].isdigit() and row[2].isdigit())
+    assert largest_accepted_step(refined) < largest_accepted_step(result)
     from o3d.artifacts import export_bundle
     import zipfile
     release=export_bundle(store,p)
@@ -108,6 +114,41 @@ def test_large_deformation_against_independent_elastica_boundary_value_solution(
     assert result["moment_balance_error"]<.01
     assert result["displacement_to_extent_ratio"]>.05
     assert not any("outside this adapter" in w for w in result["warnings"])
+
+
+def test_plastic_reversal_repeated_on_same_mesh_has_bounded_newton_updates(store):
+    from o3d.analysis import run_solver
+    from o3d.analysis_mesh import generate_mesh, prepare_geometry
+
+    p = plastic_setup(store)
+    # This is the first refined mesh on which coarse unloading occasionally
+    # diverged. Reuse its actual elements to isolate solver stability from CAD
+    # transfer and mesher variability.
+    p.study.mesh_size_mm /= 1.5
+    p = store.apply(Command(expected_revision=p.revision, actor="human", project=p))
+    transfer = prepare_geometry(store, p)
+    root = store.cache / "reversal-qualification"
+    mesh, quality = generate_mesh(root / "mesh", transfer, p)
+    assert quality["minimum_corner_quality"] > 1e-4
+    coordinates = {int(k): np.asarray(v) for k, v in mesh["nodes"].items()}
+    edges = ((0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3))
+    assert max(np.linalg.norm(coordinates[e[4+i]] - (coordinates[e[a]]+coordinates[e[b]])/2)
+               for e in mesh["elements"] for i, (a, b) in enumerate(edges)) < 1e-10
+    for repeat in range(3):
+        run = root / f"solve-{repeat}"
+        run.mkdir(parents=True)
+        boundary, frames = run_solver(run, mesh, p, "analysis")
+        metrics, _field, _observations, balanced = nonlinear_result(run, mesh, p, frames, boundary, transfer, store)
+        assert metrics["completed_load_path"] and balanced
+        assert [v["time"] for v in metrics["increments"]] == [.25, .5, .75, 1]
+        peak = next(v for v in metrics["increments"] if v["time"] == .5)
+        assert peak["probe_displacement_mm"] == pytest.approx(.268, rel=.03)
+        assert metrics["final_max_displacement_mm"] == pytest.approx(.16, rel=.04)
+        assert metrics["force_balance_error"] < .01 and metrics["moment_balance_error"] < .01
+        log = (run / "analysis.log").read_text()
+        corrections = [abs(float(v)) for v in re.findall(r"largest correction to disp=\s*([0-9Ee.+-]+)", log)]
+        assert corrections and max(corrections) < 1
+        assert "divergence;" not in log
 
 
 def test_nonlinear_input_and_incomplete_history_refusal(store,tmp_path):
