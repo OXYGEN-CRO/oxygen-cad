@@ -69,6 +69,18 @@ def export_bundle(store, project):
             shutil.copy2(store.artifact(state["build"]["artifacts"][kind]), folder / filename)
     write_json(folder / "o3d.json", project.model_dump(mode="json"))
     analysis = state["analysis"]
+    if analysis:
+        study_folder = folder / "analysis"
+        study_folder.mkdir(exist_ok=True)
+        write_json(study_folder / "result.json", analysis)
+        shutil.copy2(store.artifact(analysis["field_artifact"]), study_folder / "field.json")
+        for name, relative in analysis.get("artifacts", {}).items():
+            target_name = {"study_package":"study-package.json", "region_map":"region-map.json"}.get(name, name)
+            target = (study_folder / target_name).resolve()
+            if not target.is_relative_to(study_folder.resolve()):
+                raise ValueError("Analysis artifact name escapes the release package")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(store.artifact(relative), target)
     report = {"project": project.name, "revision": project.revision, "geometry_key": geometry_key(project), "study_key": study_key(project),
               "geometry_engine": state["build"].get("engine"), "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": analysis,
               "dimensions_mm": state["build"]["dimensions_mm"], "volume_mm3": state["build"]["volume_mm3"]}
@@ -85,7 +97,7 @@ def export_bundle(store, project):
         for ref in project.references:
             writer.writerow([ref.name, "reference", 1, "", ref.sha256])
     with zipfile.ZipFile(folder / "release.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(folder.iterdir()):
-            if path.name != "release.zip":
-                archive.write(path, path.name)
+        for path in sorted(folder.rglob("*")):
+            if path.is_file() and path != folder / "release.zip":
+                archive.write(path, path.relative_to(folder))
     return {"revision": project.revision, "artifact": f"exports/{project.revision}/release.zip", "report": f"exports/{project.revision}/report.html"}

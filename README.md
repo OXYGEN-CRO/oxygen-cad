@@ -98,7 +98,7 @@ Do not overwrite the live `o3d.json` directly. Apply proposal files through the 
 - **Reference geometry:** content-addressed STEP imports with editable placement and visibility.
 - **Review:** orbit/zoom, face selection, measurements between surface points, section view, exact dimensions, agent selection context, and PNG rendering.
 - **Verification:** solid validity, connectedness, dimensions, mass with supplied density, reference interference/clearance, and an independent exported-mesh audit.
-- **Structural studies:** real CalculiX linear-static analysis with isolated Netgen meshing, editable materials/forces/supports, mesh refinement, reaction-balance checks, and stress/displacement overlays.
+- **Simulation:** experimental real CalculiX static, modal, buckling, steady conduction and sequential thermal-stress studies; isolated Netgen/Gmsh meshing, explicit material/boundary inputs, refinement, balance checks, temperature/mode/stress/displacement fields and reproducible analysis artifacts. See [capabilities, evidence and parity ledger](docs/SIMULATION.md).
 - **Handoff:** STEP, STL, project source, BOM CSV, and HTML/JSON engineering report in a revision-linked ZIP.
 - **Local operation:** background jobs, cancellation, worker timeouts, recoverable job records, and explicit stale-result handling.
 

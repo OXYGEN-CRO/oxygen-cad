@@ -24,6 +24,11 @@ export type Force = {
   vector_n: [number, number, number];
 };
 
+export type HeatSource = {
+  face: string;
+  power_w: number;
+};
+
 export type Hole = {
   id: string;
   name: string;
@@ -42,11 +47,17 @@ export type Hole = {
 
 export type Material = {
   name: string;
-  youngs_modulus_mpa: number;
-  poisson_ratio: number;
+  youngs_modulus_mpa: number | null;
+  poisson_ratio: number | null;
   density_g_cm3: number;
   yield_strength_mpa: number | null;
   source: string;
+  thermal_conductivity_w_m_k: number | null;
+  specific_heat_j_kg_k: number | null;
+  thermal_expansion_per_k: number | null;
+  process: string | null;
+  condition: string | null;
+  property_sources: Record<string, string>;
 };
 
 export type NativeFeature = {
@@ -96,7 +107,15 @@ export type ReferenceAsset = {
 
 export type Requirement = {
   id: string;
-  kind: "max_mass" | "max_dimension" | "min_clearance" | "max_displacement";
+  kind:
+    | "max_mass"
+    | "max_dimension"
+    | "min_clearance"
+    | "max_displacement"
+    | "max_temperature"
+    | "min_frequency"
+    | "min_buckling_factor"
+    | "max_stress";
   value: number;
   axis: "X" | "Y" | "Z";
   reference: string | null;
@@ -104,14 +123,40 @@ export type Requirement = {
 };
 
 export type Study = {
-  type: "linear_static";
+  schema_version: 1;
+  type:
+    | "linear_static"
+    | "modal"
+    | "buckling"
+    | "thermal"
+    | "thermal_stress"
+    | "nonlinear_static"
+    | "quasistatic_event"
+    | "dynamic_event"
+    | "shape_optimization"
+    | "electronics_cooling"
+    | "injection_molding";
+  name: string;
   fixed_faces: string[];
   forces: Force[];
+  temperatures: TemperatureBoundary[];
+  heat_sources: HeatSource[];
+  reference_temperature_c: number | null;
+  mode_count: number;
+  mesher: "netgen" | "gmsh";
   mesh_size_mm: number;
+  max_nodes: number;
+  solver_timeout_seconds: number;
   refinement_steps: number;
   convergence_tolerance: number;
   stress_probe_mm: [number, number, number] | null;
+  probe_point_mm: [number, number, number] | null;
   assumptions_confirmed: boolean;
+};
+
+export type TemperatureBoundary = {
+  face: string;
+  temperature_c: number;
 };
 
 export type Project = {

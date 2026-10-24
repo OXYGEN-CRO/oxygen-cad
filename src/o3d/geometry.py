@@ -235,7 +235,7 @@ def check(store: Store, project: Project):
         if ref.check_interference and interference > 1e-5:
             findings.append(Finding(code="interference", severity="error", feature=ref.id, message=f"Interference with {ref.name}", value=interference, limit=0))
     for req in project.requirements:
-        if not req.enabled or req.kind == "max_displacement":
+        if not req.enabled or req.kind in ("max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress"):
             continue
         if req.kind == "max_mass":
             if project.material is None:

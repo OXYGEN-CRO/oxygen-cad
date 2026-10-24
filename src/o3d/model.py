@@ -122,16 +122,22 @@ class ReferenceAsset(Model):
 
 class Material(Model):
     name: str = "User-defined material"
-    youngs_modulus_mpa: float = Field(gt=0)
-    poisson_ratio: float = Field(gt=-1, lt=0.5)
+    youngs_modulus_mpa: float | None = Field(default=None, gt=0)
+    poisson_ratio: float | None = Field(default=None, gt=-1, lt=0.5)
     density_g_cm3: float = Field(gt=0)
     yield_strength_mpa: float | None = Field(default=None, gt=0)
-    source: str = Field(min_length=1)
+    source: str = Field(min_length=1, pattern=r"\S")
+    thermal_conductivity_w_m_k: float | None = Field(default=None, gt=0)
+    specific_heat_j_kg_k: float | None = Field(default=None, gt=0)
+    thermal_expansion_per_k: float | None = None
+    process: str | None = None
+    condition: str | None = None
+    property_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class Requirement(Model):
     id: Identifier
-    kind: Literal["max_mass", "max_dimension", "min_clearance", "max_displacement"]
+    kind: Literal["max_mass", "max_dimension", "min_clearance", "max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress"]
     value: float = Field(gt=0)
     axis: Literal["X", "Y", "Z"] = "X"
     reference: str | None = None
@@ -143,14 +149,38 @@ class Force(Model):
     vector_n: Vec3
 
 
+class TemperatureBoundary(Model):
+    face: str
+    temperature_c: float = Field(ge=-273.15)
+
+
+class HeatSource(Model):
+    face: str
+    power_w: float
+
+
+StudyType = Literal["linear_static", "modal", "buckling", "thermal", "thermal_stress", "nonlinear_static",
+                    "quasistatic_event", "dynamic_event", "shape_optimization", "electronics_cooling", "injection_molding"]
+
+
 class Study(Model):
-    type: Literal["linear_static"] = "linear_static"
+    schema_version: Literal[1] = 1
+    type: StudyType = "linear_static"
+    name: str = "Engineering study"
     fixed_faces: list[str] = Field(default_factory=list)
     forces: list[Force] = Field(default_factory=list)
+    temperatures: list[TemperatureBoundary] = Field(default_factory=list)
+    heat_sources: list[HeatSource] = Field(default_factory=list)
+    reference_temperature_c: float | None = Field(default=None, ge=-273.15)
+    mode_count: int = Field(default=6, ge=1, le=20)
+    mesher: Literal["netgen", "gmsh"] = "netgen"
     mesh_size_mm: float = Field(default=4, gt=0)
+    max_nodes: int = Field(default=200000, ge=100, le=200000)
+    solver_timeout_seconds: int = Field(default=180, ge=1, le=600)
     refinement_steps: int = Field(default=3, ge=2, le=4)
     convergence_tolerance: float = Field(default=0.05, gt=0, le=0.2)
     stress_probe_mm: Vec3 | None = None
+    probe_point_mm: Vec3 | None = None
     assumptions_confirmed: bool = False
 
 
@@ -250,8 +280,13 @@ def geometry_key(project: Project) -> str:
 
 
 def study_key(project: Project) -> str:
+    from .analysis import solver_identity
+    try:
+        runtime = solver_identity()
+    except (RuntimeError, OSError):
+        runtime = {"name": "CalculiX", "available": False}
     return digest({"geometry": geometry_key(project), "material": project.material.model_dump() if project.material else None,
-                   "study": project.study.model_dump(), "requirements": [r.model_dump() for r in project.requirements if r.kind == "max_displacement"], "solver": "calculix-static-v1"})
+                   "study": project.study.model_dump(), "requirements": [r.model_dump() for r in project.requirements if r.kind in ("max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress")], "solver": runtime})
 
 
 def verification_key(project: Project) -> str:

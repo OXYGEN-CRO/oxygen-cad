@@ -113,6 +113,15 @@ def check(ctx: typer.Context, json_output: bool = typer.Option(False, "--json"))
 
 
 @app.command()
+def studies(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
+    """List study capabilities and validate the current study without solving."""
+    from .analysis import capabilities, validate_study
+    project = ctx.obj.load() if (ctx.obj.root / "o3d.json").exists() else None
+    emit({**capabilities(), "current_study": project.study.model_dump() if project else None,
+          "setup_errors": validate_study(project) if project else []})
+
+
+@app.command()
 def simulate(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
     from .worker import dispatch
     result = dispatch("simulate", ctx.obj, ctx.obj.load())

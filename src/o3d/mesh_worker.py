@@ -1,6 +1,7 @@
 """Runs exclusively in the isolated Netgen environment (never imports OCP)."""
 import json
 import sys
+import importlib.metadata
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,8 @@ def mesh(request):
     for region in request["regions"]:
         matches = [face for face in shape.faces
                    if np.linalg.norm(np.array(list(face.center)) - region["center"]) < 1e-4
-                   and abs(face.mass - region["area"]) < max(1e-4, region["area"] * 1e-6)]
+                   and abs(face.mass - region["area"]) < max(1e-4, region["area"] * 1e-6)
+                   and ("bounds" not in region or np.max(np.abs(np.array([list(p) for p in face.bounding_box])-np.array(region["bounds"]))) < 1e-4)]
         if len(matches) != 1:
             raise ValueError(f"STEP face transfer is missing or ambiguous for {region['name']}")
         matches[0].name = region["name"]
@@ -20,7 +22,7 @@ def mesh(request):
     result = geo.GenerateMesh(maxh=request["mesh_size"], grading=0.3, optsteps3d=3)
     result.SecondOrder()
     nodes = {int(p.nr): list(result[p].p) for element in result.Elements3D() for p in element.points}
-    if len(nodes) > 200000:
+    if len(nodes) > request.get("max_nodes", 200000):
         raise ValueError("Analysis exceeds the alpha limit of 200,000 nodes; increase mesh size")
     permutation = [0, 1, 3, 2, 4, 8, 6, 5, 7, 9]
     elements = []
@@ -38,7 +40,8 @@ def mesh(request):
     for region in request["regions"]:
         if not surfaces.get(region["name"]):
             raise ValueError(f"No boundary mesh associated with {region['name']}")
-    return {"nodes": nodes, "elements": elements, "surfaces": surfaces}
+    return {"nodes": nodes, "elements": elements, "surfaces": surfaces,
+            "mesher": {"name": "Netgen", "version": importlib.metadata.version("netgen-mesher")}}
 
 
 if __name__ == "__main__":

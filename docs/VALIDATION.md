@@ -32,7 +32,7 @@ The compact breadcrumb header removes branding, the project-title input, mode ta
 
 ## Numerical boundaries
 
-Only a homogeneous linear-elastic single-solid static study with fully fixed planar faces and distinct planar distributed-force regions is supported. No contact, bolt preload, impact, fatigue or calibrated additive-material model is implied.
+The experimental workflows now include single-solid isotropic linear static, unloaded modal, ideal eigenvalue buckling, steady conduction and sequential thermal stress through CalculiX and isolated Netgen/Gmsh meshers. [Simulation scope and implementation ledger](SIMULATION.md) records the exact inputs, units, tests and remaining work. No contact, bolt preload, impact, fatigue or calibrated additive-material model is implied.
 
 Mesh convergence is reported for displacement and, when supplied, the named stress probe. Unconverged or unbalanced studies are inconclusive. Stress peaks at constraints or sharp corners may be singular. Exported reports retain these qualifications and the exact inputs.
 

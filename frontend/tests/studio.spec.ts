@@ -172,7 +172,9 @@ test("native editing, revision persistence, checks, context and release", async 
     fullPage: true,
   });
   await openTool(page, "Study setup");
-  await expect(page.getByText("Static stress", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Static stress", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Run static study" }),
   ).toBeDisabled();
