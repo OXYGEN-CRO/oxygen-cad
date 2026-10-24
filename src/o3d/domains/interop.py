@@ -205,7 +205,12 @@ def _drawing_scale(text, declared):
 def _import_asset(store, project, asset, payload, cancel=None):
     _check_cancel(cancel)
     project = _with_assets(project, asset)
-    if asset.format in {"solidcraft", "json"}:
+    if asset.format == "json":
+        snapshot = next((a for a in _data(project).assets if a.format == "solidcraft" and a.source_asset == asset.id), None)
+        if snapshot is None:
+            raise ValueError("Native JSON requires its validated .solidcraft snapshot; upload the JSON source again")
+        return _import_asset(store, project, snapshot, payload, cancel)
+    if asset.format == "solidcraft":
         project, result = _native(project, store, "component.insert_design", {"asset_id": asset.id, "name": asset.name, "reuse": bool(payload.get("reuse", False))})
     elif asset.format in {"step", "stp"}:
         project, result = _native(project, store, "file.insert_step", {"asset_id": asset.id, "name": asset.name,
@@ -265,6 +270,17 @@ def _upload(store, project, payload, cancel):
         with NativeSession() as session:
             session.execute("doc.open", {"path": str(path)})
             document = session.execute("oxygen.document.get")["document"]
+            if extension == "json":
+                # Upstream relink accepts its native container. Preserve JSON
+                # bytes and register a genuine native snapshot for the source
+                # revision, so insertion and later relinking use one format.
+                with tempfile.TemporaryDirectory(prefix="oxygen-native-source-", dir=store.cache) as temporary:
+                    target = Path(temporary) / (Path(name).stem + ".solidcraft")
+                    session.execute("file.save_as", {"path": str(target), "cache": False, "preview": False})
+                    snapshot = _put_asset(store, target.read_bytes(), target.name, "solidcraft",
+                                          source_units="file", source_asset=source.id, operation="native_source_snapshot")
+                project = _with_assets(project, source)
+                source = snapshot
         if payload.get("register_only", False):
             project = _with_assets(project, source)
             return _proposal(project, {"asset": source.model_dump(mode="json"), "registered": True,

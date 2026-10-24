@@ -364,13 +364,33 @@ def test_native_design_upload_register_and_link_through_supported_adapter(store,
     assert registered["project"]["native_document"] is None
     apply_result(store, registered)
     asset_id = registered["result"]["asset"]["id"]
+    assert registered["result"]["asset"]["format"] == "solidcraft"
+    if extension == "json":
+        original = next(a for a in store.load().domains["interop"]["assets"] if a["format"] == "json")
+        assert registered["result"]["asset"]["source_asset"] == original["id"]
+        assert (store.root / original["file"]).read_bytes() == content
     inserted = interop.execute(store, store.load(), "insert_asset", {"asset_id": asset_id})
     apply_result(store, inserted)
     assert inserted["result"]["native"]["component"]
     assert measure(Store(store.root))["total"]["volume_mm3"] == pytest.approx(6000)
     # Persisted links use portable immutable asset paths, never host paths.
     assert all(link["path"].startswith("assets/") for link in store.load().native_document["links"].values())
-    assert interop._asset_path(store, interop._find_asset(store.load(), asset_id)).read_bytes() == content
+    if extension == "solidcraft":
+        assert interop._asset_path(store, interop._find_asset(store.load(), asset_id)).read_bytes() == content
+    # A second real source revision can relink the already inserted definition.
+    previous_occurrences = store.load().native_document["occurrences"]
+    with NativeSession() as session:
+        session.execute("solid.box", {"length": 20, "width": 20, "height": 30})
+        session.execute("file.save_as", {"path": str(path)})
+    revision = interop.execute(store, store.load(), "import", {
+        "name": f"revision.{extension}", "content_base64": base64.b64encode(path.read_bytes()).decode(),
+        "units": "file", "register_only": True})
+    apply_result(store, revision)
+    proposal, _ = interop._native(store.load(), store, "component.relink", {
+        "component": inserted["result"]["native"]["component"], "asset_id": revision["result"]["asset"]["id"]})
+    apply_result(store, {"changed": True, "project": proposal.model_dump(mode="json")})
+    assert measure(Store(store.root))["total"]["volume_mm3"] == pytest.approx(12000)
+    assert store.load().native_document["occurrences"] == previous_occurrences
 
 
 def test_native_upload_refuses_external_links_before_source_registration(store):
