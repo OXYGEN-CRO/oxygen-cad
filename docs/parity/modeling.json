@@ -25,14 +25,14 @@
     },
     {
       "command": "cd frontend && PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<native-engine> O3D_TEST_PORT=8964 npx playwright test --config tests/modeling/playwright.config.ts",
-      "result": "7 passed in 16.5 seconds against the integrated production API on disposable Store/Vite ports 8964/5194; includes migrated human lock/unlock, preservation of native document/context/checkpoint, synchronized legacy/native lock flags, agent refusal without revision change and cold reopen; no engine mocks"
+      "result": "8 passed in 22.0 seconds against the integrated production API on disposable Store/Vite ports 8964/5194; includes individual nested-profile reuse into two native features/bodies, twenty alternating GUI/agent edits, true dry-run trim preview, image/text cold reopen, measured plastic dialogs, migrated lock/unlock and native feature navigation/topology in both themes; no engine mocks"
     }
   ],
   "rows": [
     {
       "id": "MOD-001",
       "status": "partial",
-      "implemented": "SVG placement of points, lines, rectangles, rounded rectangles, circles, arcs and fit splines; native solved entities, stable profile selectors and sketch reuse for feature forms.",
+      "implemented": "SVG placement of points, lines, rectangles, rounded rectangles, circles, arcs and fit splines; native solved entities, stable profile selectors and sketch reuse for feature forms. Browser acceptance selects outer/inner nested regions independently, creates two features/bodies from the same sketch and verifies cold reopen; persisted selection initializes synchronously.",
       "remaining": "Spline canvas currently shows a labeled fit/control polygon, not an evaluated spline. Full region hit-testing and broad face-attached sketch cases need acceptance."
     },
     {
