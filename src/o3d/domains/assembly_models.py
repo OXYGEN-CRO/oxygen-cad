@@ -44,6 +44,13 @@ class Pose(DataModel):
     name: str = Field(min_length=1, max_length=120)
     values: dict[str, list[float]] = Field(default_factory=dict)
     native_key: str
+    joint_types: dict[str, str] = Field(default_factory=dict)
+
+
+class ConstraintSet(DataModel):
+    id: str
+    name: str = Field(min_length=1, max_length=120)
+    joints: list[int] = Field(min_length=1, max_length=100)
 
 
 class AssemblyData(DataModel):
@@ -59,8 +66,11 @@ class AssemblyData(DataModel):
     bom_levels: Literal["flat", "top"] = "flat"
     bom_group_by: Literal["definition", "part_number"] = "part_number"
     bom_group_children: bool = False
+    bom_exclusions: dict[str, list[int]] = Field(default_factory=dict)
     poses: list[Pose] = Field(default_factory=list, max_length=100)
+    constraint_sets: list[ConstraintSet] = Field(default_factory=list, max_length=100)
     locks: dict[str, list[list[float] | None]] = Field(default_factory=dict)
+    lock_kinds: dict[str, str] = Field(default_factory=dict)
     stacks: list[Stack] = Field(default_factory=list, max_length=100)
     reports: list[dict] = Field(default_factory=list, max_length=100)
 

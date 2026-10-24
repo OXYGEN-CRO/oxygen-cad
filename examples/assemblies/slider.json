@@ -1,0 +1,329 @@
+{
+  "schema_version": 1,
+  "geometry_engine": "solidcraft",
+  "revision": 1,
+  "name": "Slider mechanism",
+  "units": "mm",
+  "parameters": {},
+  "features": [],
+  "native_document": {
+    "assembly": {
+      "contact_enabled": true,
+      "contact_sets": [
+        {
+          "id": 8,
+          "name": "Mechanical stop",
+          "occurrences": [
+            2,
+            5
+          ]
+        }
+      ],
+      "exploded": [
+        {
+          "id": 10,
+          "moves": [
+            [
+              5,
+              [
+                0.0,
+                0.0,
+                25.0
+              ]
+            ]
+          ],
+          "name": "Service"
+        }
+      ],
+      "joints": [
+        {
+          "a": {
+            "occurrence": 2,
+            "snap": {
+              "face": "F3:+x",
+              "pick": [
+                10.0,
+                5.0,
+                5.0
+              ],
+              "type": "face_center",
+              "x": [
+                0.0,
+                0.0,
+                1.0
+              ]
+            }
+          },
+          "angle": 3.141592653589793,
+          "b": {
+            "occurrence": 5,
+            "snap": {
+              "face": "F6:-x",
+              "pick": [
+                20.0,
+                5.0,
+                5.0
+              ],
+              "type": "face_center",
+              "x": [
+                0.0,
+                0.0,
+                -1.0
+              ]
+            }
+          },
+          "id": 7,
+          "kind": "slider",
+          "limits": [
+            [
+              -30.0,
+              30.0
+            ]
+          ],
+          "name": "Rail",
+          "offset": 0.0,
+          "values": [
+            10.0
+          ]
+        }
+      ],
+      "studies": [
+        {
+          "id": 9,
+          "keys": [
+            {
+              "index": 0,
+              "joint": 7,
+              "points": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  100.0,
+                  20.0
+                ]
+              ]
+            }
+          ],
+          "name": "Travel",
+          "steps": 100
+        }
+      ]
+    },
+    "components": [
+      {
+        "id": 1,
+        "metadata": {
+          "description": "Grounded stop",
+          "part_number": "BASE-001",
+          "revision": "A"
+        },
+        "name": "Base",
+        "parent": 0
+      },
+      {
+        "id": 4,
+        "metadata": {
+          "description": "Sliding carriage",
+          "part_number": "CARRIAGE-001",
+          "revision": "A"
+        },
+        "name": "Carriage",
+        "parent": 0
+      }
+    ],
+    "features": [
+      {
+        "body_names": [
+          "Base"
+        ],
+        "component": 1,
+        "corner": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "height": "10",
+        "id": 3,
+        "length": "10",
+        "name": "BaseBox",
+        "operation": "new_body",
+        "param_names": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "suppressed": false,
+        "type": "box",
+        "width": "10"
+      },
+      {
+        "body_names": [
+          "Carriage"
+        ],
+        "component": 4,
+        "corner": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "height": "10",
+        "id": 6,
+        "length": "10",
+        "name": "CarriageBox",
+        "operation": "new_body",
+        "param_names": [
+          "d4",
+          "d5",
+          "d6"
+        ],
+        "suppressed": false,
+        "type": "box",
+        "width": "10"
+      }
+    ],
+    "format": "solidcraft/35",
+    "format_pending": [
+      "browser-view-state",
+      "frame-members",
+      "hole-reference-edges",
+      "inserted-file-features",
+      "linked-face-names",
+      "material-engineering-cards",
+      "render-certified-nested-media",
+      "render-cpu-budget",
+      "render-cpu-progressive",
+      "render-display-bloom",
+      "render-finishing-linear-master",
+      "render-hdr-resources",
+      "render-homogeneous-volume",
+      "render-independent-pilot-sampling",
+      "render-job-intent",
+      "render-layered-aging-photographic",
+      "render-passive-stage",
+      "render-portable-optical-bindings",
+      "render-stable-aging-targets",
+      "render-surface-bindings",
+      "tapped-parallel-pipe-threads",
+      "tapped-unified-threads"
+    ],
+    "name": "Untitled",
+    "next_id": 11,
+    "occurrences": [
+      {
+        "component": 1,
+        "grounded": true,
+        "id": 2,
+        "name": "Base:1",
+        "parent": 0,
+        "transform": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "component": 4,
+        "grounded": false,
+        "id": 5,
+        "name": "Carriage:1",
+        "parent": 0,
+        "transform": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            -1.2246467991473532e-16,
+            0.0
+          ],
+          [
+            0.0,
+            1.2246467991473532e-16,
+            1.0,
+            0.0
+          ],
+          [
+            -1.7763568394002505e-15,
+            -8.881784197001252e-16,
+            8.881784197001252e-16,
+            1.0
+          ]
+        ]
+      }
+    ],
+    "params": [],
+    "units": "mm"
+  },
+  "domains": {
+    "modeling": {
+      "schema_version": 1,
+      "native_context": {
+        "active_component": 4,
+        "active_occurrence_path": [
+          5
+        ],
+        "active_sketch": null,
+        "pending_moves": {},
+        "selection": []
+      }
+    },
+    "assemblies": {
+      "schema_version": 1,
+      "samples": 21,
+      "duration_s": 2,
+      "clearance_mm": 0.1
+    }
+  },
+  "references": [],
+  "placement": {
+    "translation": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rotation": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "material": null,
+  "requirements": [],
+  "study": {
+    "type": "linear_static",
+    "fixed_faces": [],
+    "forces": [],
+    "mesh_size_mm": 4.0,
+    "refinement_steps": 3,
+    "convergence_tolerance": 0.05,
+    "stress_probe_mm": null,
+    "assumptions_confirmed": false
+  }
+}
