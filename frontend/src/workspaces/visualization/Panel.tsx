@@ -82,10 +82,10 @@ export default function VisualizationPanel(props: DomainPanelProps) {
     await props.saveDomain("visualization", data as unknown as JsonObject);
     setStatus("Scene and storyboards saved");
   };
+  const persistedData=JSON.stringify(props.domainData);
   useEffect(() => {
-    if (Object.keys(props.domainData).length)
-      setData(props.domainData as unknown as Visualization);
-  }, [props.domainData]);
+    setData(persistedData!=="{}"?JSON.parse(persistedData):dataDefault());
+  }, [persistedData]);
   useEffect(() => {
     let alive = true;
     void act(async () => {
