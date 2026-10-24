@@ -8,6 +8,9 @@ test("graphite components stay neutral, dark and usable across studio views", as
   page.on("pageerror", (error) => errors.push(error.message));
   const before = await (await request.get("/api/project")).json();
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() =>
+    localStorage.setItem("oxygen-cad-theme", "dark"),
+  );
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
@@ -30,8 +33,8 @@ test("graphite components stay neutral, dark and usable across studio views", as
           .click();
       } else
         await page
-          .getByRole("group", { name: "Project tools menu" })
-          .getByRole("button", { name: view, exact: true })
+          .getByRole("menu", { name: "Project tools", exact: true })
+          .getByRole("menuitem", { name: view, exact: true })
           .click();
       await expect
         .poll(

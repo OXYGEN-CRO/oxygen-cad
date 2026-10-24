@@ -1,4 +1,4 @@
-/* Oxygen Graphite · v0.2 · Semantic dark theme. No dependencies. */
+/* Oxygen Studio · neutral materials, adapted from OXYGEN control patterns. */
 :root {
   color-scheme: dark;
   --viewport-bg: #101010;
@@ -37,12 +37,18 @@
   --success: #9eafa3;
   --warning: #b9aa90;
   --danger: #c19191;
-  --focus: #9a9a9a;
+  --focus: #737373;
+  --field-focus: #535353;
+  --hover-wash: rgba(255, 255, 255, 0.035);
+  --quiet-wash: rgba(255, 255, 255, 0.025);
+  --rim: rgba(255, 255, 255, 0.045);
+  --input-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  --warning-surface: #26231d;
   --font-sans:
     "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", monospace;
   --radius-sm: 4px;
-  --radius-control: 6px;
+  --radius-control: 8px;
   --radius-card: 10px;
   --radius-window: 12px;
   --radius-pill: 999px;
@@ -60,4 +66,48 @@
     0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
   --duration: 120ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f3f3f1;
+  --surface: #fafaf9;
+  --surface-glass: rgba(253, 253, 252, 0.9);
+  --surface-raised: #ffffff;
+  --surface-inset: #ffffff;
+  --text: #262626;
+  --text-secondary: #585858;
+  --text-muted: #707070;
+  --border: rgba(0, 0, 0, 0.085);
+  --border-bright: rgba(0, 0, 0, 0.16);
+  --control-primary: #e6e6e4;
+  --control-hover: #ddddda;
+  --control-border: rgba(0, 0, 0, 0.12);
+  --accent: #727272;
+  --accent-text: #343434;
+  --accent-wash: rgba(0, 0, 0, 0.045);
+  --hover-wash: rgba(0, 0, 0, 0.035);
+  --quiet-wash: rgba(0, 0, 0, 0.025);
+  --rim: rgba(255, 255, 255, 0.85);
+  --input-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.025);
+  --focus: #737373;
+  --field-focus: #a3a3a0;
+  --success: #4c6957;
+  --warning: #85652d;
+  --danger: #a94c4c;
+  --success-wash: rgba(76, 105, 87, 0.07);
+  --warning-wash: rgba(133, 101, 45, 0.07);
+  --danger-wash: rgba(169, 76, 76, 0.07);
+  --warning-surface: #f1ece1;
+  --viewport-bg: #eaeae7;
+  --viewport-part: #9a9a98;
+  --viewport-edge: #464646;
+  --viewport-reference: #a0a09d;
+  --viewport-reference-edge: #747471;
+  --viewport-grid: #ddddd9;
+  --viewport-grid-major: #c9c9c4;
+  --viewport-selection: #b8b8b4;
+  --viewport-selection-edge: #525250;
+  --glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.035);
+  --raised-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), inset 0 1px 0 var(--rim);
 }

@@ -43,3 +43,9 @@ Mesh convergence is reported for displacement and, when supplied, the named stre
 - All six browser flows pass against a fresh fixture, including editing a Rust-native shell through the same UI and measuring the rebuilt volume. The real static study and field visualization continue to pass.
 - OCCT remains an independent STEP/volume validator and an explicit compatibility backend; Netgen/CalculiX remain separate processes. Broader upstream functionality and universal kernel robustness are not inferred.
 - The desktop launcher preserves the current React studio and packages a local Docker runtime. Apple Silicon artifacts are built on macOS CI; Linux native-window smoke verification and macOS build results are recorded separately from physical Mac testing.
+
+## OXYGEN component patterns and dual themes (2026-10-24)
+
+The existing studio now has complete neutral dark/light themes, a persistent sun/moon switch, quiet field focus and a Radix project-tools menu. The OXYGEN reference was inspected read-only; the CAD styling is an original neutral adaptation using open-source primitives.
+
+All nine browser flows passed on the final production assets against a disposable fixture at port 19516 (49.6 seconds). They cover both themes across four views and 320/390/768/1024/1512px, actual WebGL clear-color changes, renderer identity, preference persistence, unsaved input preservation, pointer/keyboard focus without an outer halo, menu arrow keys/Escape/focus return, sidebar navigation, native editing/export, revision conflicts and a real Netgen/CalculiX study. All 29 backend tests passed (38.85 seconds); production build, formatting and whitespace checks passed. Final live read-only screenshots show dark/light property panels and the light mobile menu, with zero runtime errors or page overflow. No acceptance test edited the live working design. Physical macOS/Safari, human visual acceptance and extended-session usability remain unclaimed.

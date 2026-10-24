@@ -6,8 +6,8 @@ async function openTool(page: Page, name: string) {
     .getByRole("button", { name: "Project tools", exact: true })
     .click();
   await page
-    .getByRole("group", { name: "Project tools menu" })
-    .getByRole("button", { name, exact: true })
+    .getByRole("menu", { name: "Project tools", exact: true })
+    .getByRole("menuitem", { name, exact: true })
     .click();
 }
 

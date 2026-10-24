@@ -9,7 +9,7 @@
   background: var(--control-primary);
   border: 1px solid var(--control-border);
   color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 var(--rim);
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 500;
@@ -37,4 +37,43 @@
 }
 .ui-button:disabled {
   box-shadow: none;
+}
+
+.ui-button[data-size="md"] {
+  min-height: 36px;
+  padding-inline: 14px;
+}
+.ui-button[data-size="icon"] {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.ui-button[data-variant="glass"] {
+  background: var(--surface-glass);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--rim);
+}
+.ui-button[data-variant="glass"]:hover {
+  background: var(--surface);
+}
+.ui-input:hover:not(:focus):not(:disabled),
+.ui-select:hover:not(:focus):not(:disabled) {
+  border-color: var(--border-bright);
+}
+.ui-select {
+  background-color: var(--surface-glass);
+  box-shadow: inset 0 1px 0 var(--rim);
+}
+.ui-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+.ui-input:disabled,
+.ui-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ui-input[aria-invalid="true"],
+.ui-select[aria-invalid="true"] {
+  border-color: var(--danger);
 }

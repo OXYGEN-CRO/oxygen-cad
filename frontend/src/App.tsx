@@ -18,6 +18,8 @@ import {
   Loader2,
   Lock,
   MoreHorizontal,
+  Sun,
+  Moon,
   PanelLeft,
   PanelRight,
   Play,
@@ -46,7 +48,17 @@ import {
 } from "./api";
 import { Viewport } from "./Viewport";
 import { Breadcrumbs } from "./components/Breadcrumbs";
-import { Button, Input, SelectControl } from "./components/ui";
+import {
+  Button,
+  Input,
+  SelectControl,
+  Menu,
+  MenuTrigger,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+} from "./components/ui";
+import { useTheme } from "./theme";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 const number = (value: unknown) =>
@@ -138,6 +150,7 @@ function Select({ label, value, options, onChange }: any) {
 }
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
   const [state, setState] = useState<State | null>(null),
     [draft, setDraft] = useState<Project | null>(null),
     [dirty, setDirty] = useState(false),
@@ -158,30 +171,17 @@ export default function App() {
     [source, setSource] = useState(""),
     [showAgent, setShowAgent] = useState(false),
     [showBottom, setShowBottom] = useState(false),
-    [toolsOpen, setToolsOpen] = useState(false),
     [leftOpen, setLeftOpen] = useState(true),
     [rightOpen, setRightOpen] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const upload = useRef<HTMLInputElement>(null);
-  const toolsMenu = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!toolsMenu.current?.contains(event.target as Node))
-        setToolsOpen(false);
-    };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setToolsOpen(false);
-        setAddOpen(false);
-      }
+      if (event.key === "Escape") setAddOpen(false);
     };
-    document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
-    };
+    return () => document.removeEventListener("keydown", escape);
   }, []);
   const refresh = useCallback(async () => {
     try {
@@ -398,7 +398,6 @@ export default function App() {
   function openPanel(panel: string) {
     setTab(panel);
     setRightOpen(true);
-    setToolsOpen(false);
   }
   function toggleInspector() {
     if (inspectorVisible) setRightOpen(false);
@@ -483,6 +482,15 @@ export default function App() {
           </span>
         )}
         <div className="top-actions">
+          <Button
+            className="theme-toggle"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </Button>
           {dirty && (
             <Button
               variant="primary"
@@ -524,80 +532,72 @@ export default function App() {
               </span>
             </a>
           )}
-          <div className="tools-menu" ref={toolsMenu}>
-            <Button
-              title="Project tools"
-              aria-label="Project tools"
-              aria-expanded={toolsOpen}
-              onClick={() => setToolsOpen(!toolsOpen)}
-            >
-              <MoreHorizontal size={19} />
-            </Button>
-            {toolsOpen && (
-              <div
-                className="tools-popover"
-                role="group"
-                aria-label="Project tools menu"
+          <Menu>
+            <MenuTrigger asChild>
+              <Button title="Project tools" aria-label="Project tools">
+                <MoreHorizontal size={19} />
+              </Button>
+            </MenuTrigger>
+            <MenuContent className="tools-popover">
+              {[
+                ["project", Settings2, "Project settings"],
+                ["verify", ShieldCheck, "Study setup"],
+                ["source", Code2, "Source"],
+                ["history", History, "History"],
+              ].map(([id, Icon, label]: any) => (
+                <MenuItem
+                  className="ui-menu-item"
+                  key={id}
+                  onSelect={() => {
+                    openPanel(id);
+                  }}
+                >
+                  <Icon size={15} />
+                  {label}
+                </MenuItem>
+              ))}
+              <MenuItem
+                className="ui-menu-item"
+                disabled={dirty}
+                onSelect={() => {
+                  upload.current?.click();
+                }}
               >
-                {[
-                  ["project", Settings2, "Project settings"],
-                  ["verify", ShieldCheck, "Study setup"],
-                  ["source", Code2, "Source"],
-                  ["history", History, "History"],
-                ].map(([id, Icon, label]: any) => (
-                  <Button
-                    key={id}
-                    onClick={() => {
-                      openPanel(id);
-                    }}
-                  >
-                    <Icon size={15} />
-                    {label}
-                  </Button>
-                ))}
-                <Button
-                  disabled={dirty}
-                  onClick={() => {
-                    upload.current?.click();
-                    setToolsOpen(false);
-                  }}
-                >
-                  <Upload size={15} />
-                  Import STEP
-                </Button>
-                <Button
-                  onClick={() => {
-                    setShowAgent(!showAgent);
-                    setToolsOpen(false);
-                  }}
-                >
-                  <Terminal size={15} />
-                  Agent tools
-                </Button>
-                <div className="menu-divider" />
-                <Button
-                  disabled={dirty || state.project.revision === 0}
-                  onClick={() => {
-                    history("undo");
-                    setToolsOpen(false);
-                  }}
-                >
-                  <ArrowLeft size={15} />
-                  Undo
-                </Button>
-                <Button
-                  disabled={dirty}
-                  onClick={() => {
-                    history("redo");
-                    setToolsOpen(false);
-                  }}
-                >
-                  <ArrowRight size={15} />
-                  Redo
-                </Button>
-              </div>
-            )}
-          </div>
+                <Upload size={15} />
+                Import STEP
+              </MenuItem>
+              <MenuItem
+                className="ui-menu-item"
+                onSelect={() => {
+                  setShowAgent(!showAgent);
+                }}
+              >
+                <Terminal size={15} />
+                Agent tools
+              </MenuItem>
+              <MenuSeparator className="menu-divider" />
+              <MenuItem
+                className="ui-menu-item"
+                disabled={dirty || state.project.revision === 0}
+                onSelect={() => {
+                  history("undo");
+                }}
+              >
+                <ArrowLeft size={15} />
+                Undo
+              </MenuItem>
+              <MenuItem
+                className="ui-menu-item"
+                disabled={dirty}
+                onSelect={() => {
+                  history("redo");
+                }}
+              >
+                <ArrowRight size={15} />
+                Redo
+              </MenuItem>
+            </MenuContent>
+          </Menu>
           <Button
             className="sidebar-toggle"
             aria-label={
@@ -803,6 +803,7 @@ export default function App() {
             </div>
           </div>
           <Viewport
+            theme={theme}
             geometry={geometry ?? null}
             project={current}
             selected={selection}

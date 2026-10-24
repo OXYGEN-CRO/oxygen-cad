@@ -61,7 +61,9 @@ test("breadcrumbs and panel toggles resize the workspace without losing edits", 
   await page
     .getByRole("button", { name: "Project tools", exact: true })
     .click();
-  await page.getByRole("button", { name: "Study setup", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Study setup", exact: true })
+    .click();
   await expect(
     page.getByText("Select planar faces in the viewport", { exact: false }),
   ).toHaveCount(0);

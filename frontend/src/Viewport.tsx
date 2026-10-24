@@ -10,6 +10,7 @@ import {
 } from "./api";
 
 type Props = {
+  theme: "dark" | "light";
   geometry: Geometry | null;
   project: Project;
   selected: Selection | null;
@@ -24,6 +25,20 @@ type Props = {
   isolate: boolean;
 };
 
+function readPalette() {
+  const computed = getComputedStyle(document.documentElement);
+  const color = (token: string) => computed.getPropertyValue(token).trim();
+  return {
+    background: color("--viewport-bg"),
+    part: color("--viewport-part"),
+    edge: color("--viewport-edge"),
+    reference: color("--viewport-reference"),
+    referenceEdge: color("--viewport-reference-edge"),
+    selection: color("--viewport-selection"),
+    selectionEdge: color("--viewport-selection-edge"),
+  };
+}
+
 export function Viewport(props: Props) {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
@@ -31,17 +46,7 @@ export function Viewport(props: Props) {
   const runtime = useRef<any>(null);
   useEffect(() => {
     const element = host.current!;
-    const theme = getComputedStyle(document.documentElement);
-    const color = (token: string) => theme.getPropertyValue(token).trim();
-    const palette = {
-      background: color("--viewport-bg"),
-      part: color("--viewport-part"),
-      edge: color("--viewport-edge"),
-      reference: color("--viewport-reference"),
-      referenceEdge: color("--viewport-reference-edge"),
-      selection: color("--viewport-selection"),
-      selectionEdge: color("--viewport-selection-edge"),
-    };
+    const palette = readPalette();
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(palette.background);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -65,8 +70,12 @@ export function Viewport(props: Props) {
     const grid = new THREE.GridHelper(
       500,
       50,
-      color("--viewport-grid-major"),
-      color("--viewport-grid"),
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--viewport-grid-major")
+        .trim(),
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--viewport-grid")
+        .trim(),
     );
     grid.material.transparent = true;
     grid.material.opacity = 0.4;
@@ -166,6 +175,25 @@ export function Viewport(props: Props) {
       runtime.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const r = runtime.current;
+    if (!r) return;
+    r.palette = readPalette();
+    r.scene.background.set(r.palette.background);
+    r.renderer.setClearColor(r.palette.background);
+    const computed = getComputedStyle(document.documentElement);
+    const nextGrid = new THREE.GridHelper(
+      500,
+      50,
+      computed.getPropertyValue("--viewport-grid-major").trim(),
+      computed.getPropertyValue("--viewport-grid").trim(),
+    );
+    r.grid.geometry.dispose();
+    r.grid.geometry = nextGrid.geometry;
+    nextGrid.material.dispose();
+    r.renderer.render(r.scene, r.camera);
+  }, [props.theme]);
 
   useEffect(() => {
     const r = runtime.current;
@@ -381,7 +409,10 @@ export function Viewport(props: Props) {
       r.model.add(
         new THREE.Line(
           bg,
-          new THREE.LineBasicMaterial({ color: "#cccccc", depthTest: false }),
+          new THREE.LineBasicMaterial({
+            color: r.palette.selectionEdge,
+            depthTest: false,
+          }),
         ),
       );
     }
@@ -389,6 +420,7 @@ export function Viewport(props: Props) {
       disposed = true;
     };
   }, [
+    props.theme,
     props.geometry,
     props.selected,
     props.section,

@@ -8,7 +8,7 @@ The workflow is familiar from code-driven creative tools such as Hyperframes and
 
 ![Oxygen CAD studio](docs/studio.png)
 
-The studio uses [Oxygen Graphite](docs/UI.md): a black-and-grey interface with compact graphite controls, subtle highlights, Geist typography and floating tools around the real CAD viewport. The same design extends to engineering studies, history and source editing, with an adaptive layout on smaller screens.
+The studio uses [Oxygen Studio components](docs/UI.md): neutral dark and light themes, compact glass controls, quiet field focus, Geist typography and floating tools around the real CAD viewport. The sun/moon control switches themes and remembers your choice. The same components extend to engineering studies, history and source editing, with an adaptive layout on smaller screens. [Preview light mode](docs/studio-light.png).
 
 ## Apple Silicon desktop preview
 

@@ -49,7 +49,7 @@ button {
     box-shadow var(--duration) var(--ease);
 }
 button:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--hover-wash);
 }
 button:disabled {
   opacity: 0.4;
@@ -57,8 +57,8 @@ button:disabled {
 }
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
 }
 input,
 select,
@@ -68,14 +68,14 @@ textarea {
   border-radius: var(--radius-control);
   background: var(--surface-inset);
   color: var(--text);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--input-shadow);
   outline: none;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.025);
+  border-color: var(--field-focus);
+  box-shadow: var(--input-shadow);
 }
 input[type="checkbox"] {
   accent-color: var(--accent);
@@ -136,13 +136,13 @@ small {
   font-size: 11px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  background: #191919;
+  background: var(--surface);
   box-shadow: none;
   color: var(--text-secondary);
   border-radius: 6px;
 }
 .top-actions > button:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--accent-wash);
 }
 .local-status i,
 .statusbar i {
@@ -167,11 +167,11 @@ small {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: transparent;
+  background: var(--surface-glass);
   overflow-y: auto;
-  border: 0;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 var(--rim);
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
 }
@@ -184,7 +184,7 @@ small {
   font-size: 10px;
   letter-spacing: 0.015em;
   font-weight: 500;
-  color: #898989;
+  color: var(--text-muted);
   border-bottom: 0;
   text-transform: none;
 }
@@ -246,9 +246,9 @@ small {
   flex-shrink: 0;
 }
 .tree-item.selected {
-  background: rgba(255, 255, 255, 0.04);
-  color: #d6d6d6;
-  border-color: rgba(255, 255, 255, 0.04);
+  background: var(--accent-wash);
+  color: var(--text);
+  border-color: var(--accent-wash);
   box-shadow: none;
 }
 .tree-item.selected:before {
@@ -285,7 +285,7 @@ small {
 .add-menu {
   margin: 3px 16px;
   padding: 6px;
-  background: #191919;
+  background: var(--surface);
   border: 1px solid var(--border);
   box-shadow:
     0 12px 28px rgba(0, 0, 0, 0.3),
@@ -308,7 +308,7 @@ small {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: none;
-  border-color: rgba(255, 255, 255, 0.055);
+  border-color: var(--border);
 }
 .webgl {
   position: absolute;
@@ -330,7 +330,7 @@ small {
 }
 .canvas-toolbar > div {
   pointer-events: auto;
-  background: rgba(25, 25, 25, 0.92);
+  background: var(--surface-glass);
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 3px;
@@ -375,7 +375,7 @@ small {
   pointer-events: none;
   font-size: 9px;
   color: var(--text-secondary);
-  background: rgba(17, 17, 17, 0.75);
+  background: var(--surface-glass);
   border: 0;
   padding: 7px 9px;
   border-radius: 8px;
@@ -408,7 +408,7 @@ small {
   display: flex;
   align-items: center;
   gap: 3px;
-  background: rgba(25, 25, 25, 0.95);
+  background: var(--surface-glass);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px;
@@ -461,7 +461,7 @@ small {
   margin-bottom: 20px;
 }
 .feature-glyph {
-  background: #1c1c1c;
+  background: var(--surface-raised);
   color: var(--accent-text);
   padding: 7px;
   border: 1px solid var(--border);
@@ -671,12 +671,12 @@ small {
   padding: 8px;
   width: 100%;
   color: var(--text-secondary);
-  background: #202020;
+  background: var(--control-primary);
   box-shadow: none;
   border-radius: 6px;
 }
 .wide-button:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--accent-wash);
 }
 .selection-card {
   background: var(--accent-wash);
@@ -705,7 +705,7 @@ small {
 }
 .selection-card button {
   font-size: 9px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--quiet-wash);
   border: 1px solid var(--border);
   padding: 7px;
   flex: 1;
@@ -849,8 +849,8 @@ small {
   font: 9px/1.6 var(--font-mono);
   margin-bottom: 12px;
   tab-size: 2;
-  background: #101010;
-  color: #c3c3c3;
+  background: var(--surface-inset);
+  color: var(--text-secondary);
   border-radius: 12px;
   font-size: 10px;
 }
@@ -875,8 +875,7 @@ small {
   height: 155px;
   flex-shrink: 0;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 45%),
-    var(--surface-glass);
+    linear-gradient(135deg, var(--rim), transparent 45%), var(--surface-glass);
   border-top: 1px solid var(--border);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1017,7 +1016,7 @@ small {
   left: 23px;
   padding: 7px 10px;
   border: 1px solid rgba(229, 195, 143, 0.2);
-  background: rgba(46, 39, 31, 0.9);
+  background: var(--warning-surface);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1109,7 +1108,7 @@ small {
   font: 11px var(--font-mono);
   padding: 11px;
   border: 1px solid rgba(229, 195, 143, 0.2);
-  background: rgba(46, 39, 31, 0.9);
+  background: var(--warning-surface);
   border-radius: 12px;
   color: var(--warning);
   backdrop-filter: blur(16px);
@@ -1118,7 +1117,7 @@ small {
   position: absolute;
   right: 22px;
   bottom: 86px;
-  background: rgba(23, 23, 23, 0.95);
+  background: var(--surface-glass);
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1219,20 +1218,12 @@ summary {
   }
   .canvas-toolbar > div,
   .canvas-actions {
-    background: #202020;
+    background: var(--control-primary);
   }
 }
 option {
   background: var(--surface);
   color: var(--text);
-}
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
 }
 .schema-link {
   color: var(--accent-text);
@@ -1241,40 +1232,6 @@ textarea:focus-visible {
   box-shadow: 0 0 9px rgba(162, 217, 189, 0.12);
 }
 
-.tools-menu {
-  position: relative;
-}
-.tools-menu > button {
-  width: 34px;
-  height: 34px;
-  color: var(--text-secondary);
-}
-.tools-popover {
-  position: absolute;
-  right: 0;
-  top: 42px;
-  width: 232px;
-  z-index: 20;
-  padding: 4px;
-  background: #181818;
-  border: 1px solid var(--border-bright);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  border-color: var(--border);
-}
-.tools-popover button {
-  width: 100%;
-  justify-content: flex-start;
-  padding: 8px 9px;
-  font-size: 12px;
-  border-radius: 5px;
-  min-height: 32px;
-}
-.menu-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 5px;
-}
 .source-panel {
   width: min(540px, 45vw);
 }
@@ -1381,7 +1338,7 @@ textarea:focus-visible {
     bottom: 8px;
     width: min(320px, calc(100vw - 24px));
     z-index: 5;
-    background: #161616;
+    background: var(--surface);
   }
   .source-panel {
     width: calc(100vw - 24px);
@@ -1408,7 +1365,7 @@ textarea:focus-visible {
   height: 48px;
   padding: 0 12px;
   gap: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--accent-wash);
   margin-bottom: 8px;
 }
 .breadcrumbs {
@@ -1432,7 +1389,7 @@ textarea:focus-visible {
 }
 .breadcrumbs li > svg {
   flex-shrink: 0;
-  color: #505050;
+  color: var(--text-muted);
 }
 .breadcrumbs button {
   min-height: 30px;
@@ -1449,7 +1406,7 @@ textarea:focus-visible {
   color: var(--text);
 }
 .breadcrumbs button[aria-expanded="true"] {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--quiet-wash);
 }
 .top-actions {
   margin-left: auto;
@@ -1470,7 +1427,7 @@ textarea:focus-visible {
   color: var(--text-secondary);
 }
 .topbar .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--hover-wash);
   color: var(--text);
 }
 .left-panel[hidden] {
@@ -1525,4 +1482,63 @@ textarea:focus-visible {
   .breadcrumbs button {
     max-width: 120px;
   }
+}
+
+.tools-popover {
+  position: relative;
+  z-index: 20;
+  width: 232px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  top: auto;
+  right: auto;
+  max-width: calc(100vw - 24px);
+  background: var(--surface-glass);
+  box-shadow: var(--raised-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+}
+.tools-popover .ui-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  min-height: 32px;
+  font-size: 12px;
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+}
+.ui-menu-item[data-highlighted] {
+  background: var(--accent-wash);
+}
+.ui-menu-item[data-disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.topbar .theme-toggle {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+.topbar .theme-toggle:hover {
+  background: var(--hover-wash);
+}
+@media (forced-colors: active) {
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 1px solid Highlight;
+  }
+}
+
+::selection {
+  background: rgba(128, 128, 128, 0.2);
+  color: var(--text);
 }
