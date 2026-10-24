@@ -10,8 +10,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Set up cached runtime builder
+        uses: docker/setup-buildx-action@v4
       - name: Build pinned local runtime
-        run: docker build -t oxygen-cad .
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: oxygen-cad:latest
+          cache-from: type=gha,scope=oxygen-cad-runtime
+          cache-to: type=gha,scope=oxygen-cad-runtime,mode=max
       - name: Geometry, editing and numerical tests
         run: |
           docker run --rm oxygen-cad sh -eu -c '
