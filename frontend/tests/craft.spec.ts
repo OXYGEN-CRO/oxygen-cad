@@ -1,5 +1,21 @@
 import { test, expect } from "@playwright/test";
 
+let originalProject: any;
+test.beforeEach(async ({ request }) => {
+  originalProject = await (await request.get("/api/project")).json();
+});
+test.afterEach(async ({ request }) => {
+  const current = await (await request.get("/api/project")).json();
+  const response = await request.post("/api/commands", {
+    data: {
+      expected_revision: current.revision,
+      actor: "human",
+      project: originalProject,
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+});
+
 test("precision workspace keeps filtering, disclosures, tool hints and standard views read-only", async ({
   page,
   request,
@@ -139,4 +155,49 @@ test("save shortcut uses the same revision-protected command as the save action"
   expect((await (await request.get("/api/project")).json()).features).toEqual(
     before.features,
   );
+});
+
+test("edits and a save shortcut during acknowledgement preserve both revisions", async ({
+  page,
+  request,
+}) => {
+  const before = await (await request.get("/api/project")).json();
+  await page.goto("/");
+  await page.locator(".feature-list .tree-item").first().click();
+  await page.getByText("Feature details", { exact: true }).click();
+  const name = page.getByLabel("Feature name", { exact: true });
+  let acknowledge: () => void = () => {};
+  const held = new Promise<void>((resolve) => (acknowledge = resolve));
+  let arrived: () => void = () => {};
+  const firstSave = new Promise<void>((resolve) => (arrived = resolve));
+  let count = 0;
+  await page.route("**/api/commands", async (route) => {
+    const response = await route.fetch();
+    if (++count === 1) {
+      arrived();
+      await held;
+    }
+    await route.fulfill({ response });
+  });
+  try {
+    await name.fill("First accepted edit");
+    await page.keyboard.press("ControlOrMeta+s");
+    await firstSave;
+    await name.fill("Second edit while saving");
+    await page.keyboard.press("ControlOrMeta+s");
+    acknowledge();
+    await expect(
+      page.getByRole("button", { name: "Save changes", exact: true }),
+    ).toHaveCount(0);
+    await expect
+      .poll(
+        async () => (await (await request.get("/api/project")).json()).revision,
+      )
+      .toBe(before.revision + 2);
+    const saved = await (await request.get("/api/project")).json();
+    expect(saved.features[0].name).toBe("Second edit while saving");
+    await expect(name).toHaveValue("Second edit while saving");
+  } finally {
+    acknowledge();
+  }
 });

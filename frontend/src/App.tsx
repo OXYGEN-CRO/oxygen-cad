@@ -191,6 +191,11 @@ export default function App() {
   });
   const featureSearch = useRef<HTMLInputElement>(null);
   const saveCurrent = useRef(() => {});
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const editSerial = useRef(0);
+  const savingRef = useRef(false);
+  const pendingSave = useRef(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const upload = useRef<HTMLInputElement>(null);
@@ -268,6 +273,7 @@ export default function App() {
     if (state) setChecks(state.checks);
   }, [state]);
   function edit(fn: (p: Project) => void) {
+    editSerial.current += 1;
     dirtyRef.current = true;
     setDraft((p) => {
       if (!p) return p;
@@ -285,23 +291,56 @@ export default function App() {
   }
   async function save(project = draft) {
     if (!project || !state) return;
+    if (savingRef.current) {
+      pendingSave.current = true;
+      return;
+    }
+    savingRef.current = true;
+    const submittedSerial = editSerial.current;
+    const baseRevision = draftRef.current?.revision ?? project.revision;
+    let succeeded = false;
     setBusy(true);
     setError("");
     try {
-      await post("commands", {
-        expected_revision: project.revision,
+      const saved = await post("commands", {
+        expected_revision: baseRevision,
         actor: "human",
         action: "replace",
         project,
         summary: "Manual studio edit",
       });
-      dirtyRef.current = false;
-      setDirty(false);
-      await refresh();
+      const refreshed = await refresh();
+      if (editSerial.current === submittedSerial) {
+        const confirmed = refreshed?.project ?? saved.project;
+        draftRef.current = confirmed;
+        setDraft(confirmed);
+        setSource(pretty(confirmed));
+        dirtyRef.current = false;
+        setDirty(false);
+      } else {
+        // Preserve edits made while the server acknowledged this save. They
+        // start from our accepted revision, never a newer agent revision.
+        setDraft((latest) => {
+          const next = {
+            ...(latest ?? project),
+            revision: saved.project.revision,
+          };
+          draftRef.current = next;
+          return next;
+        });
+        dirtyRef.current = true;
+        setDirty(true);
+      }
+      succeeded = true;
     } catch (e) {
       setError(String(e));
     } finally {
+      savingRef.current = false;
       setBusy(false);
+      const queued = pendingSave.current;
+      pendingSave.current = false;
+      if (queued && succeeded)
+        requestAnimationFrame(() => saveCurrent.current());
     }
   }
   async function run(kind: string) {
@@ -506,7 +545,12 @@ export default function App() {
     (j) => j.kind === "export" && j.state === "succeeded",
   );
   saveCurrent.current = () => {
-    if (!dirty || busy) return;
+    if (!dirty) return;
+    if (savingRef.current) {
+      pendingSave.current = true;
+      return;
+    }
+    if (busy) return;
     try {
       void save(tab === "source" ? JSON.parse(source) : draft);
     } catch (error) {
@@ -1860,6 +1904,7 @@ export default function App() {
                     value={source}
                     onChange={(e) => {
                       setSource(e.target.value);
+                      editSerial.current += 1;
                       dirtyRef.current = true;
                       setDirty(true);
                     }}
