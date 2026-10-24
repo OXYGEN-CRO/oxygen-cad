@@ -84,6 +84,18 @@ test("real native geometry responds to scene camera, material, section and explo
   await preview();
   const painted = await pixels(page);
   expect(painted.colored).toBeGreaterThan(1000);
+  const clearColor = () =>
+    page.locator(".webgl canvas").evaluate((canvas) => {
+      const gl = (canvas as HTMLCanvasElement).getContext("webgl2")!;
+      return Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array);
+    });
+  const savedBackground = await clearColor();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.waitForTimeout(100);
+  expect(await clearColor()).toEqual(savedBackground);
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.waitForTimeout(100);
+  expect(await clearColor()).toEqual(savedBackground);
   scene.camera.fov = Math.PI / 4;
   await preview();
   await expect(page.locator(".webgl")).toHaveAttribute(

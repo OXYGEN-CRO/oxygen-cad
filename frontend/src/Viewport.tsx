@@ -314,8 +314,12 @@ export function Viewport(props: Props) {
     const r = runtime.current;
     if (!r) return;
     r.palette = readPalette();
-    r.scene.background.set(r.palette.background);
-    r.renderer.setClearColor(r.palette.background);
+    r.scene.background.set(
+      visualization?.scene.background ?? r.palette.background,
+    );
+    r.renderer.setClearColor(
+      visualization?.scene.background ?? r.palette.background,
+    );
     const computed = getComputedStyle(document.documentElement);
     const nextGrid = new THREE.GridHelper(
       500,
@@ -327,7 +331,7 @@ export function Viewport(props: Props) {
     r.grid.geometry = nextGrid.geometry;
     nextGrid.material.dispose();
     r.renderer.render(r.scene, r.camera);
-  }, [props.theme]);
+  }, [props.theme, visualization?.scene.background]);
 
   useEffect(() => {
     const r = runtime.current;

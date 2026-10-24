@@ -8,6 +8,7 @@ import {
   dataDefault,
   previewEvent,
   sampleScene,
+  stableJson,
   type CameraState,
   type NativeScene,
   type Scene,
@@ -24,6 +25,26 @@ export default function VisualizationPanel(props: DomainPanelProps) {
   );
   const [geometry, setGeometry] = useState<NativeScene | null>(null);
   const [caps, setCaps] = useState<JsonObject>({});
+  const nativeCpuAvailable = (
+    (
+      caps.native as
+        | {
+            backends?: {
+              availability: { status: string };
+              executors: { id: string; availability: { status: string } }[];
+            }[];
+          }
+        | undefined
+    )?.backends ?? []
+  ).some(
+    (backend) =>
+      backend.availability.status === "available" &&
+      backend.executors.some(
+        (executor) =>
+          executor.id === "cpu-raytrace" &&
+          executor.availability.status === "available",
+      ),
+  );
   const [gallery, setGallery] = useState<any[]>([]);
   const [target, setTarget] = useState("*");
   const [busy, setBusy] = useState(false);
@@ -85,7 +106,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
     await props.saveDomain("visualization", data as unknown as JsonObject);
     setStatus("Scene and storyboards saved");
   };
-  const persistedData = JSON.stringify(props.domainData);
+  const persistedData = stableJson(props.domainData);
   useEffect(() => {
     setData(persistedData !== "{}" ? JSON.parse(persistedData) : dataDefault());
   }, [persistedData]);
@@ -734,7 +755,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
               <label>
                 Light type
                 <SelectControl
-                  aria-label={`Light ${i+1} type`}
+                  aria-label={`Light ${i + 1} type`}
                   value={light.kind}
                   onChange={(e) => patch({ kind: e.target.value as any })}
                 >
@@ -856,7 +877,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
             }
           >
             <option value="cpu-raster">CPU raster · direct lighting</option>
-            {JSON.stringify(caps.native ?? {}).includes("cpu-raytrace") && (
+            {nativeCpuAvailable && (
               <option value="native-cpu-raytrace">
                 Native CPU raytrace · preview
               </option>

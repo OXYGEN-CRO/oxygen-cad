@@ -163,6 +163,14 @@ export const dataDefault = (): Visualization => ({
 });
 export const previewEvent = "o3d:visualization";
 export const cameraEvent = "o3d:visualization-camera";
+export const stableJson = (value: unknown) =>
+  JSON.stringify(value, (_key, item) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : item,
+  );
 
 export function sampleScene(
   scene: Scene,

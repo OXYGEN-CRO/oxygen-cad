@@ -58,6 +58,16 @@
       "command": "PYTHONPATH=$PWD/src O3D_ENGINE_BINARY=<CPU-host-enabled canonical core> .venv/bin/python -m pytest -q tests/test_visualization.py tests/test_native_document.py",
       "result": "14 passed",
       "evidence": "Installed cpu-raytrace executor resolves after document reopen, real progressive 4-sample seeded PNG renders and byte-identical repeat. Native finite ground stage plus shadow enable/disable produces measured image pixel differences; exact product document remains unchanged."
+    },
+    {
+      "command": "O3D_BROWSER_URL=http://127.0.0.1:5195 O3D_VISUALIZATION_INTEGRATION=1 npx playwright test tests/visualization-integration.spec.ts",
+      "result": "2 passed (26.0 seconds), including the geometry-edit snapshot comparison",
+      "evidence": "Disposable API8954 plus isolated Vite5195 (HMR disabled). Scene draft survives polling before/after save; actual native progressive ground render through Jobs produces128x96PNG; reload/gallery; UI undo/redo; storyboard image-sequence download; no browser errors. A running publication job cancels without project edits. A native render captured before a concurrent extrusion edit retains its old revision, is marked stale, and its PNG is byte-identical to the original snapshot reference. The current project retains the intended geometry edit."
+    },
+    {
+      "command": "cd frontend && O3D_TEST_PORT=8961 PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<canonical core> npx playwright test tests/visualization.spec.ts --grep 'real native geometry'",
+      "result": "1 passed",
+      "evidence": "Saved scene background remains exactly unchanged through dark/light theme toggles, in addition to geometry/material/camera/clipping/visibility/explosion pixel checks."
     }
   ],
   "rows": [
@@ -86,7 +96,8 @@
       "implemented": "Independent scoped face/body/default visual appearances, metallic/roughness/opacity controls; physical materials and study key preserved",
       "remaining": [
         "Definition-to-occurrence inheritance editor",
-        "Native per-face optical lowering"
+        "Native per-face optical lowering",
+        "Face topology repair across feature changes"
       ]
     },
     {
@@ -104,8 +115,7 @@
       "status": "partial",
       "implemented": "Named reusable scenes with camera target/yaw/pitch/roll/distance/projection/FOV, exposure, background and explicit output dimensions",
       "remaining": [
-        "Depth of field and focus distance",
-        "Integrated browser scene save/reopen after shell integration"
+        "Depth of field and focus distance"
       ]
     },
     {
@@ -131,10 +141,9 @@
     {
       "id": "R08",
       "status": "partial",
-      "implemented": "Snapshot revision/document/scene digests, retained gallery with stale labels, cancellation hooks, bounded PNG output including straight alpha and downloadable results",
+      "implemented": "Snapshot revision/document/scene digests, retained gallery with stale labels, cancellation hooks, bounded PNG output including straight alpha and downloadable results; integrated UI save/render/reopen, real job cancellation and concurrent geometry-edit snapshot byte comparison",
       "remaining": [
-        "Shell-integrated asynchronous cancel/retry acceptance",
-        "Mid-job model-change acceptance",
+        "Two concurrently queued named render shots cancellation fixture",
         "No cloud service offered"
       ]
     },
