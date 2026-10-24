@@ -831,7 +831,12 @@ export default function VisualizationPanel(props: DomainPanelProps) {
           <SelectControl
             value={scene.renderer}
             onChange={(e) =>
-              change({ renderer: e.target.value as Scene["renderer"] })
+              change({
+                renderer: e.target.value as Scene["renderer"],
+                ...(e.target.value === "native-cpu-raytrace"
+                  ? { style: "shaded", transparent: false }
+                  : {}),
+              })
             }
           >
             <option value="cpu-raster">CPU raster · direct lighting</option>
@@ -842,10 +847,103 @@ export default function VisualizationPanel(props: DomainPanelProps) {
             )}
           </SelectControl>
         </label>
+        {scene.renderer === "native-cpu-raytrace" && (
+          <>
+            <div className="visualization-row">
+              {number(
+                "Native samples per pixel",
+                scene.samples ?? 1,
+                (samples) => change({ samples }),
+                1,
+                64,
+              )}
+              {number(
+                "Native sampling seed",
+                scene.seed ?? 0,
+                (seed) => change({ seed }),
+                0,
+                4294967295,
+              )}
+            </div>
+            <label>
+              <input
+                type="checkbox"
+                checked={scene.native_shadows ?? true}
+                onChange={(e) => change({ native_shadows: e.target.checked })}
+              />{" "}
+              Native ray shadows
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!!scene.ground}
+                onChange={(e) =>
+                  change({
+                    ground: e.target.checked
+                      ? {
+                          margin_fraction: 0.5,
+                          gap_mm: 0.1,
+                          reflectance_linear: [0.18, 0.18, 0.18],
+                        }
+                      : null,
+                  })
+                }
+              />{" "}
+              Ground stage in native render
+            </label>
+            {scene.ground && (
+              <>
+                {number(
+                  "Ground clearance mm",
+                  scene.ground.gap_mm,
+                  (gap_mm) => change({ ground: { ...scene.ground!, gap_mm } }),
+                  0.0001,
+                  1000,
+                  0.1,
+                )}
+                {number(
+                  "Ground margin fraction",
+                  scene.ground.margin_fraction,
+                  (margin_fraction) =>
+                    change({ ground: { ...scene.ground!, margin_fraction } }),
+                  0,
+                  10,
+                  0.1,
+                )}
+                <div className="visualization-row">
+                  {scene.ground.reflectance_linear.map((v, i) =>
+                    number(
+                      `Ground reflectance ${"RGB"[i]}`,
+                      v,
+                      (value) =>
+                        change({
+                          ground: {
+                            ...scene.ground!,
+                            reflectance_linear:
+                              scene.ground!.reflectance_linear.map((x, j) =>
+                                i === j ? value : x,
+                              ),
+                          },
+                        }),
+                      0,
+                      1,
+                      0.05,
+                    ),
+                  )}
+                </div>
+              </>
+            )}
+            <p>
+              Ground and ray shadows appear in the native render output. The
+              interactive viewport previews direct lighting.
+            </p>
+          </>
+        )}
         <label>
           <input
             type="checkbox"
             checked={scene.transparent}
+            disabled={scene.renderer === "native-cpu-raytrace"}
             onChange={(e) => change({ transparent: e.target.checked })}
           />{" "}
           Transparent PNG background

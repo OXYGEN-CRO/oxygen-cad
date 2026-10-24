@@ -116,6 +116,8 @@ def apply_texture(base, points, mapping, textures):
 
 def render_image(store, geometry, scene, assets, cancel=None):
     """Perspective-correct triangle rasterization with per-pixel depth and direct lights."""
+    if scene.ground is not None:
+        raise ValueError("Render ground requires native CPU raytrace; CPU raster does not simulate a ground stage")
     validate_targets(geometry, scene)
     needed={a.texture.asset for a in scene.appearances.values() if a.texture}
     if needed-assets.keys():
@@ -272,7 +274,9 @@ def native_render(store, project, scene, path, cancel):
                     "pbr":{"metallic":look.metallic,"roughness":look.roughness,"dielectric_ior":1.5}})
         if any(":face:" in key for key in scene.appearances):
             raise ValueError("Native raytrace per-face host appearance bindings require explicit native face mapping")
-        options = {"lights":[],"punctual_lights":[],"environment":{"color":[1,1,1],"intensity":scene.ambient}}
+        options = {"lights":[],"punctual_lights":[],"environment":{"color":[1,1,1],"intensity":scene.ambient},"shadows":scene.native_shadows}
+        if scene.samples>1:
+            options["progressive"]={"samples_per_pixel":scene.samples,"seed":scene.seed}
         for light in scene.lights:
             if light.kind=="directional":
                 vector=np.array(light.vector,dtype=float)
@@ -288,8 +292,13 @@ def native_render(store, project, scene, path, cancel):
         settings = {"camera":scene.camera.model_dump()|{"up":"z"},"width":scene.width,"height":scene.height,
             "background":list(ImageColor.getrgb(scene.background)),"exposure_ev":scene.exposure_ev,
             "job":{"method":"cpu_raytrace","options":options}}
-        preflight = engine.execute("render.preflight", {"settings":settings})
-        started = engine.execute("render.start", {"settings":settings})
+        request={"settings":settings}
+        if scene.ground is not None:
+            engine.execute("render.settings.set",{"name":"Oxygen captured product","set":settings})
+            engine.execute("render.stage.ground",{"name":"Oxygen captured product",**scene.ground.model_dump(),"replace_stage":True})
+            request={"setup":"Oxygen captured product"}
+        preflight = engine.execute("render.preflight", request)
+        started = engine.execute("render.start", request)
         job = started["job"]
         end = time.monotonic()+180
         while True:
@@ -310,6 +319,6 @@ def native_render(store, project, scene, path, cancel):
             else:
                 time.sleep(0.03)
         exported = engine.execute("render.export", {"job":job,"path":str(path.resolve())})
-    return {"renderer":"native-cpu-raytrace","photorealistic":False,"capabilities":capabilities,
+    return {"renderer":"native-cpu-raytrace","photorealistic":False,"capabilities":capabilities,"native_status":status,
         "preflight":preflight,"native_export":exported,"dimensions":[scene.width,scene.height],
         "limitations":["Native direct-light CPU raytrace preview; no general global illumination or photorealistic acceptance established"]}

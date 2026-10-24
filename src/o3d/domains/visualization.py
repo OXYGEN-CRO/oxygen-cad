@@ -101,6 +101,12 @@ class Light(Data):
         return self
 
 
+class Ground(Data):
+    margin_fraction: float = Field(default=0.5,ge=0,le=10)
+    gap_mm: float = Field(default=0.1,ge=0.0001,le=1000)
+    reflectance_linear: Annotated[list[Annotated[float,Field(ge=0,le=1)]],Field(min_length=3,max_length=3)] = [0.18,0.18,0.18]
+
+
 class Scene(Data):
     name: Name = "Product"
     camera: Camera = Field(default_factory=Camera)
@@ -119,6 +125,10 @@ class Scene(Data):
     sections: list[Section] = Field(default_factory=list, max_length=6)
     transforms: dict[Target, Vec] = Field(default_factory=dict, max_length=2048)
     renderer: Literal["cpu-raster", "native-cpu-raytrace"] = "cpu-raster"
+    samples: int = Field(default=1,ge=1,le=64)
+    seed: int = Field(default=0,ge=0,le=4_294_967_295)
+    native_shadows: bool = True
+    ground: Ground | None = None
 
     @model_validator(mode="after")
     def budget(self):

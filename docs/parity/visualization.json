@@ -53,6 +53,11 @@
       "command": "cd frontend && O3D_TEST_PORT=8961 PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<canonical scene core> npx playwright test tests/themes.spec.ts tests/studio.spec.ts --grep 'theme|a real study'",
       "result": "3 passed",
       "evidence": "Real study solve and current stress/displacement field rendering, light theme compact views, viewport/draft preservation on theme switching."
+    },
+    {
+      "command": "PYTHONPATH=$PWD/src O3D_ENGINE_BINARY=<CPU-host-enabled canonical core> .venv/bin/python -m pytest -q tests/test_visualization.py tests/test_native_document.py",
+      "result": "14 passed",
+      "evidence": "Installed cpu-raytrace executor resolves after document reopen, real progressive 4-sample seeded PNG renders and byte-identical repeat. Native finite ground stage plus shadow enable/disable produces measured image pixel differences; exact product document remains unchanged."
     }
   ],
   "rows": [
@@ -106,21 +111,20 @@
     {
       "id": "R06",
       "status": "partial",
-      "implemented": "Saved directional/point/spot lights, relative intensity, positional reference distance/falloff, spot cone, environment light rotation and ambient/background",
+      "implemented": "Saved directional/point/spot lights, relative intensity, positional reference distance/falloff, spot cone, environment light rotation and ambient/background; native finite passive ground stage with explicit gap, margin, linear RGB reflectance and real ray shadows",
       "remaining": [
         "HDR asset lighting",
-        "Ground/shadow/reflection scene authoring",
+        "Ground reflection authoring",
         "Photometric IES lights and calibrated physical units"
       ]
     },
     {
       "id": "R07",
       "status": "partial",
-      "implemented": "Measured CPU raster z-buffer with perspective-correct interpolation, direct diffuse/specular lighting, explicit algorithm/limits; conditional strict native CPU-raytrace job path",
+      "implemented": "Measured CPU raster z-buffer with perspective-correct interpolation, direct diffuse/specular lighting, explicit algorithm/limits; conditional strict native CPU-raytrace job path; exercised actual native CPU-raytrace host with progressive samples/seed, deterministic rerender and ground shadow pixel checks",
       "remaining": [
-        "Enabled CPU-raytrace host image acceptance (unavailable host refusal is exercised)",
-        "Progressive samples and visible progress",
-        "Glass/metal/reflection/shadow image references",
+        "Intermediate progressive image display",
+        "Glass/metal reflection image reference suite",
         "Photorealistic parity is not claimed"
       ]
     },

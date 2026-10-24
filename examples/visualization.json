@@ -49,7 +49,11 @@
       "isolated": [],
       "sections": [],
       "transforms": {},
-      "renderer": "cpu-raster"
+      "renderer": "cpu-raster",
+      "samples": 1,
+      "seed": 0,
+      "native_shadows": true,
+      "ground": null
     }
   ],
   "storyboards": [

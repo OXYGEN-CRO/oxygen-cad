@@ -57,6 +57,14 @@ export type Scene = {
   }[];
   transforms: Record<string, number[]>;
   renderer: "cpu-raster" | "native-cpu-raytrace";
+  samples: number;
+  seed: number;
+  native_shadows: boolean;
+  ground: {
+    margin_fraction: number;
+    gap_mm: number;
+    reflectance_linear: number[];
+  } | null;
 };
 export type Keyframe = {
   time: number;
@@ -141,6 +149,10 @@ export const sceneDefault = (name = "Product"): Scene => ({
   sections: [],
   transforms: {},
   renderer: "cpu-raster",
+  samples: 1,
+  seed: 0,
+  native_shadows: true,
+  ground: null,
 });
 export const dataDefault = (): Visualization => ({
   schema_version: 1,

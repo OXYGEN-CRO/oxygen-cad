@@ -250,6 +250,7 @@ def test_native_raytrace_runs_only_when_the_installed_host_advertises_it(visual_
     available=any(e["id"]=="cpu-raytrace" and e["availability"]["status"]=="available"
         for backend in caps["native"]["backends"] for e in backend["executors"])
     scene=scene_fixture();scene.style="shaded";scene.renderer="native-cpu-raytrace"
+    scene.samples=4;scene.seed=17
     scene.appearances["*"]=Appearance(color="#d06020",metallic=0.8,roughness=0.2)
     payload={"data":Visualization(scenes=[scene]).model_dump(mode="json")}
     if not available:
@@ -259,7 +260,20 @@ def test_native_raytrace_runs_only_when_the_installed_host_advertises_it(visual_
         result=execute(store,project,"render",payload)
         assert result["renderer"]=="native-cpu-raytrace"
         assert result["preflight"]["request"]["integrator"]=="raytrace"
+        assert result["preflight"]["resolved"]["executor"]=="cpu-raytrace"
+        assert result["native_status"]["progress"]["phase"]=="completed"
         with Image.open(store.artifact(result["artifacts"]["image"])) as image:
             assert image.size==(128,96)
             assert np.unique(np.asarray(image).reshape(-1,len(image.getbands())),axis=0).shape[0]>8
+        repeat=execute(store,project,"render",payload)
+        assert store.artifact(repeat["artifacts"]["image"]).read_bytes()==store.artifact(result["artifacts"]["image"]).read_bytes()
+        from o3d.domains.visualization import Ground
+        scene.ground=Ground();scene.samples=1
+        scene.appearances["*"].metallic=0
+        shadow=execute(store,project,"render",{"data":Visualization(scenes=[scene]).model_dump(mode="json")})
+        assert shadow["preflight"]["stage_panels"]==1
+        scene.native_shadows=False
+        unshadowed=execute(store,project,"render",{"data":Visualization(scenes=[scene]).model_dump(mode="json")})
+        with Image.open(store.artifact(shadow["artifacts"]["image"])) as shaded, Image.open(store.artifact(unshadowed["artifacts"]["image"])) as unshaded:
+            assert np.count_nonzero(np.asarray(shaded)!=np.asarray(unshaded))>20
     assert store.load()==project
