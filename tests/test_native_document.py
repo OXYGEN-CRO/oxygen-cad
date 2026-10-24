@@ -132,6 +132,7 @@ def test_open_surface_keeps_area_and_geometry_kind_without_claiming_solid_mass(t
     result = build(store, project)
     body = result['scene']['bodies'][0]
     assert body['geometry_kind'] == 'surface'
+    assert result['volume_mm3'] is None and result['center_of_mass'] is None
     assert result['engine']['independent_bodies'][0]['area_mm2'] == pytest.approx(140)
     assert body['faces'] and body['topology']['faces']
     assert body['mesh']['triangles']
@@ -318,3 +319,64 @@ def test_geometric_path_references_are_distinct_from_filesystem_paths(tmp_path):
     assert len(inspect_native(Store(tmp_path).load())['inspection']['timeline']) == 3
     with pytest.raises(ValueError, match='Filesystem'):
         execute_native(store, 3, 'human', 'construct.point.along_path', {'path': {'file': '/etc/passwd'}})
+
+
+def test_legacy_through_holes_remain_through_after_thickness_and_direction_changes(tmp_path):
+    import math
+    from o3d.model import Profile, Extrude, Hole
+    project = Project(parameters={'thickness': Parameter(value=3)}, features=[
+        Profile(id='profile', width=20, height=10), Extrude(id='base', profile='profile', distance='$thickness'),
+        Hole(id='hole', diameter=2, center=(0, 0, 0), through=True),
+    ])
+    store = Store(tmp_path); store.init(project)
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'thickness', 'expression': '8 mm'})
+    assert query_native(store.load(), 'inspect.measure')['total']['volume_mm3'] == pytest.approx(1600 - 8*math.pi, rel=1e-5)
+    execute_native(store, 2, 'human', 'parameters.change', {'name': 'thickness', 'expression': '-8 mm'})
+    assert query_native(store.load(), 'inspect.measure')['total']['volume_mm3'] == pytest.approx(1600 - 8*math.pi, rel=1e-5)
+
+
+def test_mixed_scene_exports_all_geometry_to_stl_and_exposes_exact_subsets(tmp_path):
+    import trimesh
+    source = tmp_path / 'source.stl'; bd.export_stl(bd.Box(4, 5, 6).moved(bd.Location((40, 0, 0))), source)
+    content = source.read_bytes(); sha = hashlib.sha256(content).hexdigest()
+    assets = tmp_path / 'assets'; assets.mkdir(); (assets / f'{sha}.stl').write_bytes(content)
+    project = native_project([('solid.box', {'length': 20, 'width': 10, 'height': 5})])
+    project.domains['interop'] = {'schema_version': 1, 'assets': [{'id': 'mesh', 'sha256': sha, 'file': f'assets/{sha}.stl'}]}
+    store = Store(tmp_path); store.init(project)
+    execute_native(store, 1, 'human', 'file.insert_mesh', {'asset_id': 'mesh'})
+    result = build(store, store.load())
+    assert {b['geometry_kind'] for b in result['scene']['bodies']} == {'solid', 'mesh'}
+    assert result['bounds'][1][0] == pytest.approx(42)
+    exported = trimesh.load(store.artifact(result['artifacts']['stl']), force='mesh')
+    assert abs(exported.volume) == pytest.approx(1120, rel=1e-6)
+    assert 'step' not in result['artifacts'] and 'brep' not in result['artifacts']
+    assert len(result['artifact_scope']['stl']['body_ids']) == 2
+    assert len(result['artifact_scope']['exact_per_body']['excluded_mesh_body_ids']) == 1
+    assert result['volume_mm3'] is None and result['center_of_mass'] is None
+
+
+def test_renaming_a_migrated_parameter_preserves_alias_mirror_and_user_lock(tmp_path):
+    project = Project(parameters={'length': Parameter(value=20, locked=True)}, features=[
+        NativeFeature(id='base', command='solid.box', params={'length': '$length', 'width': 10, 'height': 5}),
+    ])
+    store = Store(tmp_path); store.init(project)
+    execute_native(store, 1, 'human', 'parameters.rename', {'name': 'length', 'new_name': 'span'})
+    assert store.load().domains['modeling']['legacy_parameter_map']['length'] == 'span'
+    assert store.load().domains['modeling']['parameter_locks']['span']
+    with pytest.raises(Conflict, match='locked'):
+        execute_native(store, 2, 'agent', 'parameters.change', {'name': 'span', 'expression': '30 mm'})
+    assert store.load().revision == 2
+    assert query_native(store.load(), 'inspect.measure')['total']['volume_mm3'] == pytest.approx(1000)
+
+
+def test_legacy_angle_mirror_remains_in_degrees_after_native_edits(tmp_path):
+    project = Project(parameters={'turn': Parameter(value=90, unit='deg', locked=True)}, features=[
+        NativeFeature(id='base', command='solid.box', params={'length': 10, 'width': 5, 'height': 2}),
+        NativeFeature(id='rotate', command='solid.move', params={'bodies': ['Body1'], 'axis': [0, 0, 1], 'angle': '$turn'}),
+    ])
+    store = Store(tmp_path); store.init(project)
+    execute_native(store, 1, 'agent', 'appearance.assign', {'bodies': ['Body1'], 'color': '#336699'})
+    assert store.load().parameters['turn'].value == 90
+    execute_native(store, 2, 'human', 'parameters.change', {'name': 'turn', 'expression': '180 deg'})
+    assert store.load().parameters['turn'].value == pytest.approx(180)
+    assert query_native(store.load(), 'inspect.measure')['bodies'][0]['bbox']['min'] == pytest.approx([-10, -5, 0], abs=1e-5)

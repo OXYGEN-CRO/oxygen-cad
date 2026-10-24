@@ -27,9 +27,39 @@
       "evidence": "Host adapter materializes current evaluated projection before break_link; parameter-edited silhouette detach has an actual source-engine regression test. Arbitrary missing-link relink is not implemented."
     },
     {
+      "id": "MOD-007",
+      "status": "bounded",
+      "evidence": "Construction plane and point Along Path accept structured geometric references, reject nested filesystem access, and persist across cold open."
+    },
+    {
       "id": "MOD-008",
       "status": "bounded",
       "evidence": "Source-built box/extrusion fixtures and typed signed extrusions are independently verified through STEP. Not every advanced extent/taper/thin combination is accepted."
+    },
+    {
+      "id": "MOD-009",
+      "status": "bounded",
+      "evidence": "Original ring revolve, parameterized alternate-plane sweep and frustum loft have analytic measured volumes, independent STEP validation and parameter edits after reopen. Rails/twist/complex continuity variants remain unaccepted."
+    },
+    {
+      "id": "MOD-010",
+      "status": "bounded",
+      "evidence": "Counterbore and a cosmetic M6 tapped hole preserve expected removed volume and thread designation metadata after reopen. Modeled-thread fidelity and full thread libraries remain unaccepted. Legacy through holes migrate to symmetric native ThroughAll extents and remain through after thickness 3\u21928\u2192\u22128 mm."
+    },
+    {
+      "id": "MOD-011",
+      "status": "bounded",
+      "evidence": "Four-edge constant fillet/chamfer chains recompute at 1 and 2 mm with analytic volumes. Impossible 100 mm settings fail atomically without reducing the requested size. Variable/G2/corner families remain unaccepted."
+    },
+    {
+      "id": "MOD-012",
+      "status": "bounded",
+      "evidence": "Curved open-top shell changes 1 to 2 mm with measured cavity volume and an 8 mm inner cylindrical radius; impossible 12 mm walls fail atomically. A selected face drafts 5 to 10 degrees against XY with analytic wedge volume. Original L bracket rib/web thickness edits retain analytic reinforcement volume. Coil and broader thin-wall variants remain unaccepted."
+    },
+    {
+      "id": "MOD-013",
+      "status": "bounded",
+      "evidence": "Rectangular body pattern plus mirror preserve six distinct body identities and recompute measured volume after a seed height edit; feature/construction patterns and instance suppression remain unaccepted."
     },
     {
       "id": "MOD-014",
@@ -44,12 +74,12 @@
     {
       "id": "MOD-020",
       "status": "bounded",
-      "evidence": "Immutable STL import embeds an explicit mesh body, validates triangle geometry independently, and reopens without fabricating exact B-rep."
+      "evidence": "Immutable STL import embeds an explicit mesh body, validates triangle geometry independently, and reopens without fabricating exact B-rep. Native STL exports all mixed-scene geometry; aggregate exact-format artifact keys are omitted when they would drop mesh bodies, while per-body exact STEP remains explicit. Scene bounds include every geometry kind."
     },
     {
       "id": "MOD-022",
       "status": "bounded",
-      "evidence": "Native expressions are canonical. Legacy profile dimensions and extrusion distances migrate into the same graph. Original v1 names outside native grammar receive an explicit persisted alias mapping; host value mirrors update through that map."
+      "evidence": "Native expressions are canonical. Legacy profile dimensions and extrusion distances migrate into the same graph. Original v1 names outside native grammar receive an explicit persisted alias mapping; host value mirrors update through that map. Degree-unit host mirrors convert upstream internal radians correctly. Parameter renames update the alias and lock mapping, so later agent edits remain blocked."
     },
     {
       "id": "MOD-023",
@@ -86,11 +116,15 @@
     "tests/test_native_document.py",
     "tests/test_native_engine.py",
     "tests/test_engineering.py",
-    "tests/test_editing_sequences.py"
+    "tests/test_editing_sequences.py",
+    "tests/test_native_modeling_workflows.py"
   ],
   "executed": [
     "35 source-native/backend tests passed before final edge-case increment",
-    "Expanded source-native document + native-engine suite: 26 passed, including nested profile reuse, Keep Tools Boolean, surface physical-total exclusion, mesh audit, legacy aliases, projection break rollback and native render-host preservation"
+    "Expanded source-native document + native-engine suite: 26 passed, including nested profile reuse, Keep Tools Boolean, surface physical-total exclusion, mesh audit, legacy aliases, projection break rollback and native render-host preservation",
+    "11 original analytic source-native modeling workflow cases passed in 12.29 s; independent STEP imports validate every body before a persisted parameter edit is acknowledged",
+    "Final complete backend suite: 68 passed in 97.51 s on the source-built Rust engine; through-hole and mixed-scene correctness checks rerun after final nullable-metric adjustment",
+    "Final source-native focused suite: 40 passed in 18.08 s; final targeted checks additionally verify degree-unit mirrors and user locks across parameter rename"
   ],
   "remaining": [
     "Full acceptance of every Modeling row requires the domain fixtures and graphical workflows; a registered command is not a passing parity claim.",
@@ -99,6 +133,7 @@
     "Linked source imports are limited to one self-contained native design; nested external dependency packaging must be implemented before allowing that closure.",
     "Native cancellation of an editing context imported without an Oxygen sketch-entry snapshot requires project undo.",
     "Netgen and CAD remain in separate environments. Study support has its own multi-body/contact acceptance gates.",
-    "Native host installs the bounded CPU worker and advertises cpu-product/cpu-raytrace; actual image material/camera acceptance belongs to visualization track."
+    "Native host installs the bounded CPU worker and advertises cpu-product/cpu-raytrace; actual image material/camera acceptance belongs to visualization track.",
+    "Build volume_mm3 and center_of_mass are null for scenes containing open surfaces or meshes; exact_solid_volume_mm3 reports only independently verified B-rep solid volume. Engineering checks reject mixed geometry rather than omitting bodies."
   ]
 }

@@ -198,7 +198,8 @@ def compile_native(project: Project, destination: Path):
                                 circle = session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
                                 session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "diameter", "value": _resolved(project, feature.diameter, parameter_bindings)})
                         session.execute("sketch.finish")
-                        session.execute("solid.extrude", {"distance": depth if feature.through else _resolved(project, feature.depth, parameter_bindings), "operation": "cut", "name": feature.name or feature.id})
+                        extent = {"through_all": True, "direction": "symmetric"} if feature.through else {"distance": _resolved(project, feature.depth, parameter_bindings)}
+                        session.execute("solid.extrude", extent | {"operation": "cut", "name": feature.name or feature.id})
                         if before["total"]["volume_mm3"] - measure()["total"]["volume_mm3"] < 1e-8:
                             raise ValueError("Hole pattern did not intersect the solid")
                     elif isinstance(feature, EdgeTreatment):
@@ -241,6 +242,8 @@ def compile_native(project: Project, destination: Path):
         brep_bodies = [b for b in scene["bodies"] if b["geometry_kind"] != "mesh"]
         if brep_bodies:
             session.execute("file.export", {"path": str(destination / "part.step"), "bodies": [b["name"] for b in brep_bodies]})
+        if scene["bodies"]:
+            session.execute("file.export", {"path": str(destination / "part.stl"), "bodies": [b["name"] for b in scene["bodies"]]})
         session.execute("file.save_as", {"path": str(destination / "part.solidcraft")})
         (destination / "engine-script.json").write_text(json.dumps(recipe, indent=2) + "\n")
         (destination / "engine-measures.json").write_text(json.dumps(measured, indent=2) + "\n")

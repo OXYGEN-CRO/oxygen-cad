@@ -287,7 +287,7 @@ def digest(value) -> str:
 
 
 def geometry_key(project: Project) -> str:
-    return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-document-v2-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features] if project.native_document is None else None,
+    return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-document-v3-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features] if project.native_document is None else None,
                    "native_document": project.native_document,
                    "native_pending_moves": project.domains.get("modeling", {}).get("native_context", {}).get("pending_moves") if project.native_document else None,
                    "parameters": {k: v.value for k, v in project.parameters.items()},

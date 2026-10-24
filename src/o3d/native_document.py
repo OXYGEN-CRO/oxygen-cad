@@ -8,6 +8,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import tempfile
@@ -217,9 +218,10 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
         params["path"] = str(path)
     with opened_native(project, store) as session:
         before = session.execute("oxygen.document.get")
-        parameter_map = session.legacy_parameter_map
+        parameter_map = dict(session.legacy_parameter_map)
         if command.startswith("parameters.") and params.get("name") in parameter_map:
             params["name"] = parameter_map[params["name"]]
+        renamed_from = params.get("name") if command in {"parameters.rename", "parameters.change"} and isinstance(params.get("new_name"), str) else None
         _guard_references(before["document"], command, params)
         if command == "sketch.cancel":
             entry = project.domains.get("modeling", {}).get("sketch_entry")
@@ -231,6 +233,8 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
             result = session.execute(command, params)
         after = session.execute("oxygen.document.get")
         values = session.execute("document.inspect")["params"]
+    if renamed_from is not None:
+        parameter_map = {name: params["new_name"] if native_name == renamed_from else native_name for name, native_name in parameter_map.items()}
     before = _portable_links(before, store)
     after = _portable_links(after, store)
     updated = project.model_copy(deep=True)
@@ -242,7 +246,10 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     for parameter in values:
         host_name = next((name for name, native_name in parameter_map.items() if native_name == parameter["name"]), parameter["name"])
         if host_name in updated.parameters and parameter.get("value") is not None:
-            updated.parameters[host_name].value = parameter["value"]
+            mirror = updated.parameters[host_name]
+            value = math.degrees(parameter["value"]) if mirror.unit == "deg" else parameter["value"]
+            if not math.isclose(value, mirror.value, rel_tol=1e-12, abs_tol=1e-12):
+                mirror.value = value
     modeling = updated.domains.setdefault("modeling", {"schema_version": 1})
     modeling["native_context"] = after["context"]
     if parameter_map:
@@ -252,6 +259,8 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     elif not after["context"].get("active_sketch"):
         modeling.pop("sketch_entry", None)
     locks = modeling.setdefault("parameter_locks", {})
+    if renamed_from in locks:
+        locks[params["new_name"]] = locks.pop(renamed_from)
     for name, parameter in project.parameters.items():
         if parameter.locked:
             locks.setdefault(parameter_map.get(name, name), True)

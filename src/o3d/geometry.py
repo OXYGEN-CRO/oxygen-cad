@@ -193,8 +193,11 @@ def build(store: Store, project: Project):
             raise ValueError("BREP export failed")
         if project.geometry_engine == "occt":
             bd.export_step(shape, destination / "part.step")
-        bd.export_stl(shape, destination / "part.stl", tolerance=0.05, angular_tolerance=0.1)
+        if project.geometry_engine == "occt":
+            bd.export_stl(shape, destination / "part.stl", tolerance=0.05, angular_tolerance=0.1)
         artifacts.update({name: f"builds/{key}/part.{extension}" for name, extension in (("step", "step"), ("stl", "stl"), ("brep", "brep"))})
+    if (destination / "part.stl").is_file():
+        artifacts["stl"] = f"builds/{key}/part.stl"
     faces = face_metadata(shape) if shape is not None else []
     if scene:
         # Preserve body-specific identities/topology alongside legacy aggregate viewport data.
@@ -213,17 +216,24 @@ def build(store: Store, project: Project):
         for index, face in enumerate(ref_faces):
             face["id"] = f"asset:{ref.sha256}:{index}"
         references.append({"id": ref.id, "name": ref.name, "faces": ref_faces, "visible": ref.visible})
-    if shape is not None:
+    has_mesh = bool(scene and any(b["geometry_kind"] == "mesh" for b in scene["bodies"]))
+    has_surface = bool(scene and any(b["geometry_kind"] == "surface" for b in scene["bodies"]))
+    if scene and scene["bodies"]:
+        low = [min(b["bbox"]["min"][i] for b in scene["bodies"]) for i in range(3)]
+        high = [max(b["bbox"]["max"][i] for b in scene["bodies"]) for i in range(3)]
+        bounds, dimensions = [low, high], [high[i]-low[i] for i in range(3)]
+        volume = sum(s.volume for s in shape.solids()) if shape is not None and not has_mesh and not has_surface else None
+        center = vector(shape.center(bd.CenterOf.MASS)) if shape is not None and volume and not has_surface else None
+        if has_mesh:
+            # Aggregate exact-format buttons must never silently omit mesh bodies.
+            artifacts.pop("step", None)
+            artifacts.pop("brep", None)
+    elif shape is not None:
         bbox = shape.bounding_box()
         bounds = [vector(bbox.min), vector(bbox.max)]
         dimensions = vector(bbox.size)
         volume = sum(s.volume for s in shape.solids())
         center = vector(shape.center(bd.CenterOf.MASS)) if volume > 0 else vector(shape.center())
-    elif scene and scene["bodies"]:
-        low = [min(b["bbox"]["min"][i] for b in scene["bodies"]) for i in range(3)]
-        high = [max(b["bbox"]["max"][i] for b in scene["bodies"]) for i in range(3)]
-        bounds, dimensions, volume = [low, high], [high[i]-low[i] for i in range(3)], None
-        center = [(low[i]+high[i])/2 for i in range(3)]
     else:
         bounds, dimensions, volume, center = [[0,0,0],[0,0,0]], [0,0,0], 0, [0,0,0]
     result = {"key": key, "revision": project.revision, "engine": engine, "volume_mm3": volume,
@@ -231,6 +241,12 @@ def build(store: Store, project: Project):
               "faces": faces, "references": references, "scene": scene,
               "edges": [{"id": f"edge:{signature(e)}", "center": vector(e.center()), "length_mm": e.length} for e in shape.edges()] if shape is not None else [],
               "artifacts": artifacts}
+    if scene:
+        all_ids = [b["id"] for b in scene["bodies"]]
+        brep_ids = [b["id"] for b in scene["bodies"] if b["geometry_kind"] != "mesh"]
+        result["artifact_scope"] = {"stl": {"body_ids":all_ids},
+            "exact_per_body": {"body_ids":brep_ids,"excluded_mesh_body_ids":[b["id"] for b in scene["bodies"] if b["geometry_kind"] == "mesh"]}}
+        result["exact_solid_volume_mm3"] = sum(s.volume for s in shape.solids()) if shape is not None else 0
     if project.geometry_engine == "solidcraft":
         result["artifacts"].update({"native_design": f"builds/{key}/part.solidcraft", "engine_script": f"builds/{key}/engine-script.json"})
     write_json(destination / "build.json", result)
@@ -245,6 +261,9 @@ def check(store: Store, project: Project):
         build(store, project)
     if not (path / "part.brep").exists():
         raise ValueError("Engineering checks require B-rep geometry; mesh-only and sketch-only documents are not solids")
+    cached = json.loads((path / "build.json").read_text())
+    if any(b["geometry_kind"] != "solid" for b in (cached.get("scene") or {}).get("bodies", [])):
+        raise ValueError("Solid engineering checks require only exact solid bodies; use mesh/surface diagnostics for mixed documents")
     shape = bd.import_brep(path / "part.brep")
     if not shape.solids() or shape.volume <= 0:
         raise ValueError("Solid engineering checks require positive-volume solid bodies; use surface diagnostics for open surfaces")
