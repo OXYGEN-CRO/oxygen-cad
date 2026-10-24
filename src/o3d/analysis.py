@@ -266,7 +266,7 @@ def parse_eigenvalues(path, kind):
     return values
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=512)
 def _binary_hash(path, mtime, size):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 

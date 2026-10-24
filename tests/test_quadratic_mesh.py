@@ -214,3 +214,19 @@ def test_hollow_thermal_stress_keeps_one_cad_interior_probe_across_remeshing(tmp
     extension=max(v[0] for v in field['displacements'].values())
     assert extension==pytest.approx(12e-6*result['max_temperature_c']/2*40,rel=.03)
     assert result['force_balance_error']<.01 and result['moment_balance_error']<.01
+
+
+def test_many_saved_studies_reuse_unchanged_runtime_binary_fingerprints(store,monkeypatch):
+    from o3d.analysis import solver_identity
+    from o3d.model import Command
+    project=store.load()
+    project.named_studies={f'case_{i}':project.study.model_copy(deep=True) for i in range(30)}
+    store.apply(Command(expected_revision=project.revision,actor='human',project=project))
+    solver_identity()  # Warm the installed binary fingerprints once.
+    original=Path.read_bytes;reads=[]
+    def observe(path):
+        if '.so' in path.name:reads.append(str(path))
+        return original(path)
+    monkeypatch.setattr(Path,'read_bytes',observe)
+    assert len(store.state()['studies'])==31
+    assert not reads,'Reading study state must not rehash unchanged native libraries for every saved study'
