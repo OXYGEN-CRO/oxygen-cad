@@ -3,6 +3,7 @@ WORKDIR /web
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+COPY examples/ /examples/
 RUN npm run build
 
 FROM rust:1.95-slim-trixie AS engine
