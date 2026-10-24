@@ -1,4 +1,5 @@
 @import "./tokens.css";
+@import "./components/ui.css";
 
 :root {
   font-family: var(--font-sans);
@@ -6,26 +7,17 @@
   background: var(--canvas);
   font-synthesis: none;
   font-size: 13px;
-  font-weight: 450;
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.012em;
+  font-optical-sizing: auto;
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
-  background:
-    radial-gradient(
-      ellipse at 85% -10%,
-      rgba(57, 87, 139, 0.18),
-      transparent 45%
-    ),
-    radial-gradient(
-      ellipse at 10% 110%,
-      rgba(37, 87, 83, 0.12),
-      transparent 50%
-    ),
-    var(--canvas);
+  background: var(--canvas);
 }
 button,
 input,
@@ -57,7 +49,7 @@ button {
     box-shadow var(--duration) var(--ease);
 }
 button:hover {
-  background: rgba(200, 220, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
 }
 button:disabled {
   opacity: 0.4;
@@ -73,7 +65,7 @@ select,
 textarea {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--surface-inset);
   color: var(--text);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -82,8 +74,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: rgba(155, 191, 255, 0.5);
-  box-shadow: 0 0 0 3px rgba(155, 191, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.025);
 }
 input[type="checkbox"] {
   accent-color: var(--accent);
@@ -92,7 +84,7 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 code {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 p {
@@ -142,11 +134,11 @@ small {
   border-radius: 0;
   font-size: 0;
   transform: none;
-  color: #dbe6fa;
+  color: #cccccc;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 0 8px rgba(155, 191, 255, 0.14));
+  filter: none;
 }
 .brand-symbol:after {
   content: none;
@@ -208,43 +200,17 @@ small {
   flex-shrink: 0;
 }
 .top-actions > button {
-  height: 35px;
+  height: 32px;
   font-size: 11px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.055),
-    rgba(255, 255, 255, 0.02)
-  );
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: #191919;
+  box-shadow: none;
   color: var(--text-secondary);
+  border-radius: 6px;
 }
 .top-actions > button:hover {
-  background: rgba(200, 220, 255, 0.09);
-}
-.top-actions > button.primary {
-  background: linear-gradient(180deg, #dae7ff, #b6cff9);
-  color: var(--primary-ink);
-  border: 1px solid rgba(230, 239, 255, 0.45);
-  font-weight: 550;
-  box-shadow:
-    0 3px 12px rgba(139, 175, 255, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.primary {
-  background: linear-gradient(180deg, #dae7ff, #b6cff9);
-  color: var(--primary-ink);
-  padding: 9px 13px;
-  font-size: 11px;
-  font-weight: 550;
-  border: 1px solid rgba(230, 239, 255, 0.45);
-  box-shadow:
-    0 3px 12px rgba(139, 175, 255, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.primary:hover {
-  background: linear-gradient(180deg, #edf4ff, #c6dcff);
+  background: rgba(255, 255, 255, 0.05);
 }
 .nav-tabs {
   display: flex;
@@ -256,7 +222,7 @@ small {
   border-radius: 12px;
 }
 .nav-tabs button {
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0 13px;
   position: relative;
   font-size: 11px;
@@ -272,15 +238,9 @@ small {
 .nav-tabs button.active {
   color: var(--text);
   font-weight: 500;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.07),
-    rgba(255, 255, 255, 0.035)
-  );
-  border-color: var(--border);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: #202020;
+  border-color: rgba(255, 255, 255, 0.065);
+  box-shadow: none;
 }
 .nav-tabs button.active:after {
   content: none;
@@ -328,10 +288,10 @@ small {
   justify-content: space-between;
   min-height: 40px;
   padding: 0 12px;
-  font-size: 11px;
-  letter-spacing: 0;
+  font-size: 10px;
+  letter-spacing: 0.015em;
   font-weight: 500;
-  color: var(--text-muted);
+  color: #898989;
   border-bottom: 0;
   text-transform: none;
 }
@@ -361,14 +321,14 @@ small {
   color: var(--text-muted);
 }
 .tree-item {
-  height: 34px;
+  height: 32px;
   text-align: left;
   width: calc(100% - 8px);
   justify-content: flex-start;
-  border-radius: 10px;
+  border-radius: 5px;
   padding: 0 8px;
-  gap: 9px;
-  font-size: 11px;
+  gap: 8px;
+  font-size: 12px;
   color: var(--text-secondary);
   position: relative;
   border: 1px solid transparent;
@@ -385,9 +345,7 @@ small {
 }
 .tree-item small {
   margin-left: auto;
-  font:
-    9px "IBM Plex Mono",
-    monospace;
+  font: 9px var(--font-mono);
   color: var(--text-muted);
 }
 .tree-indent {
@@ -395,14 +353,10 @@ small {
   flex-shrink: 0;
 }
 .tree-item.selected {
-  background: linear-gradient(
-    120deg,
-    rgba(175, 202, 255, 0.11),
-    rgba(175, 202, 255, 0.035)
-  );
-  color: #e5edfb;
-  border-color: rgba(198, 219, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(216, 230, 255, 0.035);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d6d6d6;
+  border-color: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
 }
 .tree-item.selected:before {
   content: none;
@@ -438,7 +392,7 @@ small {
 .add-menu {
   margin: 3px 16px;
   padding: 6px;
-  background: #252b36;
+  background: #191919;
   border: 1px solid var(--border);
   box-shadow:
     0 12px 28px rgba(0, 0, 0, 0.3),
@@ -460,7 +414,8 @@ small {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: var(--glass-shadow);
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.055);
 }
 .webgl {
   position: absolute;
@@ -482,26 +437,22 @@ small {
 }
 .canvas-toolbar > div {
   pointer-events: auto;
-  background: linear-gradient(
-    145deg,
-    rgba(75, 87, 108, 0.24),
-    rgba(33, 39, 50, 0.72)
-  );
+  background: rgba(25, 25, 25, 0.92);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 4px;
+  border-radius: 7px;
+  padding: 3px;
   display: flex;
   gap: 3px;
-  box-shadow: var(--raised-shadow);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   align-items: center;
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
 }
 .canvas-toolbar button {
-  height: 30px;
-  min-width: 31px;
+  height: 28px;
+  min-width: 28px;
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .canvas-toolbar button.tool-active {
   background: var(--accent-wash);
@@ -531,7 +482,7 @@ small {
   pointer-events: none;
   font-size: 9px;
   color: var(--text-secondary);
-  background: rgba(19, 24, 32, 0.55);
+  background: rgba(17, 17, 17, 0.75);
   border: 0;
   padding: 7px 9px;
   border-radius: 8px;
@@ -554,6 +505,7 @@ small {
 }
 .status-dot.good {
   background: var(--success);
+  box-shadow: none;
 }
 .canvas-actions {
   position: absolute;
@@ -563,14 +515,10 @@ small {
   display: flex;
   align-items: center;
   gap: 3px;
-  background: linear-gradient(
-    145deg,
-    rgba(75, 87, 108, 0.26),
-    rgba(33, 39, 50, 0.76)
-  );
+  background: rgba(25, 25, 25, 0.95);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 6px;
+  border-radius: 8px;
+  padding: 4px;
   box-shadow: var(--raised-shadow);
   white-space: nowrap;
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -580,24 +528,11 @@ small {
   justify-content: center;
 }
 .canvas-actions button {
-  height: 33px;
+  height: 32px;
   padding: 0 13px;
   font-size: 10px;
   color: var(--text-secondary);
-  border-radius: 9px;
-}
-.canvas-actions button.build-button {
-  background: linear-gradient(180deg, #dae7ff, #b6cff9);
-  color: var(--primary-ink);
-  margin-right: 2px;
-  border: 1px solid rgba(230, 239, 255, 0.45);
-  box-shadow:
-    0 3px 12px rgba(139, 175, 255, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  font-weight: 550;
-}
-.canvas-actions button.build-button:hover {
-  background: linear-gradient(180deg, #edf4ff, #c6dcff);
+  border-radius: 6px;
 }
 .download-link {
   font-size: 9px;
@@ -609,20 +544,18 @@ small {
   width: 302px;
   flex-shrink: 0;
   border-left: 1px solid var(--line);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 45%),
-    var(--surface-glass);
+  background: var(--surface-glass);
   display: flex;
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--glass-shadow);
+  border-radius: 10px;
+  box-shadow: none;
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
 }
 .properties {
-  padding: 19px 19px 25px;
+  padding: 16px 16px 20px;
   overflow-y: auto;
   flex: 1;
   scrollbar-width: thin;
@@ -631,25 +564,22 @@ small {
 .inspector-title {
   display: flex;
   align-items: center;
-  gap: 11px;
-  margin-bottom: 23px;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 .feature-glyph {
-  background: linear-gradient(
-    135deg,
-    rgba(209, 227, 255, 0.08),
-    rgba(255, 255, 255, 0.015)
-  );
+  background: #1c1c1c;
   color: var(--accent-text);
-  padding: 9px;
+  padding: 7px;
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 6px;
 }
 .inspector-title h2 {
-  font-size: 14px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   margin: 0 0 4px;
   color: var(--text);
+  letter-spacing: -0.025em;
 }
 .inspector-title span {
   font-size: 9px;
@@ -660,7 +590,7 @@ small {
   flex-direction: column;
   gap: 6px;
   margin: 0 0 14px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 .field > div {
@@ -669,13 +599,12 @@ small {
   position: relative;
 }
 .field input {
-  height: 33px;
+  height: 32px;
   padding: 0 9px;
   flex: 1;
   width: 100%;
-  font:
-    11px "IBM Plex Mono",
-    monospace;
+  font: 12px var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 .field small {
   position: absolute;
@@ -688,9 +617,9 @@ small {
   padding-right: 47px;
 }
 .field select {
-  height: 33px;
+  height: 32px;
   padding: 0 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .checkbox {
   display: flex;
@@ -727,31 +656,27 @@ small {
 .vector-field label > span {
   position: absolute;
   left: 7px;
-  font:
-    8px "IBM Plex Mono",
-    monospace;
+  font: 8px var(--font-mono);
   color: var(--text-muted);
 }
 .vector-field input {
   height: 31px;
   width: 100%;
   padding: 0 3px 0 19px;
-  font:
-    10px "IBM Plex Mono",
-    monospace;
+  font: 10px var(--font-mono);
   appearance: textfield;
 }
 .vector-field input::-webkit-inner-spin-button {
   display: none;
 }
 .section-heading {
-  font-size: 8px;
-  letter-spacing: 1.4px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
   font-weight: 500;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
-  padding-top: 20px;
-  margin: 24px 0 16px;
+  padding-top: 16px;
+  margin: 20px 0 13px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -807,6 +732,7 @@ small {
   font-size: 9px;
   color: var(--text-muted);
   border: 1px solid var(--border);
+  border-radius: 5px;
 }
 .danger-link {
   font-size: 10px;
@@ -848,20 +774,16 @@ small {
 }
 .wide-button {
   border: 1px solid var(--border);
-  font-size: 10px;
+  font-size: 11px;
   padding: 8px;
   width: 100%;
   color: var(--text-secondary);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.045),
-    rgba(255, 255, 255, 0.015)
-  );
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  border-radius: 10px;
+  background: #202020;
+  box-shadow: none;
+  border-radius: 6px;
 }
 .wide-button:hover {
-  background: rgba(200, 220, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
 }
 .selection-card {
   background: var(--accent-wash);
@@ -890,7 +812,7 @@ small {
 }
 .selection-card button {
   font-size: 9px;
-  background: rgba(200, 220, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--border);
   padding: 7px;
   flex: 1;
@@ -958,9 +880,7 @@ small {
   margin-bottom: 5px;
 }
 .result-metric > strong {
-  font:
-    20px "IBM Plex Mono",
-    monospace;
+  font: 20px var(--font-mono);
   color: var(--accent-text);
 }
 .result-metric small {
@@ -976,9 +896,7 @@ small {
   color: var(--text-muted);
 }
 .iteration-row strong {
-  font:
-    9px "IBM Plex Mono",
-    monospace;
+  font: 9px var(--font-mono);
   color: var(--text-secondary);
 }
 .study-warning {
@@ -1035,13 +953,11 @@ small {
   min-height: 220px;
   resize: vertical;
   padding: 10px;
-  font:
-    9px/1.6 "IBM Plex Mono",
-    monospace;
+  font: 9px/1.6 var(--font-mono);
   margin-bottom: 12px;
   tab-size: 2;
-  background: rgba(5, 8, 14, 0.45);
-  color: #c3d2e8;
+  background: #101010;
+  color: #c3c3c3;
   border-radius: 12px;
   font-size: 10px;
 }
@@ -1054,9 +970,7 @@ small {
   height: 110px;
   margin: 6px 0;
   padding: 8px;
-  font:
-    10px/1.5 "IBM Plex Mono",
-    monospace;
+  font: 10px/1.5 var(--font-mono);
   resize: vertical;
 }
 .schema-link {
@@ -1153,9 +1067,7 @@ small {
 }
 .finding small {
   display: block;
-  font:
-    8px "IBM Plex Mono",
-    monospace;
+  font: 8px var(--font-mono);
   margin-top: 4px;
   color: var(--text-muted);
 }
@@ -1250,7 +1162,7 @@ small {
   background: var(--accent-wash);
   border-bottom: 1px solid var(--border);
   color: var(--accent-text);
-  border: 1px solid rgba(155, 191, 255, 0.15);
+  border: 1px solid var(--border);
   border-radius: 14px;
   margin: 0 16px 12px;
   backdrop-filter: blur(24px);
@@ -1301,9 +1213,7 @@ small {
   display: flex;
   align-items: center;
   gap: 10px;
-  font:
-    11px "IBM Plex Mono",
-    monospace;
+  font: 11px var(--font-mono);
   padding: 11px;
   border: 1px solid rgba(229, 195, 143, 0.2);
   background: rgba(46, 39, 31, 0.9);
@@ -1315,7 +1225,7 @@ small {
   position: absolute;
   right: 22px;
   bottom: 86px;
-  background: rgba(25, 30, 39, 0.86);
+  background: rgba(23, 23, 23, 0.95);
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1343,9 +1253,7 @@ small {
 .field-legend small {
   display: flex;
   justify-content: space-between;
-  font:
-    9px "IBM Plex Mono",
-    monospace;
+  font: 9px var(--font-mono);
   color: var(--text-muted);
 }
 .field-legend small b {
@@ -1418,7 +1326,7 @@ summary {
   }
   .canvas-toolbar > div,
   .canvas-actions {
-    background: #252c39;
+    background: #202020;
   }
 }
 option {
@@ -1459,17 +1367,20 @@ textarea:focus-visible {
   top: 42px;
   width: 232px;
   z-index: 20;
-  padding: 6px;
-  background: #20242d;
+  padding: 4px;
+  background: #181818;
   border: 1px solid var(--border-bright);
-  border-radius: 12px;
-  box-shadow: 0 12px 36px #0008;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  border-color: var(--border);
 }
 .tools-popover button {
   width: 100%;
   justify-content: flex-start;
-  padding: 10px;
+  padding: 8px 9px;
   font-size: 12px;
+  border-radius: 5px;
+  min-height: 32px;
 }
 .menu-divider {
   height: 1px;
@@ -1582,9 +1493,24 @@ textarea:focus-visible {
     bottom: 8px;
     width: min(320px, calc(100vw - 24px));
     z-index: 5;
-    background: #1b1e25;
+    background: #161616;
   }
   .source-panel {
     width: calc(100vw - 24px);
   }
+}
+
+.field select.ui-select {
+  padding-right: 28px;
+}
+.ui-button svg {
+  stroke-width: 1.5;
+}
+
+.properties > .wide-button + .inspector-title {
+  margin-top: 18px;
+}
+.assumptions {
+  font-size: 10px;
+  line-height: 1.6;
 }

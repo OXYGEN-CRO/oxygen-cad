@@ -55,11 +55,11 @@ export function Viewport(props: Props) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
-    scene.add(new THREE.HemisphereLight(0xdbe8ff, 0x263243, 2.1));
-    const light = new THREE.DirectionalLight(0xe6efff, 3);
+    scene.add(new THREE.HemisphereLight(0xf2f2f2, 0x242424, 2.1));
+    const light = new THREE.DirectionalLight(0xffffff, 2.6);
     light.position.set(60, -80, 160);
     scene.add(light);
-    const rim = new THREE.DirectionalLight(0xb9d1f4, 0.9);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.65);
     rim.position.set(-80, 60, 90);
     scene.add(rim);
     const grid = new THREE.GridHelper(
@@ -74,6 +74,7 @@ export function Viewport(props: Props) {
     grid.position.z = -0.1;
     scene.add(grid);
     const axes = new THREE.AxesHelper(14);
+    axes.setColors(0x666666, 0x929292, 0xbcbcbc);
     scene.add(axes);
     const model = new THREE.Group();
     scene.add(model);
@@ -343,7 +344,7 @@ export function Viewport(props: Props) {
         const marker = new THREE.Mesh(
           bg,
           new THREE.MeshBasicMaterial({
-            color: "#3a8ba3",
+            color: "#949494",
             transparent: true,
             opacity: 0.3,
             side: THREE.DoubleSide,
@@ -364,7 +365,7 @@ export function Viewport(props: Props) {
           direction.normalize(),
           new THREE.Vector3(...(face.center as [number, number, number])),
           Math.max(8, diameter * 0.2),
-          "#bd793b",
+          "#b0b0b0",
         );
         r.model.add(arrow);
       }
@@ -378,7 +379,7 @@ export function Viewport(props: Props) {
       r.model.add(
         new THREE.Line(
           bg,
-          new THREE.LineBasicMaterial({ color: "#c57a21", depthTest: false }),
+          new THREE.LineBasicMaterial({ color: "#cccccc", depthTest: false }),
         ),
       );
     }

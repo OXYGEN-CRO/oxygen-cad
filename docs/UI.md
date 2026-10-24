@@ -1,19 +1,23 @@
-# Oxygen Glass
+# Oxygen Graphite
 
-The studio uses a dark glass interface: translucent charcoal panels, softly illuminated edges, rounded controls, silver text and restrained ice-blue actions. The design applies to the functioning CAD editor, verification tools, history and source view.
+The studio uses a monochrome technical interface: black canvas, graphite controls, fine grey borders, quiet selected states and restrained glass depth. The design applies to the functioning CAD editor, verification tools, history and source view.
 
 ## Shared tokens
 
 `frontend/src/tokens.css` defines the semantic colors, materials, radii, spacing and motion values. `style.css` imports these tokens for the application. The Three.js viewport reads the `--viewport-*` tokens when it initializes, so the real geometry view shares the same dark palette.
 
 - Canvas: near-black, with a quiet grid and cool neutral model lighting.
-- Panels: 24px glass blur, rounded corners, a fine border and soft upper reflection.
-- Controls: inset dark inputs, rounded toolbars, segmented navigation and an illuminated primary action.
+- Panels: 16px glass blur, rounded corners, a fine border and minimal reflection.
+- Controls: inset dark inputs, rounded toolbars, segmented navigation and an dark graphite primary action.
 - State: mint for current/success, amber for stale/review/selection, rose for errors. Existing numerical result colors and legends retain their engineering meaning.
-- Type: native system sans-serif, with IBM Plex Mono for dimensions, source and measured results.
+- Type: locally served Geist Sans, with Geist Mono for dimensions, source and measured results.
 - Access: visible focus rings, native dark form controls, named icon actions, exposed toggle state, reduced-motion support and solid-surface fallbacks.
 
 Place prefixed backdrop declarations before the standard declaration. The production CSS optimizer can otherwise discard the standard declaration when the shared blur value is a custom property. The browser test checks the computed blur in the built application.
+
+## Reusable controls
+
+`frontend/src/components/ui.tsx` and `ui.css` define the shared Button, Input and SelectControl primitives. Every native studio action and field uses these primitives while keeping existing event handlers, refs and commands. Primary actions have a dark graphite fill in both their idle and hover states. Inputs use the sans-serif face for comfortable editing; vectors, source and measured results use the mono face. Corners, borders, icon strokes and spacing follow the same compact treatment.
 
 ## Responsive studio
 

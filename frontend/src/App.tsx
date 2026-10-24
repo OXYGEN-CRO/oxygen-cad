@@ -43,6 +43,7 @@ import {
   type State,
 } from "./api";
 import { Viewport } from "./Viewport";
+import { Button, Input, SelectControl } from "./components/ui";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 const number = (value: unknown) =>
@@ -56,7 +57,7 @@ function Field({ label, value, onChange, type = "text", unit, step }: any) {
     <label className="field">
       <span>{label}</span>
       <div>
-        <input
+        <Input
           aria-label={label}
           type={type}
           step={step ?? "any"}
@@ -93,7 +94,7 @@ function VectorField({
         {value.map((v, i) => (
           <label key={i}>
             <span>{"XYZ"[i]}</span>
-            <input
+            <Input
               type="number"
               step="any"
               aria-label={`${label} ${"XYZ"[i]}`}
@@ -114,7 +115,7 @@ function Select({ label, value, options, onChange }: any) {
   return (
     <label className="field">
       <span>{label}</span>
-      <select
+      <SelectControl
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -128,7 +129,7 @@ function Select({ label, value, options, onChange }: any) {
             </option>
           ),
         )}
-      </select>
+      </SelectControl>
     </label>
   );
 }
@@ -411,7 +412,7 @@ export default function App() {
           <strong>oxygen</strong>
         </div>
         <div className="project-title">
-          <input
+          <Input
             aria-label="Project name"
             value={current.name}
             onChange={(e) => edit((p) => (p.name = e.target.value))}
@@ -427,20 +428,20 @@ export default function App() {
             ["design", "Design"],
             ["verify", "Verify"],
           ].map(([id, label]) => (
-            <button
+            <Button
               key={id}
               className={tab === id ? "active" : ""}
               aria-pressed={tab === id}
               onClick={() => setTab(id)}
             >
               {label}
-            </button>
+            </Button>
           ))}
         </nav>
         <div className="top-actions">
           {dirty && (
-            <button
-              className="primary"
+            <Button
+              variant="primary"
               disabled={busy}
               onClick={() => {
                 try {
@@ -452,9 +453,9 @@ export default function App() {
             >
               <Save size={15} />
               Save changes
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             title="Export"
             aria-label="Export"
             disabled={
@@ -463,7 +464,7 @@ export default function App() {
             onClick={() => run("export")}
           >
             <ArrowDownToLine size={16} />
-          </button>
+          </Button>
           {lastExport && (
             <a
               className="download-link"
@@ -474,14 +475,14 @@ export default function App() {
             </a>
           )}
           <div className="tools-menu" ref={toolsMenu}>
-            <button
+            <Button
               title="Project tools"
               aria-label="Project tools"
               aria-expanded={toolsOpen}
               onClick={() => setToolsOpen(!toolsOpen)}
             >
               <MoreHorizontal size={19} />
-            </button>
+            </Button>
             {toolsOpen && (
               <div className="tools-popover" aria-label="Project tools menu">
                 {[
@@ -489,7 +490,7 @@ export default function App() {
                   ["source", Code2, "Source"],
                   ["history", History, "History"],
                 ].map(([id, Icon, label]: any) => (
-                  <button
+                  <Button
                     key={id}
                     onClick={() => {
                       setTab(id);
@@ -498,9 +499,9 @@ export default function App() {
                   >
                     <Icon size={15} />
                     {label}
-                  </button>
+                  </Button>
                 ))}
-                <button
+                <Button
                   disabled={dirty}
                   onClick={() => {
                     upload.current?.click();
@@ -509,8 +510,8 @@ export default function App() {
                 >
                   <Upload size={15} />
                   Import STEP
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => {
                     setShowAgent(!showAgent);
                     setToolsOpen(false);
@@ -518,9 +519,9 @@ export default function App() {
                 >
                   <Terminal size={15} />
                   Agent tools
-                </button>
+                </Button>
                 <div className="menu-divider" />
-                <button
+                <Button
                   disabled={dirty || state.project.revision === 0}
                   onClick={() => {
                     history("undo");
@@ -529,8 +530,8 @@ export default function App() {
                 >
                   <ArrowLeft size={15} />
                   Undo
-                </button>
-                <button
+                </Button>
+                <Button
                   disabled={dirty}
                   onClick={() => {
                     history("redo");
@@ -539,7 +540,7 @@ export default function App() {
                 >
                   <ArrowRight size={15} />
                   Redo
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -549,9 +550,9 @@ export default function App() {
         <div role="alert" className="error-banner">
           <AlertTriangle size={16} />
           <span>{error.replace("Error: ", "")}</span>
-          <button onClick={() => setError("")} aria-label="Dismiss error">
+          <Button onClick={() => setError("")} aria-label="Dismiss error">
             <X size={16} />
-          </button>
+          </Button>
         </div>
       )}
       {showAgent && (
@@ -565,7 +566,7 @@ export default function App() {
               {state.project.revision}
             </code>
           </div>
-          <button
+          <Button
             aria-label="Copy agent commands"
             onClick={() =>
               navigator.clipboard.writeText(
@@ -574,30 +575,30 @@ export default function App() {
             }
           >
             <Copy size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
             aria-label="Close agent tools"
             onClick={() => setShowAgent(false)}
           >
             <X size={15} />
-          </button>
+          </Button>
         </div>
       )}
       <main className="workspace">
         <aside className="left-panel">
           <div className="panel-heading">
             <span>Features</span>
-            <button
+            <Button
               onClick={() => setAddOpen(!addOpen)}
               aria-label="Add feature"
               aria-expanded={addOpen}
             >
               <Plus size={16} />
-            </button>
+            </Button>
           </div>
           <div className="feature-list">
             {current.features.map((f) => (
-              <button
+              <Button
                 key={f.id}
                 className={`tree-item ${active === f.id ? "selected" : ""} ${f.suppressed ? "suppressed" : ""}`}
                 onClick={() => {
@@ -614,17 +615,17 @@ export default function App() {
                   <Settings2 size={15} />
                 )}
                 <span>{f.name || f.id}</span>
-              </button>
+              </Button>
             ))}
           </div>
           {addOpen && (
             <div className="add-menu">
               {["profile", "extrude", "hole", "fillet", "chamfer"].map(
                 (type) => (
-                  <button key={type} onClick={() => add(type)}>
+                  <Button key={type} onClick={() => add(type)}>
                     <Plus size={14} />
                     Add {type}
-                  </button>
+                  </Button>
                 ),
               )}
             </div>
@@ -637,7 +638,7 @@ export default function App() {
           )}
           {current.references.map((ref) => (
             <div className="reference-row" key={ref.id}>
-              <button
+              <Button
                 className={`tree-item ${active === ref.id ? "selected" : ""}`}
                 onClick={() => {
                   setActive(ref.id);
@@ -646,8 +647,8 @@ export default function App() {
               >
                 <FileBox size={14} />
                 <span>{ref.name}</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 title="Toggle reference visibility"
                 onClick={() =>
                   edit((p) => {
@@ -657,10 +658,10 @@ export default function App() {
                 }
               >
                 {ref.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-              </button>
+              </Button>
             </div>
           ))}
-          <input
+          <Input
             ref={upload}
             type="file"
             accept=".step,.stp"
@@ -675,7 +676,7 @@ export default function App() {
         <section className="canvas-panel">
           <div className="canvas-toolbar">
             <div>
-              <button
+              <Button
                 className={measureMode ? "tool-active" : ""}
                 title="Measure between two surface points"
                 aria-pressed={measureMode}
@@ -685,30 +686,30 @@ export default function App() {
                 }}
               >
                 <Ruler size={17} />
-              </button>
+              </Button>
               <span />
-              <button
+              <Button
                 className={section ? "tool-active" : ""}
                 title="Section view"
                 aria-pressed={section}
                 onClick={() => setSection(!section)}
               >
                 <Scissors size={17} />
-              </button>
+              </Button>
               {current.references.length > 0 && (
-                <button
+                <Button
                   className={isolate ? "tool-active" : ""}
                   title="Isolate manufactured part"
                   aria-pressed={isolate}
                   onClick={() => setIsolate(!isolate)}
                 >
                   <Eye size={17} />
-                </button>
+                </Button>
               )}
             </div>
             <div>
               {state.analysis && (
-                <select
+                <SelectControl
                   aria-label="Viewport display"
                   value={field}
                   onChange={(e) => setField(e.target.value as any)}
@@ -720,11 +721,11 @@ export default function App() {
                   <option value="displacement" disabled={!state.analysis}>
                     Displacement
                   </option>
-                </select>
+                </SelectControl>
               )}
-              <button title="Fit model" onClick={() => setFit((v) => v + 1)}>
+              <Button title="Fit model" onClick={() => setFit((v) => v + 1)}>
                 <Focus size={17} />
-              </button>
+              </Button>
             </div>
           </div>
           <Viewport
@@ -770,9 +771,9 @@ export default function App() {
               {measure.length === 1
                 ? "Select a second point"
                 : `${Math.hypot(...measure[0].map((v, i) => v - measure[1][i])).toFixed(3)} mm`}
-              <button onClick={() => setMeasure([])}>
+              <Button onClick={() => setMeasure([])}>
                 <X size={13} />
-              </button>
+              </Button>
             </div>
           )}
           {field !== "solid" && state.analysis && (
@@ -794,7 +795,7 @@ export default function App() {
               </small>
               <label>
                 Deformation ×{deformation}
-                <input
+                <Input
                   aria-label="Deformation scale"
                   type="range"
                   min="0"
@@ -807,8 +808,9 @@ export default function App() {
           )}
           {(state.geometry_state !== "current" || pending) && (
             <div className="canvas-actions">
-              <button
+              <Button
                 className="build-button"
+                variant="primary"
                 disabled={busy || dirty || pending}
                 onClick={() => run("build")}
               >
@@ -818,7 +820,7 @@ export default function App() {
                   <Play size={15} />
                 )}
                 {pending ? "Working…" : "Build model"}
-              </button>
+              </Button>
             </div>
           )}
         </section>
@@ -838,7 +840,7 @@ export default function App() {
                         ? "PROJECT"
                         : "PROPERTIES"}
               </span>
-              <button
+              <Button
                 aria-label="Close properties"
                 onClick={() => {
                   setTab("design");
@@ -847,7 +849,7 @@ export default function App() {
                 }}
               >
                 <X size={15} />
-              </button>
+              </Button>
             </div>
             <div className="properties">
               {tab === "design" && (
@@ -871,7 +873,7 @@ export default function App() {
                         onChange={(v: string) => patchFeature({ name: v })}
                       />
                       <label className="checkbox">
-                        <input
+                        <Input
                           type="checkbox"
                           checked={feature.suppressed}
                           onChange={(e) =>
@@ -1026,7 +1028,7 @@ export default function App() {
                             onChange={(v: string) => patchFeature({ axis: v })}
                           />
                           <label className="checkbox">
-                            <input
+                            <Input
                               type="checkbox"
                               checked={feature.through}
                               onChange={(e) =>
@@ -1046,7 +1048,7 @@ export default function App() {
                                 }
                               />
                               <label className="checkbox">
-                                <input
+                                <Input
                                   type="checkbox"
                                   checked={feature.reverse}
                                   onChange={(e) =>
@@ -1129,7 +1131,7 @@ export default function App() {
                         </>
                       )}
                       <div className="feature-order">
-                        <button
+                        <Button
                           disabled={current.features[0].id === feature.id}
                           onClick={() =>
                             edit((p) => {
@@ -1144,8 +1146,8 @@ export default function App() {
                           }
                         >
                           Move earlier
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           disabled={current.features.at(-1)?.id === feature.id}
                           onClick={() =>
                             edit((p) => {
@@ -1160,10 +1162,11 @@ export default function App() {
                           }
                         >
                           Move later
-                        </button>
+                        </Button>
                       </div>
-                      <button
+                      <Button
                         className="danger-link"
+                        variant="danger"
                         onClick={() => {
                           edit(
                             (p) =>
@@ -1176,7 +1179,7 @@ export default function App() {
                       >
                         <Trash2 size={14} />
                         Delete feature
-                      </button>
+                      </Button>
                     </>
                   ) : reference ? (
                     <>
@@ -1210,7 +1213,7 @@ export default function App() {
                         }
                       />
                       <label className="checkbox">
-                        <input
+                        <Input
                           type="checkbox"
                           checked={reference.check_interference}
                           onChange={(e) =>
@@ -1224,8 +1227,9 @@ export default function App() {
                         />
                         Check interference
                       </label>
-                      <button
+                      <Button
                         className="danger-link"
+                        variant="danger"
                         onClick={() => {
                           edit(
                             (p) =>
@@ -1238,7 +1242,7 @@ export default function App() {
                       >
                         <Trash2 size={14} />
                         Remove reference
-                      </button>
+                      </Button>
                     </>
                   ) : null}
                 </>
@@ -1247,7 +1251,7 @@ export default function App() {
                 <>
                   <div className="section-heading">
                     PARAMETERS
-                    <button
+                    <Button
                       title="Add parameter"
                       onClick={() => {
                         const name = prompt(
@@ -1265,7 +1269,7 @@ export default function App() {
                       }}
                     >
                       <Plus size={14} />
-                    </button>
+                    </Button>
                   </div>
                   {Object.entries(current.parameters).map(([name, p]) => (
                     <div className="parameter" key={name}>
@@ -1278,7 +1282,7 @@ export default function App() {
                           edit((d) => (d.parameters[name].value = v))
                         }
                       />
-                      <button
+                      <Button
                         aria-label={`${p.locked ? "Unlock" : "Lock"} ${name}`}
                         className={p.locked ? "locked" : ""}
                         onClick={() =>
@@ -1286,8 +1290,8 @@ export default function App() {
                         }
                       >
                         {p.locked ? <Lock size={14} /> : <Unlock size={14} />}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         title={`Delete ${name}`}
                         onClick={() =>
                           edit((d) => {
@@ -1296,7 +1300,7 @@ export default function App() {
                         }
                       >
                         <X size={12} />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                   <details>
@@ -1317,7 +1321,7 @@ export default function App() {
                   </details>
                   <div className="section-heading">
                     REQUIREMENTS
-                    <button
+                    <Button
                       title="Add requirement"
                       onClick={() =>
                         edit((p) =>
@@ -1332,20 +1336,20 @@ export default function App() {
                       }
                     >
                       <Plus size={14} />
-                    </button>
+                    </Button>
                   </div>
                   {current.requirements.map((req, i) => (
                     <div className="requirement-card" key={req.id}>
                       <div>
                         <strong>{req.id}</strong>
-                        <button
+                        <Button
                           title="Delete requirement"
                           onClick={() =>
                             edit((p) => p.requirements.splice(i, 1))
                           }
                         >
                           <X size={13} />
-                        </button>
+                        </Button>
                       </div>
                       <Select
                         label="Requirement type"
@@ -1395,7 +1399,7 @@ export default function App() {
                         />
                       )}
                       <label className="checkbox">
-                        <input
+                        <Input
                           type="checkbox"
                           checked={req.enabled}
                           onChange={(e) =>
@@ -1413,14 +1417,14 @@ export default function App() {
               )}
               {tab === "verify" && (
                 <>
-                  <button
+                  <Button
                     className="wide-button"
                     disabled={busy || dirty || pending}
                     onClick={() => run("check")}
                   >
                     <ShieldCheck size={15} />
                     Check fit
-                  </button>
+                  </Button>
                   <div className="inspector-title">
                     <div className="feature-glyph">
                       <Activity size={18} />
@@ -1440,20 +1444,20 @@ export default function App() {
                       <div className="selection-card">
                         <code>{selection.id}</code>
                         <div>
-                          <button onClick={() => fixed(selection.id)}>
+                          <Button onClick={() => fixed(selection.id)}>
                             <Lock size={13} />
                             Fix face
-                          </button>
-                          <button onClick={() => force(selection.id)}>
+                          </Button>
+                          <Button onClick={() => force(selection.id)}>
                             <Plus size={13} />
                             Apply force
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )}
                   <div className="section-heading">MATERIAL</div>
                   {!current.material ? (
-                    <button
+                    <Button
                       className="wide-button"
                       onClick={() =>
                         edit(
@@ -1471,7 +1475,7 @@ export default function App() {
                     >
                       <Plus size={14} />
                       Define material
-                    </button>
+                    </Button>
                   ) : (
                     <>
                       <Field
@@ -1524,14 +1528,14 @@ export default function App() {
                     <div className="region-chip" key={face}>
                       <Lock size={13} />
                       <code>{face}</code>
-                      <button
+                      <Button
                         title="Remove support"
                         onClick={() =>
                           edit((p) => p.study.fixed_faces.splice(i, 1))
                         }
                       >
                         <X size={13} />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                   <div className="section-heading">DISTRIBUTED FORCES</div>
@@ -1542,14 +1546,14 @@ export default function App() {
                     <div className="load-card" key={load.face}>
                       <div>
                         <code>{load.face}</code>
-                        <button
+                        <Button
                           title="Remove force"
                           onClick={() =>
                             edit((p) => p.study.forces.splice(i, 1))
                           }
                         >
                           <X size={13} />
-                        </button>
+                        </Button>
                       </div>
                       <VectorField
                         label="Force"
@@ -1596,17 +1600,17 @@ export default function App() {
                           edit((p) => (p.study.stress_probe_mm = v))
                         }
                       />
-                      <button
+                      <Button
                         className="text-button"
                         onClick={() =>
                           edit((p) => (p.study.stress_probe_mm = null))
                         }
                       >
                         Remove stress probe
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       className="wide-button"
                       onClick={() =>
                         edit(
@@ -1618,10 +1622,10 @@ export default function App() {
                       }
                     >
                       Add named stress probe
-                    </button>
+                    </Button>
                   )}
                   <label className="assumptions">
-                    <input
+                    <Input
                       type="checkbox"
                       checked={current.study.assumptions_confirmed}
                       onChange={(e) =>
@@ -1637,8 +1641,9 @@ export default function App() {
                       dynamic effects apply.
                     </span>
                   </label>
-                  <button
-                    className="primary full-width"
+                  <Button
+                    className="full-width"
+                    variant="primary"
                     disabled={
                       dirty ||
                       busy ||
@@ -1649,7 +1654,7 @@ export default function App() {
                   >
                     <Play size={15} />
                     Run static study
-                  </button>
+                  </Button>
                   <div className="section-heading">
                     RESULTS{" "}
                     <span className="result-state">
@@ -1673,18 +1678,18 @@ export default function App() {
                         </strong>
                       </div>
                       <div className="two-fields">
-                        <button
+                        <Button
                           className="wide-button"
                           onClick={() => setField("stress")}
                         >
                           View stress
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           className="wide-button"
                           onClick={() => setField("displacement")}
                         >
                           View displacement
-                        </button>
+                        </Button>
                       </div>
                       <p className="muted">
                         Reaction balance error:{" "}
@@ -1723,12 +1728,12 @@ export default function App() {
                       <p>{item.summary}</p>
                       <small>{new Date(item.time).toLocaleString()}</small>
                       {item.revision !== current.revision && (
-                        <button
+                        <Button
                           onClick={() => history("restore", item.revision)}
                         >
                           <RotateCcw size={13} />
                           Restore
-                        </button>
+                        </Button>
                       )}
                     </div>
                   ))}
@@ -1747,8 +1752,9 @@ export default function App() {
                       setDirty(true);
                     }}
                   />
-                  <button
-                    className="primary full-width"
+                  <Button
+                    className="full-width"
+                    variant="primary"
                     onClick={() => {
                       try {
                         save(JSON.parse(source));
@@ -1759,7 +1765,7 @@ export default function App() {
                   >
                     <Check size={15} />
                     Apply source document
-                  </button>
+                  </Button>
                   <a className="schema-link" href="/api/schema" target="_blank">
                     View project JSON Schema ↗
                   </a>
@@ -1778,7 +1784,7 @@ export default function App() {
                       Point{" "}
                       {selection.point.map((v) => v.toFixed(3)).join(", ")} mm
                     </small>
-                    <button
+                    <Button
                       className="wide-button"
                       onClick={() => {
                         setTab("verify");
@@ -1786,7 +1792,7 @@ export default function App() {
                       }}
                     >
                       Use in study
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
@@ -1798,7 +1804,7 @@ export default function App() {
         <section
           className={`verification-panel ${showBottom ? "" : "collapsed"}`}
         >
-          <button
+          <Button
             className="verification-heading"
             aria-expanded={showBottom}
             aria-controls="verification-body"
@@ -1808,7 +1814,7 @@ export default function App() {
             <strong>Verification</strong>
             <span>{checks?.state ?? state.jobs[0]?.state}</span>
             <ChevronDown size={15} />
-          </button>
+          </Button>
           {showBottom && (
             <div className="verification-body" id="verification-body">
               <div className="check-list">
@@ -1859,14 +1865,14 @@ export default function App() {
                       )}
                     </div>
                     {["running", "queued"].includes(job.state) && (
-                      <button
+                      <Button
                         title="Cancel job"
                         onClick={() =>
                           post(`jobs/${job.id}/cancel`, {}).then(refresh)
                         }
                       >
                         <X size={13} />
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ))}

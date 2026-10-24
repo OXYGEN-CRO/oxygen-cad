@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("production glass theme remains dark and usable across studio views", async ({
+test("graphite components stay neutral, dark and usable across studio views", async ({
   page,
   request,
 }) => {
@@ -10,6 +10,7 @@ test("production glass theme remains dark and usable across studio views", async
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
   for (const width of [320, 390, 768, 1024, 1512]) {
     await page.setViewportSize({ width, height: 982 });
     for (const view of ["Design", "Verify", "History", "Source"]) {
@@ -35,6 +36,10 @@ test("production glass theme remains dark and usable across studio views", async
               const toolbar = getComputedStyle(
                 document.querySelector(".canvas-toolbar > div")!,
               );
+              const neutral = (value: string) => {
+                const channels = rgb(value);
+                return Math.max(...channels) - Math.min(...channels) < 3;
+              };
               return {
                 dark:
                   getComputedStyle(document.documentElement).colorScheme ===
@@ -46,6 +51,19 @@ test("production glass theme remains dark and usable across studio views", async
                 rounded: parseFloat(panel.borderRadius) >= 8,
                 glass: toolbar.backdropFilter !== "none",
                 fits: document.documentElement.scrollWidth <= innerWidth,
+                neutral:
+                  neutral(toolbar.backgroundColor) &&
+                  neutral(input.color) &&
+                  neutral(getComputedStyle(document.body).backgroundColor),
+                geist:
+                  getComputedStyle(document.body).fontFamily.includes(
+                    "Geist Variable",
+                  ) &&
+                  [...document.fonts].some(
+                    (font) =>
+                      font.family.includes("Geist Variable") &&
+                      font.status === "loaded",
+                  ),
               };
             }),
           { message: `${view} appearance and layout at ${width}px` },
@@ -57,8 +75,36 @@ test("production glass theme remains dark and usable across studio views", async
           rounded: true,
           glass: true,
           fits: true,
+          neutral: true,
+          geist: true,
         });
     }
+  }
+  await page.getByRole("button", { name: "Design", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Mounting plate", exact: false })
+    .click();
+  await page.getByLabel("Width", { exact: true }).fill("64");
+  const save = page.getByRole("button", { name: "Save changes", exact: true });
+  await expect(save).toBeEnabled();
+  for (const hovered of [false, true]) {
+    if (hovered) await save.hover();
+    await expect
+      .poll(() =>
+        save.evaluate((element) => {
+          const style = getComputedStyle(element);
+          const channels = style.backgroundColor
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number);
+          return (
+            channels.every((channel) => channel < 70) &&
+            Math.max(...channels) - Math.min(...channels) < 3 &&
+            style.backgroundImage === "none"
+          );
+        }),
+      )
+      .toBeTruthy();
   }
   const after = await (await request.get("/api/project")).json();
   expect(after).toEqual(before);
