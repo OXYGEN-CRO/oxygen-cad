@@ -58,11 +58,14 @@ def test_mesh_topology_repair_reports_real_boundary_change(store):
     assert before["watertight"] is False
     assert before["volume_mm3"] is None
     asset = interop._put_asset(store, mesh.export(file_type="stl"), "open.stl", "stl")
-    loaded = interop._load_mesh(interop._asset_path(store, asset), "stl")
-    loaded.merge_vertices()
-    trimesh.repair.fix_normals(loaded, multibody=True)
-    trimesh.repair.fill_holes(loaded)
-    after = interop.mesh_diagnostics(loaded)
+    project = interop._with_assets(store.load(), asset)
+    result = interop.execute(store, project, "mesh.repair", {"asset_id": asset.id, "insert": False})
+    after = result["result"]["after"]
+    repaired = interop._asset_path(store, interop.Asset.model_validate(result["result"]["asset"]))
+    # Independently reopen the actual derived exchange artifact.
+    loaded = trimesh.load(repaired, force="mesh")
+    assert loaded.is_watertight
+    assert loaded.volume == pytest.approx(6000)
     assert after["boundary_edges"] == 0
     assert after["watertight"] is True
     assert after["volume_mm3"] == pytest.approx(6000)
