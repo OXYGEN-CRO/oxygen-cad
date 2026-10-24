@@ -97,8 +97,16 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
             raise ValueError("Add a machining operation to this setup")
         paths, reports = [], []
         for op in ops:
-            path = generate(op, setup, tools[op.tool_id], machine, cancel)
+            surface = None
+            if op.strategy == "parallel_finish":
+                from .manufacturing_ops.surface_cam import finish
+                path, surface = finish(_current_mesh(store, project), destination, op, setup, tools[op.tool_id], machine, cancel)
+            else:
+                path = generate(op, setup, tools[op.tool_id], machine, cancel)
             report = verify_path(path, op, setup, tools[op.tool_id], machine)
+            if surface is not None:
+                report.update(surface_finishing=surface, stock_removal_verified=False,
+                              model="OpenCAMLib ball drop cutter; independent sampled sphere/triangle check + machine/fixture envelopes")
             reports.append({"operation_id": op.id, **report})
             paths.append(path)
         _json(destination/"toolpaths.json", [p.wire() for p in paths])

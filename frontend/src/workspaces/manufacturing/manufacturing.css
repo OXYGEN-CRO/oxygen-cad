@@ -1,0 +1,159 @@
+.manufacturing-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  color: var(--text);
+  font: 12px var(--font-sans);
+}
+.manufacturing-panel nav,
+.manufacturing-actions,
+.manufacturing-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.manufacturing-heading {
+  justify-content: space-between;
+}
+.manufacturing-panel nav {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.manufacturing-panel nav [aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+.manufacturing-panel details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px;
+  min-width: 0;
+}
+.manufacturing-panel summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 550;
+  padding: 2px 0 8px;
+}
+.manufacturing-panel details[open] > :not(summary) {
+  margin-top: 8px;
+}
+.manufacturing-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.manufacturing-field > span,
+.manufacturing-vector legend {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.manufacturing-field textarea {
+  box-sizing: border-box;
+  resize: vertical;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface-inset);
+  padding: 7px;
+  font: 11px var(--font-mono);
+}
+.manufacturing-vector {
+  margin: 0;
+  padding: 3px 0 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 0;
+}
+.manufacturing-vector input {
+  width: 100%;
+  min-width: 0;
+}
+.manufacturing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.manufacturing-grid input,
+.manufacturing-field select,
+.manufacturing-field input {
+  width: 100%;
+  min-width: 0;
+}
+.manufacturing-panel p {
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.manufacturing-empty {
+  padding: 8px 0;
+  display: grid;
+  gap: 8px;
+}
+.manufacturing-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manufacturing-results {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.manufacturing-results pre {
+  font: 10px var(--font-mono);
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.manufacturing-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.manufacturing-artifacts a {
+  color: var(--accent-text);
+  font-size: 11px;
+}
+.manufacturing-preview {
+  width: 100%;
+  height: 180px;
+  background: var(--surface-inset);
+  border-radius: var(--radius-control);
+}
+.manufacturing-preview line {
+  stroke: var(--success);
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
+}
+.manufacturing-preview line[data-motion="rapid"] {
+  stroke: var(--text-muted);
+  stroke-dasharray: 2 3;
+  stroke-width: 0.4;
+  opacity: 0.45;
+}
+.manufacturing-preview path {
+  fill: var(--accent-wash);
+  stroke: var(--text-secondary);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+@media (max-width: 420px) {
+  .manufacturing-panel {
+    padding: 8px;
+  }
+  .manufacturing-grid {
+    gap: 6px;
+  }
+}

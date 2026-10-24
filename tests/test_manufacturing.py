@@ -208,6 +208,76 @@ def test_worker_threading_event_cancel_contract(store, process_project):
         m.execute(store, process_project, "post", {"setup_id":"top"}, event)
 
 
+def test_canonical_bent_sheet_dxf_bend_allowance_cold_reopen_and_rules(tmp_path):
+    from o3d.model import Project
+    from o3d.store import Store
+    from o3d.native_document import execute_native, query_native
+    store = Store(tmp_path/"sheet")
+    store.init(Project())
+    for command, params in [
+        ("sheet.manage_rules", {"name":"Test steel","thickness":2,"bend_radius":3,"k_factor":0.4,"active":True}),
+        ("sketch.create", {"name":"Base","plane":"XY"}),
+        ("sketch.rectangle.two_point", {"p0":[0,0],"p1":[100,60]}),
+        ("sketch.finish", {}), ("sheet.flange", {"sketch":"Base"}),
+        ("sheet.flange", {"edges":[[50,0,2]],"height":20,"angle":90}),
+    ]:
+        execute_native(store, store.load().revision, "human", command, params)
+    project = Store(store.root).load()
+    out = m.execute(store, project, "sheet_release", {})
+    sheet = out["sheet"]
+    assert sheet["dxf_audit"]["units"] == "mm"
+    assert sheet["dxf_audit"]["bend_lines"] == 1
+    assert sheet["dxf_audit"]["max_contour_deviation_mm"] < 0.01
+    assert sheet["flat_pattern"]["bends"][0]["allowance"] == pytest.approx(math.pi/2*3.8)
+    assert sheet["folded_step_volume_mm3"] == pytest.approx(sheet["native_volume_mm3"], rel=0.002)
+    assert query_native(project, "sheet.flat_pattern")["outline"] == sheet["flat_pattern"]["outline"]
+    execute_native(store, project.revision, "human", "sheet.manage_rules", {"name":"Test steel","k_factor":0.5})
+    changed = m.execute(store, Store(store.root).load(), "sheet_release", {})
+    assert changed["input_key"] != out["input_key"]
+    assert changed["sheet"]["flat_pattern"]["bends"][0]["allowance"] == pytest.approx(math.pi/2*4)
+
+
+def test_sheet_perforation_release_blocked(tmp_path):
+    from o3d.native import NativeSession
+    from o3d.domains.manufacturing_ops.sheet import release_session
+    with NativeSession() as session:
+        session.execute("sketch.create", {"name":"Base","plane":"XY"})
+        session.execute("sketch.rectangle.two_point", {"p0":[0,0],"p1":[100,60]})
+        session.execute("sketch.finish", {})
+        session.execute("sheet.flange", {"sketch":"Base"})
+        session.execute("sheet.perforate", {"diameter":3,"pitch":8,"margin":5})
+        with pytest.raises(ValueError, match="metadata/B-rep mismatch"):
+            release_session(session, tmp_path/"perforated")
+
+
+@pytest.mark.skipif(not os.environ.get("O3D_CAM_PYTHON"), reason="real OpenCAMLib worker requires explicit host tool")
+def test_opencamlib_ball_finishing_independent_sloped_plane_contact(tmp_path,data):
+    import numpy as np
+    import trimesh
+    from o3d.domains.manufacturing_ops.schema import Operation
+    from o3d.domains.manufacturing_ops.surface_cam import finish
+    domain = Manufacturing.model_validate(data)
+    mesh = trimesh.creation.box(extents=[30,30,10])
+    mesh.apply_translation([15,15,-5])
+    top = mesh.vertices[:,2] > -0.1
+    mesh.vertices[top,2] = mesh.vertices[top,0]*0.1
+    source = tmp_path/"wedge.stl"
+    mesh.export(source)
+    setup = domain.setups[0].model_copy(update={"stock":domain.setups[0].stock.model_copy(update={"maximum":(30,30,4)}),"clearance_z":10})
+    tool = domain.tools[0].model_copy(update={"kind":"ball_endmill"})
+    op = Operation(id="finish",name="Slope",setup_id=setup.id,tool_id=tool.id,strategy="parallel_finish",boundary=[(8,8),(22,8),(22,22),(8,22)],top_z=4,bottom_z=-2,stepover=0.4)
+    path,report = finish(source,tmp_path/"finish",op,setup,tool,domain.machines[0])
+    # Analytic ball-tip contact on z=0.1*x: tip z=surface+R*(sqrt(1+slope^2)-1).
+    compensation = 3*(math.sqrt(1.01)-1)
+    points = [p for p in path.moves if p["motion"] == "feed"]
+    assert points and max(abs(p["z"]-(0.1*p["x"]+compensation)) for p in points) < 1e-5
+    assert report["sampled_gouges"] == 0
+    assert report["minimum_sampled_ball_clearance_mm"] >= -1e-5
+    assert report["flat_reference_scallop_bound_mm"] <= setup.tolerance_mm
+    assert report["independent_sphere_samples"] > 100
+    assert len(report["binding_sha256"]) == 64
+
+
 @pytest.mark.skipif(not os.environ.get("O3D_CURA_ENGINE"), reason="real CuraEngine integration requires explicit host tool")
 def test_real_cura_slice_layers_extrusion_and_volume_fit(tmp_path, data):
     import trimesh
