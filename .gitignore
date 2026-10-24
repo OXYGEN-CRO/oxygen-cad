@@ -12,6 +12,10 @@ projects/*
 test-results/
 *.log
 .DS_Store
+.env
+.env.*
+!.env.example
+catalog-data/
 .agents/skills/oxygen-cad-*/
 .claude/skills/oxygen-cad-*/
 

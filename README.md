@@ -57,6 +57,16 @@ For an agent workspace without the plugin, install the instructions with Python 
 
 Use `--agent claude` for `.claude/skills`, or `--agent portable` for `.agents/skills`. Omit `--workspace` to install in this checkout. Setup can be rerun to update managed copies; it refuses to overwrite existing unowned skills or local edits. If the plugin already supplies the skills, use that route alone. See [agent setup and plugin installation](docs/AGENT-SKILLS.md).
 
+## Discover off-the-shelf components
+
+The optional [parts catalog](docs/CATALOG.md) adds PostgreSQL/pgvector discovery,
+provider ingestion, sourced specifications, CAD assets and purchased/custom BOM
+planning. Agents can search through a JSON CLI or REST/OpenAPI and import a
+licensed STEP model through the CAD revision checks. Start it independently with
+`docker compose -f catalog.compose.yaml up -d --build --wait` after setting the
+catalog password as described in the guide. The initial real seed contains 17,325
+provider records; stock and physical compatibility remain explicit unknowns.
+
 ## Work with a coding agent
 
 Open this repository in Claude Code, Codex, or another coding agent. Ask it to follow `AGENTS.md` and the generated instructions in `projects/demo/AGENTS.md`.

@@ -11,9 +11,15 @@ dependencies = ["build123d==0.13.0", "fastapi>=0.115,<1", "uvicorn[standard]>=0.
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "httpx>=0.28,<1"]
+catalog = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1"]
+catalog-semantic = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1", "fastembed>=0.7,<1"]
 
 [project.scripts]
 o3d = "o3d.cli:app"
+o3d-parts = "o3d.catalog.cli:main"
+
+[tool.setuptools.package-data]
+"o3d.catalog" = ["schema.sql"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

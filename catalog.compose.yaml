@@ -1,0 +1,39 @@
+services:
+  database:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: ${O3D_CATALOG_PASSWORD:?Set O3D_CATALOG_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${O3D_CATALOG_DB_PORT:-55434}:5432"
+    volumes:
+      - catalog-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  catalog:
+    build:
+      context: .
+      dockerfile: catalog.Dockerfile
+    environment:
+      O3D_CATALOG_DATABASE_URL: postgresql://catalog:${O3D_CATALOG_PASSWORD:?Set O3D_CATALOG_PASSWORD in .env}@database:5432/catalog
+    ports:
+      - "127.0.0.1:${O3D_CATALOG_PORT:-8844}:8844"
+    volumes:
+      - catalog-objects:/data
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8844/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  catalog-postgres:
+  catalog-objects:

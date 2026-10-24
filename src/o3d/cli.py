@@ -12,6 +12,9 @@ from .store import Store
 
 app = typer.Typer(no_args_is_help=True, help="Oxygen CAD: inspect, edit, build, verify and export a local CAD project.")
 
+from .catalog.cli import app as parts_app
+app.add_typer(parts_app, name="parts")
+
 
 def emit(value, machine=True):
     typer.echo(json.dumps(value, indent=2, default=str, allow_nan=False))
