@@ -14,7 +14,7 @@ RUN cargo build --release --locked --manifest-path engine/Cargo.toml --jobs 2
 
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libxrender1 libxcursor1 libxfixes3 libxext6 libxft2 libxinerama1 libx11-6 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 && rm -rf /var/lib/apt/lists/*
 # Unmodified Debian solver packages: exact binary checksums, isolated from application code.
 RUN curl -fsSL https://deb.debian.org/debian/pool/main/c/calculix-ccx/calculix-ccx_2.23-1_amd64.deb -o /tmp/ccx.deb \
  && echo '709b2d994699168f2754bd16117d51cef3241e268a7dfab185b8f78c98bd02aa  /tmp/ccx.deb' | sha256sum -c - \
@@ -28,7 +28,8 @@ COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/
 WORKDIR /app
 COPY requirements.lock mesh-requirements.lock skill-requirements.lock pyproject.toml ./
 RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requirements.lock -r skill-requirements.lock \
- && python -m venv /opt/mesh && /opt/mesh/bin/pip install --no-cache-dir -r mesh-requirements.lock
+ && python -m venv /opt/mesh && /opt/mesh/bin/pip install --no-cache-dir -r mesh-requirements.lock \
+ && /opt/mesh/bin/python -c 'import gmsh; gmsh.initialize(["oxygen-headless", "-nopopup"]); gmsh.finalize()'
 COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
