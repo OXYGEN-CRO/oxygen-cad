@@ -1,4 +1,5 @@
 import json
+import os
 from o3d.catalog.models import Part
 from o3d.joints import library, contract_from_catalog
 from o3d.cli import app
@@ -17,10 +18,13 @@ def test_existing_catalog_roundtrip_and_native_import(catalog, tmp_path, monkeyp
     row=catalog.get(str(identifier))
     recovered=contract_from_catalog(row)
     assert recovered.mpn==contract.mpn and recovered.catalog_part_id==str(identifier)
-    with TestClient(create_app(catalog.conn.info.dsn)) as client:
+    # psycopg's diagnostic DSN omits passwords. Reconnecting with it happens to
+    # work under local trust authentication but fails against CI's password auth.
+    test_dsn = os.environ['O3D_CATALOG_TEST_DATABASE_URL']
+    with TestClient(create_app(test_dsn)) as client:
         r=client.get(f'/v1/parts/{identifier}/engineering')
         assert r.status_code==200 and r.json()['mpn']==contract.mpn
-    monkeypatch.setenv('O3D_CATALOG_DATABASE_URL',catalog.conn.info.dsn)
+    monkeypatch.setenv('O3D_CATALOG_DATABASE_URL',test_dsn)
     store=Store(tmp_path/'project');store.init(Project())
     result=CliRunner().invoke(app,['--project',str(store.root),'joint','import-catalog',str(identifier),'--expected-revision','1'])
     assert result.exit_code==0,result.output
