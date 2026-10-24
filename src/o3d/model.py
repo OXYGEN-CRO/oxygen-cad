@@ -8,6 +8,7 @@ import re
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .brief_models import EngineeringBrief
 
 Scalar = float | str
 Vec3 = tuple[float, float, float]
@@ -235,6 +236,7 @@ class Project(Model):
     study: Study = Field(default_factory=Study)
     named_studies: dict[Identifier, Study] = Field(default_factory=dict, max_length=30)
     active_study_id: Identifier = "default"
+    engineering_brief: EngineeringBrief | None = None
 
     @model_validator(mode="after")
     def validate_graph(self):
