@@ -416,3 +416,32 @@ def test_authenticated_project_health_does_not_expose_saved_data(store):
     client = TestClient(_platform_app(store))
     assert client.get("/api/project").status_code == 401
     assert client.get("/api/platform/health").json() == {"service": "oxygen-cad", "api_version": 1}
+
+
+def test_native_and_host_lock_metadata_round_trips_without_changing_dimensions():
+    from copy import deepcopy
+    from types import SimpleNamespace
+    from o3d.model import Parameter
+    from o3d.store import synchronize_parameter_locks, canonical_parameter_values, enforce_agent_guards
+    before = SimpleNamespace(parameters={"width": Parameter(value=40, locked=True)}, features=[], requirements=[], domains={"modeling": {"schema_version": 1, "native_context": {"active_sketch": "sketch_1"}, "parameter_locks": {"width": True}}}, native_document={"params": [{"name": "width", "expr": "40", "unit": "mm"}]})
+    # The native Parameters UI toggles the domain map; stale legacy metadata must follow.
+    native_toggle = deepcopy(before)
+    native_toggle.domains["modeling"]["parameter_locks"]["width"] = False
+    unlocked = synchronize_parameter_locks(before, native_toggle)
+    assert unlocked.parameters["width"].locked is False
+    assert unlocked.domains["modeling"]["native_context"] == before.domains["modeling"]["native_context"]
+    assert canonical_parameter_values(unlocked) == canonical_parameter_values(before)
+    with pytest.raises(Conflict, match="locked"):
+        enforce_agent_guards(before, unlocked)
+    # The existing host Parameters UI may toggle only locked, with the same result.
+    host_toggle = deepcopy(before)
+    host_toggle.parameters["width"].locked = False
+    unlocked = synchronize_parameter_locks(before, host_toggle)
+    assert unlocked.domains["modeling"]["parameter_locks"]["width"] is False
+    assert unlocked.parameters["width"].value == 40
+    # Relocking from either UI makes both representations agree again.
+    native_relock = deepcopy(unlocked)
+    native_relock.domains["modeling"]["parameter_locks"]["width"] = True
+    relocked = synchronize_parameter_locks(unlocked, native_relock)
+    assert relocked.parameters["width"].locked is True
+    assert relocked.native_document == before.native_document

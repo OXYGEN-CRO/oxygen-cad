@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from copy import deepcopy
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,6 +68,38 @@ def enforce_agent_guards(current, updated):
     for requirement in current.requirements:
         if requirements.get(requirement.id) != requirement.model_dump():
             raise Conflict(f"Requirement {requirement.id} is user-owned; agents cannot weaken or remove it")
+
+
+def synchronize_parameter_locks(current, updated):
+    """Keep host lock metadata and canonical native lock metadata coherent.
+
+    An explicit native-map edit wins over a stale host mirror. A host-only lock
+    toggle updates that map. Dimension values and units are never synchronized.
+    """
+    if getattr(updated, "native_document", None) is None:
+        return updated
+    result = deepcopy(updated)
+    old_modeling = getattr(current, "domains", {}).get("modeling", {})
+    modeling = result.domains.setdefault("modeling", {"schema_version": 1})
+    old_locks = old_modeling.get("parameter_locks", {})
+    locks = modeling.setdefault("parameter_locks", {})
+    if not isinstance(locks, dict) or not all(isinstance(name, str) and isinstance(value, bool) for name, value in locks.items()):
+        raise ValueError("Native parameter_locks must map names to booleans")
+    for name, parameter in result.parameters.items():
+        before = current.parameters.get(name)
+        if name in locks and locks.get(name) != old_locks.get(name):
+            parameter.locked = locks[name]
+        elif before is not None and before.locked != parameter.locked:
+            locks[name] = parameter.locked
+        elif name in locks:
+            parameter.locked = locks[name]
+        else:
+            locks[name] = parameter.locked
+    return result
+
+
+def canonical_parameter_values(project):
+    return {name: parameter.model_dump(exclude={"locked"}) for name, parameter in project.parameters.items()}
 
 
 def validate_domain_transitions(current, updated, actor):
@@ -256,10 +289,11 @@ class Store:
                     state["undo"].append(current.revision)
                 else:
                     state = {"undo": state.get("undo", []) + [current.revision], "redo": []}
+            updated = synchronize_parameter_locks(current, updated)
             if command.action == "replace" and getattr(current, "native_document", None) is not None:
                 if updated.features != current.features:
                     raise Conflict("Native document is canonical; edit its native timeline instead of legacy features")
-                if updated.native_document == current.native_document and updated.parameters != current.parameters:
+                if updated.native_document == current.native_document and canonical_parameter_values(updated) != canonical_parameter_values(current):
                     raise Conflict("Native document is canonical; edit dimensions through native parameter commands")
             if command.actor == "agent":
                 enforce_agent_guards(current, updated)

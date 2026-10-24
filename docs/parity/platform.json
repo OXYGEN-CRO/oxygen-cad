@@ -5,7 +5,7 @@
   "environment": "Linux x86_64; Python 3.13; Rust 1.95; disposable local projects",
   "claims": "Implemented local workflows and optional project-scoped HTTP authorization. This is not a broad Fusion parity certification or a Mac distribution acceptance result.",
   "evidence": {
-    "python": "PYTHONPATH=src O3D_ENGINE_BINARY=<baseline-engine> .venv/bin/python -m pytest -q tests/test_platform.py tests/test_desktop_staging.py: 40 passed",
+    "python": "PYTHONPATH=src O3D_ENGINE_BINARY=<baseline-engine> .venv/bin/python -m pytest -q tests/test_platform.py tests/test_desktop_staging.py: 41 passed",
     "frontend": "npm ci && npm run build: passed (existing bundle-size advisory)",
     "desktop_policy": "rustc --edition 2024 --test desktop/src-tauri/src/lifecycle.rs: 3 passed",
     "resource_staging": "python3 scripts/stage_desktop.py: 1448 tracked public input files staged from Docker COPY closure",
