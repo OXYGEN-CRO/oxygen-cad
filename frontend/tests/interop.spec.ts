@@ -41,7 +41,7 @@ async function uploadUi(page: Page, request: APIRequestContext, name: string, bu
 async function currentGeometry(page: Page, request: APIRequestContext) {
   await expect.poll(async () => (await (await request.get("/api/state")).json()).geometry_state, { timeout: 30000 }).toBe("current");
   await expect(page.getByText("Geometry current", { exact: true })).toBeVisible({ timeout: 10000 });
-  await page.getByTitle("Fit model", { exact: true }).click();
+  await page.getByRole("button", { name: "Fit model", exact: true }).click();
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
