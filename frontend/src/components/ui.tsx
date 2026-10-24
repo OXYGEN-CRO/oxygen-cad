@@ -1,5 +1,5 @@
 import type { ComponentPropsWithRef } from "react";
-import { DropdownMenu } from "radix-ui";
+import { DropdownMenu, Tooltip } from "radix-ui";
 
 type ButtonProps = ComponentPropsWithRef<"button"> & {
   variant?: "ghost" | "primary" | "danger" | "glass";
@@ -70,3 +70,28 @@ export function MenuContent(
     </DropdownMenu.Portal>
   );
 }
+
+export function ToolButton({
+  hint,
+  shortcut,
+  ...props
+}: ButtonProps & { hint: string; shortcut?: string }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <Button aria-label={hint} {...props} />
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="ui-tooltip"
+          sideOffset={7}
+          collisionPadding={12}
+        >
+          <span>{hint}</span>
+          {shortcut && <kbd>{shortcut}</kbd>}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+export const TooltipProvider = Tooltip.Provider;

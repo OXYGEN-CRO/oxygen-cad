@@ -330,8 +330,7 @@ test("native Rust features remain editable through the same studio document", as
   await page
     .getByLabel("Native arguments")
     .fill(JSON.stringify({ faces: [[15, 10, 10]], thickness: 1.5 }));
-  await page.getByLabel("Native command").click();
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.keyboard.press("ControlOrMeta+s");
   await expect
     .poll(
       async () =>

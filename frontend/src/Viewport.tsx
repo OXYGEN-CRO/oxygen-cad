@@ -10,7 +10,10 @@ import {
   type DisplayField,
 } from "./api";
 
+export type ViewOrientation = "isometric" | "front" | "top" | "right";
+
 type Props = {
+  viewRequest: { name: ViewOrientation; version: number };
   theme: "dark" | "light";
   geometry: Geometry | null;
   project: Project;
@@ -470,16 +473,30 @@ export function Viewport(props: Props) {
       .sub(new THREE.Vector3(...(bounds[0] as [number, number, number])))
       .length();
     r.controls.target.copy(center);
-    r.camera.position.copy(
-      center.clone().add(new THREE.Vector3(1, -1.5, 1).multiplyScalar(d * 1.8)),
+    const directions = {
+      isometric: new THREE.Vector3(1, -1.5, 1),
+      front: new THREE.Vector3(0, -1, 0),
+      top: new THREE.Vector3(0, -0.00001, 1),
+      right: new THREE.Vector3(1, 0, 0),
+    };
+    r.camera.position.copy(center).add(
+      directions[props.viewRequest.name]
+        .clone()
+        .normalize()
+        .multiplyScalar(d * 3),
     );
+    // Clear residual orbit damping so a chosen standard view lands precisely.
+    r.controls.enableDamping = false;
+    r.controls.update();
+    r.controls.enableDamping = true;
     const aspect = host.current!.clientWidth / host.current!.clientHeight;
     r.camera.top = (d * 0.7) / Math.min(aspect, 1);
     r.camera.bottom = -r.camera.top;
     r.camera.left = -r.camera.top * aspect;
     r.camera.right = r.camera.top * aspect;
+    r.camera.zoom = 1;
     r.camera.updateProjectionMatrix();
-  }, [props.fit]);
+  }, [props.fit, props.viewRequest]);
   return (
     <div className="webgl" ref={host} aria-label="Interactive CAD viewport" />
   );

@@ -63,3 +63,11 @@ Prepared physical correlation protocol: [PHYSICAL-VALIDATION.md](PHYSICAL-VALIDA
 ![Modal result](analysis-modal.png)
 
 ![Temperature result](analysis-thermal.png)
+
+## Precision workspace for CAD designers and engineers (2026-10-24)
+
+The studio refinement adds a searchable feature navigator, geometry-first inspectors with native expandable Placement/Feature details, actual isometric/front/top/right camera views, fit with zoom reset, keyboard shortcuts, accessible tooltip hints and explicit unsaved state. Both neutral themes and restrained focus remain.
+
+All thirteen browser flows passed on the final production build against the disposable fixture at port 19526 (1.2 minutes). New checks verify filtering and empty/clear states, opening a hidden navigator with `/`, preserved disclosure drafts, typing guards, rendered projection differences without replacing the canvas, fit restoring the exact previous standard-view image after zoom, tooltip shortcut hints and actual revision-protected keyboard saves. The native shell test saves directly from its JSON buffer with Command/Ctrl+S and verifies rebuilt volume. Existing static, modal and thermal numerical browser workflows, concurrency, export, themes and responsive navigation pass together. All 63 backend tests passed (65.94 seconds); 14 optional catalog database cases were skipped because no disposable database URL was configured. Production build, formatting and whitespace checks pass.
+
+Read-only visual inspection of the running studio covered dark/light desktop, actual top projection and a 390px light inspector, with zero runtime errors or page overflow. Acceptance tests used disposable projects. This is Linux Chromium evidence; physical macOS/Safari execution, human visual acceptance and usability with professional CAD designers remain separate validation.

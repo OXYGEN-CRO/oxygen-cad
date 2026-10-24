@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   Activity,
   ArrowDownToLine,
@@ -47,8 +48,10 @@ import {
   type State,
   type DisplayField,
 } from "./api";
+import { FeatureNavigator } from "./components/FeatureNavigator";
+import { InspectorSection } from "./components/InspectorSection";
 import { StudyPanel } from "./components/StudyPanel";
-import { Viewport } from "./Viewport";
+import { Viewport, type ViewOrientation } from "./Viewport";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import {
   Button,
@@ -59,6 +62,7 @@ import {
   MenuContent,
   MenuItem,
   MenuSeparator,
+  ToolButton,
 } from "./components/ui";
 import { useTheme } from "./theme";
 
@@ -180,6 +184,12 @@ export default function App() {
     [showBottom, setShowBottom] = useState(false),
     [leftOpen, setLeftOpen] = useState(true),
     [rightOpen, setRightOpen] = useState(false);
+  const [viewRequest, setViewRequest] = useState({
+    name: "isometric" as ViewOrientation,
+    version: 0,
+  });
+  const featureSearch = useRef<HTMLInputElement>(null);
+  const saveCurrent = useRef(() => {});
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const upload = useRef<HTMLInputElement>(null);
@@ -444,6 +454,71 @@ export default function App() {
   const lastExport = state?.jobs.find(
     (j) => j.kind === "export" && j.state === "succeeded",
   );
+  saveCurrent.current = () => {
+    if (!dirty || busy) return;
+    try {
+      void save(tab === "source" ? JSON.parse(source) : draft);
+    } catch (error) {
+      setError(String(error));
+    }
+  };
+  useEffect(() => {
+    function shortcut(event: KeyboardEvent) {
+      if (!current || !state || event.defaultPrevented || event.isComposing)
+        return;
+      const target = event.target as HTMLElement;
+      if (target.closest('[role="menu"], [role="dialog"]')) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        // JSON editors commit on blur. Let that state settle before saving the
+        // latest draft, including when the buffer was the only pending change.
+        if (
+          target instanceof HTMLTextAreaElement &&
+          target.closest(".source-field")
+        ) {
+          try {
+            JSON.parse(target.value);
+          } catch {
+            setError("Editor contains invalid JSON");
+            return;
+          }
+          flushSync(() => target.blur());
+        }
+        requestAnimationFrame(() => saveCurrent.current());
+        return;
+      }
+      if (
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      )
+        return;
+      if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFit((v) => v + 1);
+      }
+      if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        setMeasureMode((v) => !v);
+        setMeasure([]);
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        setLeftOpen(true);
+        requestAnimationFrame(() => featureSearch.current?.focus());
+      }
+      if (event.key === "Escape") {
+        setSelection(null);
+        setMeasure([]);
+        setMeasureMode(false);
+        setIsolate(false);
+      }
+    }
+    document.addEventListener("keydown", shortcut);
+    return () => document.removeEventListener("keydown", shortcut);
+  });
   if (!current || !state)
     return (
       <div className="loading-screen">
@@ -500,7 +575,8 @@ export default function App() {
             title="Unsaved edits"
             aria-label="Unsaved edits"
           >
-            •
+            <i aria-hidden="true" />
+            <span className="unsaved-label">Unsaved</span>
           </span>
         )}
         <div className="top-actions">
@@ -514,7 +590,9 @@ export default function App() {
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </Button>
           {dirty && (
-            <Button
+            <ToolButton
+              hint="Save changes"
+              shortcut={/Mac/i.test(navigator.platform) ? "⌘S" : "Ctrl S"}
               variant="primary"
               aria-label="Save changes"
               disabled={busy}
@@ -528,7 +606,7 @@ export default function App() {
             >
               <Save size={15} />
               <span className="save-label">Save changes</span>
-            </Button>
+            </ToolButton>
           )}
           <Button
             title="Export"
@@ -681,7 +759,10 @@ export default function App() {
       <main className="workspace">
         <aside className="left-panel" id="feature-sidebar" hidden={!leftOpen}>
           <div className="panel-heading">
-            <span>Features</span>
+            <span>
+              Features{" "}
+              <small className="feature-count">{current.features.length}</small>
+            </span>
             <Button
               onClick={() => setAddOpen(!addOpen)}
               aria-label="Add feature"
@@ -690,29 +771,16 @@ export default function App() {
               <Plus size={16} />
             </Button>
           </div>
-          <div className="feature-list">
-            {current.features.map((f) => (
-              <Button
-                key={f.id}
-                className={`tree-item ${active === f.id ? "selected" : ""} ${f.suppressed ? "suppressed" : ""}`}
-                onClick={() => {
-                  setActive(f.id);
-                  setTab("design");
-                  setRightOpen(true);
-                }}
-              >
-                <span className="tree-indent" />
-                {f.type === "profile" ? (
-                  <Square size={15} />
-                ) : f.type === "extrude" ? (
-                  <Box size={15} />
-                ) : (
-                  <Settings2 size={15} />
-                )}
-                <span>{f.name || f.id}</span>
-              </Button>
-            ))}
-          </div>
+          <FeatureNavigator
+            features={current.features}
+            active={active}
+            searchRef={featureSearch}
+            onSelect={(id) => {
+              setActive(id);
+              setTab("design");
+              setRightOpen(true);
+            }}
+          />
           {addOpen && (
             <div className="add-menu">
               {["profile", "extrude", "hole", "fillet", "chamfer"].map(
@@ -772,9 +840,10 @@ export default function App() {
         <section className="canvas-panel">
           <div className="canvas-toolbar">
             <div>
-              <Button
+              <ToolButton
+                hint="Measure between two surface points"
+                shortcut="M"
                 className={measureMode ? "tool-active" : ""}
-                title="Measure between two surface points"
                 aria-pressed={measureMode}
                 onClick={() => {
                   setMeasureMode(!measureMode);
@@ -782,16 +851,16 @@ export default function App() {
                 }}
               >
                 <Ruler size={17} />
-              </Button>
+              </ToolButton>
               <span />
-              <Button
+              <ToolButton
+                hint="Section view"
                 className={section ? "tool-active" : ""}
-                title="Section view"
                 aria-pressed={section}
                 onClick={() => setSection(!section)}
               >
                 <Scissors size={17} />
-              </Button>
+              </ToolButton>
               {current.references.length > 0 && (
                 <Button
                   className={isolate ? "tool-active" : ""}
@@ -858,13 +927,51 @@ export default function App() {
                   ))}
                 </SelectControl>
               )}
-              <Button title="Fit model" onClick={() => setFit((v) => v + 1)}>
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button
+                    className="view-picker"
+                    aria-label="Orient view"
+                    title="Orient view"
+                  >
+                    <Box size={14} />
+                    <span>View</span>
+                    <ChevronDown size={12} />
+                  </Button>
+                </MenuTrigger>
+                <MenuContent className="tools-popover view-menu">
+                  {(
+                    ["isometric", "front", "top", "right"] as ViewOrientation[]
+                  ).map((name) => (
+                    <MenuItem
+                      className="ui-menu-item"
+                      key={name}
+                      onSelect={() =>
+                        setViewRequest((prev) => ({
+                          name,
+                          version: prev.version + 1,
+                        }))
+                      }
+                    >
+                      <span>
+                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                      </span>
+                    </MenuItem>
+                  ))}
+                </MenuContent>
+              </Menu>
+              <ToolButton
+                hint="Fit model"
+                shortcut="F"
+                onClick={() => setFit((v) => v + 1)}
+              >
                 <Focus size={17} />
-              </Button>
+              </ToolButton>
             </div>
           </div>
           <Viewport
             theme={theme}
+            viewRequest={viewRequest}
             geometry={geometry ?? null}
             project={current}
             selected={selection}
@@ -979,14 +1086,14 @@ export default function App() {
             <div className="panel-heading">
               <span>
                 {tab === "verify"
-                  ? "ENGINEERING STUDY"
+                  ? "Engineering study"
                   : tab === "history"
-                    ? "REVISION HISTORY"
+                    ? "Revision history"
                     : tab === "source"
-                      ? "PROJECT SOURCE"
+                      ? "Project source"
                       : tab === "project"
-                        ? "PROJECT"
-                        : "PROPERTIES"}
+                        ? "Project"
+                        : "Properties"}
               </span>
               <Button
                 aria-label="Close properties"
@@ -1004,356 +1111,374 @@ export default function App() {
                     <>
                       <div className="inspector-title">
                         <div className="feature-glyph">
-                          <Box size={18} />
+                          {feature.type === "profile" ? (
+                            <Square size={18} />
+                          ) : (
+                            <Box size={18} />
+                          )}
                         </div>
                         <div>
                           <h2>{feature.name || feature.id}</h2>
                         </div>
                       </div>
-                      <Field
-                        label="Feature name"
-                        value={feature.name}
-                        onChange={(v: string) => patchFeature({ name: v })}
-                      />
-                      <label className="checkbox">
-                        <Input
-                          type="checkbox"
-                          checked={feature.suppressed}
-                          onChange={(e) =>
-                            patchFeature({ suppressed: e.target.checked })
-                          }
-                        />
-                        Suppress feature
-                      </label>
-                      {feature.type === "profile" && (
-                        <>
-                          <Select
-                            label="Profile shape"
-                            value={feature.shape}
-                            options={["rectangle", "circle", "polygon"]}
-                            onChange={(v: string) =>
-                              patchFeature({
-                                shape: v,
-                                ...(v === "polygon" && !feature.points.length
-                                  ? {
-                                      points: [
-                                        [-10, -10],
-                                        [10, -10],
-                                        [0, 10],
-                                      ],
-                                    }
-                                  : {}),
-                              })
-                            }
-                          />
-                          {feature.shape === "rectangle" && (
-                            <>
-                              <Field
-                                label="Width"
-                                value={feature.width}
-                                unit="mm"
-                                onChange={(v: string) =>
-                                  patchFeature({ width: scalar(v) })
-                                }
-                              />
-                              <Field
-                                label="Height"
-                                value={feature.height}
-                                unit="mm"
-                                onChange={(v: string) =>
-                                  patchFeature({ height: scalar(v) })
-                                }
-                              />
-                            </>
-                          )}
-                          {feature.shape === "circle" && (
-                            <Field
-                              label="Radius"
-                              value={feature.radius}
-                              unit="mm"
+                      <InspectorSection title="Geometry">
+                        {feature.type === "profile" && (
+                          <>
+                            <Select
+                              label="Profile shape"
+                              value={feature.shape}
+                              options={["rectangle", "circle", "polygon"]}
                               onChange={(v: string) =>
-                                patchFeature({ radius: scalar(v) })
+                                patchFeature({
+                                  shape: v,
+                                  ...(v === "polygon" && !feature.points.length
+                                    ? {
+                                        points: [
+                                          [-10, -10],
+                                          [10, -10],
+                                          [0, 10],
+                                        ],
+                                      }
+                                    : {}),
+                                })
                               }
                             />
-                          )}{" "}
-                          {feature.shape === "polygon" && (
+                            {feature.shape === "rectangle" && (
+                              <div className="two-fields">
+                                <Field
+                                  label="Width"
+                                  value={feature.width}
+                                  unit="mm"
+                                  onChange={(v: string) =>
+                                    patchFeature({ width: scalar(v) })
+                                  }
+                                />
+                                <Field
+                                  label="Height"
+                                  value={feature.height}
+                                  unit="mm"
+                                  onChange={(v: string) =>
+                                    patchFeature({ height: scalar(v) })
+                                  }
+                                />
+                              </div>
+                            )}
+                            {feature.shape === "circle" && (
+                              <Field
+                                label="Radius"
+                                value={feature.radius}
+                                unit="mm"
+                                onChange={(v: string) =>
+                                  patchFeature({ radius: scalar(v) })
+                                }
+                              />
+                            )}{" "}
+                            {feature.shape === "polygon" && (
+                              <label className="source-field">
+                                Polygon vertices (JSON)
+                                <textarea
+                                  aria-label="Polygon vertices"
+                                  defaultValue={pretty(feature.points)}
+                                  key={feature.id}
+                                  onBlur={(e) => {
+                                    try {
+                                      patchFeature({
+                                        points: JSON.parse(e.target.value),
+                                      });
+                                    } catch {
+                                      setError(
+                                        "Polygon vertices must be a JSON array",
+                                      );
+                                    }
+                                  }}
+                                />
+                              </label>
+                            )}
+                            <InspectorSection title="Placement" open={false}>
+                              <Select
+                                label="Construction plane"
+                                value={feature.plane}
+                                options={["XY", "XZ", "YZ"]}
+                                onChange={(v: string) =>
+                                  patchFeature({ plane: v })
+                                }
+                              />
+                              <VectorField
+                                label="Origin"
+                                value={feature.origin}
+                                onChange={(v) => patchFeature({ origin: v })}
+                              />
+                              <VectorField
+                                label="Rotation"
+                                unit="deg"
+                                value={feature.rotation}
+                                onChange={(v) => patchFeature({ rotation: v })}
+                              />
+                            </InspectorSection>
+                          </>
+                        )}
+                        {feature.type === "native" && (
+                          <>
+                            <Field
+                              label="Native command"
+                              value={feature.command}
+                              onChange={(command: string) =>
+                                patchFeature({ command })
+                              }
+                            />
                             <label className="source-field">
-                              Polygon vertices (JSON)
+                              Arguments
                               <textarea
-                                aria-label="Polygon vertices"
-                                defaultValue={pretty(feature.points)}
-                                key={feature.id}
-                                onBlur={(e) => {
+                                aria-label="Native arguments"
+                                key={`${feature.id}-${state.project.revision}`}
+                                defaultValue={pretty(feature.params)}
+                                spellCheck={false}
+                                onBlur={(event) => {
                                   try {
                                     patchFeature({
-                                      points: JSON.parse(e.target.value),
+                                      params: JSON.parse(event.target.value),
                                     });
                                   } catch {
                                     setError(
-                                      "Polygon vertices must be a JSON array",
+                                      "Native arguments must be a JSON object",
                                     );
                                   }
                                 }}
                               />
                             </label>
-                          )}
-                          <Select
-                            label="Construction plane"
-                            value={feature.plane}
-                            options={["XY", "XZ", "YZ"]}
-                            onChange={(v: string) => patchFeature({ plane: v })}
-                          />
-                          <VectorField
-                            label="Origin"
-                            value={feature.origin}
-                            onChange={(v) => patchFeature({ origin: v })}
-                          />
-                          <VectorField
-                            label="Rotation"
-                            unit="deg"
-                            value={feature.rotation}
-                            onChange={(v) => patchFeature({ rotation: v })}
-                          />
-                        </>
-                      )}
-                      {feature.type === "native" && (
-                        <>
-                          <Field
-                            label="Native command"
-                            value={feature.command}
-                            onChange={(command: string) =>
-                              patchFeature({ command })
-                            }
-                          />
-                          <label className="source-field">
-                            Arguments
-                            <textarea
-                              aria-label="Native arguments"
-                              key={`${feature.id}-${state.project.revision}`}
-                              defaultValue={pretty(feature.params)}
-                              spellCheck={false}
-                              onBlur={(event) => {
-                                try {
-                                  patchFeature({
-                                    params: JSON.parse(event.target.value),
-                                  });
-                                } catch {
-                                  setError(
-                                    "Native arguments must be a JSON object",
-                                  );
-                                }
-                              }}
-                            />
-                          </label>
-                        </>
-                      )}
-                      {feature.type === "extrude" && (
-                        <>
-                          <Select
-                            label="Profile"
-                            value={feature.profile}
-                            options={current.features
-                              .filter((f) => f.type === "profile")
-                              .map((f) => ({
-                                value: f.id,
-                                label: f.name || f.id,
-                              }))}
-                            onChange={(v: string) =>
-                              patchFeature({ profile: v })
-                            }
-                          />
-                          <Field
-                            label="Extrusion distance"
-                            value={feature.distance}
-                            unit="mm"
-                            onChange={(v: string) =>
-                              patchFeature({ distance: scalar(v) })
-                            }
-                          />
-                          <Select
-                            label="Operation"
-                            value={feature.operation}
-                            options={["add", "cut"]}
-                            onChange={(v: string) =>
-                              patchFeature({ operation: v })
-                            }
-                          />
-                        </>
-                      )}
-                      {feature.type === "hole" && (
-                        <>
-                          <Field
-                            label="Hole diameter"
-                            value={feature.diameter}
-                            unit="mm"
-                            onChange={(v: string) =>
-                              patchFeature({ diameter: scalar(v) })
-                            }
-                          />
-                          <VectorField
-                            label="Hole center"
-                            value={feature.center}
-                            onChange={(v) => patchFeature({ center: v })}
-                          />
-                          <Select
-                            label="Hole axis"
-                            value={feature.axis}
-                            options={["X", "Y", "Z"]}
-                            onChange={(v: string) => patchFeature({ axis: v })}
-                          />
-                          <label className="checkbox">
-                            <Input
-                              type="checkbox"
-                              checked={feature.through}
-                              onChange={(e) =>
-                                patchFeature({ through: e.target.checked })
+                          </>
+                        )}
+                        {feature.type === "extrude" && (
+                          <>
+                            <Select
+                              label="Profile"
+                              value={feature.profile}
+                              options={current.features
+                                .filter((f) => f.type === "profile")
+                                .map((f) => ({
+                                  value: f.id,
+                                  label: f.name || f.id,
+                                }))}
+                              onChange={(v: string) =>
+                                patchFeature({ profile: v })
                               }
                             />
-                            Through all
-                          </label>
-                          {!feature.through && (
-                            <>
-                              <Field
-                                label="Hole depth"
-                                value={feature.depth}
-                                unit="mm"
-                                onChange={(v: string) =>
-                                  patchFeature({ depth: scalar(v) })
+                            <Field
+                              label="Extrusion distance"
+                              value={feature.distance}
+                              unit="mm"
+                              onChange={(v: string) =>
+                                patchFeature({ distance: scalar(v) })
+                              }
+                            />
+                            <Select
+                              label="Operation"
+                              value={feature.operation}
+                              options={["add", "cut"]}
+                              onChange={(v: string) =>
+                                patchFeature({ operation: v })
+                              }
+                            />
+                          </>
+                        )}
+                        {feature.type === "hole" && (
+                          <>
+                            <Field
+                              label="Hole diameter"
+                              value={feature.diameter}
+                              unit="mm"
+                              onChange={(v: string) =>
+                                patchFeature({ diameter: scalar(v) })
+                              }
+                            />
+                            <VectorField
+                              label="Hole center"
+                              value={feature.center}
+                              onChange={(v) => patchFeature({ center: v })}
+                            />
+                            <Select
+                              label="Hole axis"
+                              value={feature.axis}
+                              options={["X", "Y", "Z"]}
+                              onChange={(v: string) =>
+                                patchFeature({ axis: v })
+                              }
+                            />
+                            <label className="checkbox">
+                              <Input
+                                type="checkbox"
+                                checked={feature.through}
+                                onChange={(e) =>
+                                  patchFeature({ through: e.target.checked })
                                 }
                               />
-                              <label className="checkbox">
-                                <Input
-                                  type="checkbox"
-                                  checked={feature.reverse}
-                                  onChange={(e) =>
-                                    patchFeature({ reverse: e.target.checked })
+                              Through all
+                            </label>
+                            {!feature.through && (
+                              <>
+                                <Field
+                                  label="Hole depth"
+                                  value={feature.depth}
+                                  unit="mm"
+                                  onChange={(v: string) =>
+                                    patchFeature({ depth: scalar(v) })
                                   }
                                 />
-                                Drill in negative axis direction
-                              </label>
-                            </>
-                          )}
-                          <div className="two-fields">
-                            <Field
-                              label="Columns"
-                              type="number"
-                              value={feature.columns}
-                              onChange={(v: number) =>
-                                patchFeature({ columns: v })
-                              }
-                            />
-                            <Field
-                              label="Rows"
-                              type="number"
-                              value={feature.rows}
-                              onChange={(v: number) =>
-                                patchFeature({ rows: v })
-                              }
-                            />
-                          </div>
-                          <div className="two-fields">
-                            {feature.spacing.map((v: number, i: number) => (
+                                <label className="checkbox">
+                                  <Input
+                                    type="checkbox"
+                                    checked={feature.reverse}
+                                    onChange={(e) =>
+                                      patchFeature({
+                                        reverse: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  Drill in negative axis direction
+                                </label>
+                              </>
+                            )}
+                            <div className="two-fields">
                               <Field
-                                key={i}
-                                label={`${i ? "Row" : "Column"} spacing`}
+                                label="Columns"
                                 type="number"
-                                value={v}
-                                unit="mm"
-                                onChange={(n: number) =>
-                                  patchFeature({
-                                    spacing: feature.spacing.map(
-                                      (x: number, j: number) =>
-                                        j === i ? n : x,
-                                    ),
-                                  })
+                                value={feature.columns}
+                                onChange={(v: number) =>
+                                  patchFeature({ columns: v })
                                 }
                               />
-                            ))}
-                          </div>
-                        </>
-                      )}
-                      {["fillet", "chamfer"].includes(feature.type) && (
-                        <>
-                          <Field
-                            label="Edge selection"
-                            value={feature.selection}
-                            onChange={(v: string) =>
-                              patchFeature({ selection: v })
+                              <Field
+                                label="Rows"
+                                type="number"
+                                value={feature.rows}
+                                onChange={(v: number) =>
+                                  patchFeature({ rows: v })
+                                }
+                              />
+                            </div>
+                            <div className="two-fields">
+                              {feature.spacing.map((v: number, i: number) => (
+                                <Field
+                                  key={i}
+                                  label={`${i ? "Row" : "Column"} spacing`}
+                                  type="number"
+                                  value={v}
+                                  unit="mm"
+                                  onChange={(n: number) =>
+                                    patchFeature({
+                                      spacing: feature.spacing.map(
+                                        (x: number, j: number) =>
+                                          j === i ? n : x,
+                                      ),
+                                    })
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {["fillet", "chamfer"].includes(feature.type) && (
+                          <>
+                            <Field
+                              label="Edge selection"
+                              value={feature.selection}
+                              onChange={(v: string) =>
+                                patchFeature({ selection: v })
+                              }
+                            />
+                            <Select
+                              label="Semantic edge group"
+                              value={feature.selection}
+                              options={[
+                                "part:vertical_edges",
+                                "part:top_edges",
+                                "part:bottom_edges",
+                                "part:all_edges",
+                              ]}
+                              onChange={(v: string) =>
+                                patchFeature({ selection: v })
+                              }
+                            />
+                            <Field
+                              label="Edge size"
+                              value={feature.size}
+                              unit="mm"
+                              onChange={(v: string) =>
+                                patchFeature({ size: scalar(v) })
+                              }
+                            />
+                          </>
+                        )}
+                      </InspectorSection>
+                      <InspectorSection title="Feature details" open={false}>
+                        <Field
+                          label="Feature name"
+                          value={feature.name}
+                          onChange={(v: string) => patchFeature({ name: v })}
+                        />
+                        <label className="checkbox">
+                          <Input
+                            type="checkbox"
+                            checked={feature.suppressed}
+                            onChange={(e) =>
+                              patchFeature({ suppressed: e.target.checked })
                             }
                           />
-                          <Select
-                            label="Semantic edge group"
-                            value={feature.selection}
-                            options={[
-                              "part:vertical_edges",
-                              "part:top_edges",
-                              "part:bottom_edges",
-                              "part:all_edges",
-                            ]}
-                            onChange={(v: string) =>
-                              patchFeature({ selection: v })
+                          Suppress feature
+                        </label>
+                        <div className="feature-order">
+                          <Button
+                            disabled={current.features[0].id === feature.id}
+                            onClick={() =>
+                              edit((p) => {
+                                const i = p.features.findIndex(
+                                  (f) => f.id === feature.id,
+                                );
+                                [p.features[i - 1], p.features[i]] = [
+                                  p.features[i],
+                                  p.features[i - 1],
+                                ];
+                              })
                             }
-                          />
-                          <Field
-                            label="Edge size"
-                            value={feature.size}
-                            unit="mm"
-                            onChange={(v: string) =>
-                              patchFeature({ size: scalar(v) })
+                          >
+                            Move earlier
+                          </Button>
+                          <Button
+                            disabled={
+                              current.features.at(-1)?.id === feature.id
                             }
-                          />
-                        </>
-                      )}
-                      <div className="feature-order">
+                            onClick={() =>
+                              edit((p) => {
+                                const i = p.features.findIndex(
+                                  (f) => f.id === feature.id,
+                                );
+                                [p.features[i], p.features[i + 1]] = [
+                                  p.features[i + 1],
+                                  p.features[i],
+                                ];
+                              })
+                            }
+                          >
+                            Move later
+                          </Button>
+                        </div>
                         <Button
-                          disabled={current.features[0].id === feature.id}
-                          onClick={() =>
-                            edit((p) => {
-                              const i = p.features.findIndex(
-                                (f) => f.id === feature.id,
-                              );
-                              [p.features[i - 1], p.features[i]] = [
-                                p.features[i],
-                                p.features[i - 1],
-                              ];
-                            })
-                          }
+                          className="danger-link"
+                          variant="danger"
+                          onClick={() => {
+                            edit(
+                              (p) =>
+                                (p.features = p.features.filter(
+                                  (f) => f.id !== feature.id,
+                                )),
+                            );
+                            setActive("");
+                          }}
                         >
-                          Move earlier
+                          <Trash2 size={14} />
+                          Delete feature
                         </Button>
-                        <Button
-                          disabled={current.features.at(-1)?.id === feature.id}
-                          onClick={() =>
-                            edit((p) => {
-                              const i = p.features.findIndex(
-                                (f) => f.id === feature.id,
-                              );
-                              [p.features[i], p.features[i + 1]] = [
-                                p.features[i + 1],
-                                p.features[i],
-                              ];
-                            })
-                          }
-                        >
-                          Move later
-                        </Button>
-                      </div>
-                      <Button
-                        className="danger-link"
-                        variant="danger"
-                        onClick={() => {
-                          edit(
-                            (p) =>
-                              (p.features = p.features.filter(
-                                (f) => f.id !== feature.id,
-                              )),
-                          );
-                          setActive("");
-                        }}
-                      >
-                        <Trash2 size={14} />
-                        Delete feature
-                      </Button>
+                      </InspectorSection>
                     </>
                   ) : reference ? (
                     <>
