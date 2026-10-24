@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 python3 -m venv .venv
-.venv/bin/pip install -e '.[test]'
+.venv/bin/pip install -e '.[test,skills]'
 python3 -m venv .mesh-venv
 .mesh-venv/bin/pip install -r mesh-requirements.lock
 cd frontend

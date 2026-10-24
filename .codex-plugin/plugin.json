@@ -1,7 +1,7 @@
 {
   "name": "oxygen-cad",
-  "version": "0.1.0",
-  "description": "Use the local Oxygen CAD studio and CLI to edit, verify and export revisioned CAD projects.",
+  "version": "0.2.0",
+  "description": "CAD editing, parts, drawings, manufacturing review, robot descriptions and local fabrication handoff workflows.",
   "author": {
     "name": "OXYGEN"
   },

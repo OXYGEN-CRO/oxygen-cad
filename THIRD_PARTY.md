@@ -15,6 +15,8 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 | SPOOLES | Solver numerical dependency | Upstream terms included in Debian package — https://sources.debian.org/src/spooles/ |
 | Radix Primitives | Accessible dropdown menu foundation | MIT — https://github.com/radix-ui/primitives; installed package notices retained |
 | React, Three.js, Vite, FastAPI, Pydantic, Typer, Trimesh | UI and application/runtime libraries | See installed package license files and upstream projects |
+| ReportLab | Standalone engineering-sheet PDF renderer | BSD-style license; installed package license retained; https://www.reportlab.com/opensource/ |
+| charset-normalizer | ReportLab text dependency | MIT; installed package notices retained; https://github.com/jawah/charset_normalizer |
 | Geist Sans / Geist Mono | Locally served variable fonts | SIL Open Font License — `frontend/public/fonts/Geist-LICENSE.txt` and `Geist-Mono-LICENSE.txt`; https://fontsource.org/fonts/geist |
 
 The Dockerfile downloads unmodified CalculiX 2.23 and SPOOLES binary packages from Debian and verifies their SHA-256 checksums. Their copyright/license notices are retained under `/opt/solver/usr/share/doc/`. Debian's corresponding source packages and upstream source are available through the links above. Other installed dependencies retain their package notices.

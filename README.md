@@ -45,7 +45,7 @@ The default project is `projects/demo/`. No account, built-in chat, or hosted ba
 
 ## Bundled agent skills
 
-Oxygen CAD ships three focused skills: **oxygen-cad-setup**, **oxygen-cad-model** and **oxygen-cad-verify**. They teach the actual project, CLI, revision and engineering-result contracts. The same `skills/` directory is bundled by the Claude Code and Codex plugin manifests.
+Oxygen CAD ships **14 focused skills**: setup, modelling, verification, parts search, PDF drawings, planar DXF, additive/process manufacturing review, SendCutSend preflight, URDF/SRDF/SDF, slicing and Bambu app handoff. They teach the actual CLI and provide standalone helpers over current exports. External applications and consumer checks remain explicit dependencies. The same `skills/` directory is bundled by the Claude Code and Codex plugin manifests.
 
 For an agent workspace without the plugin, install the instructions with Python 3 on the host; Docker is not needed for this step:
 
@@ -90,6 +90,12 @@ The agent reads `o3d.json`, writes a proposal file, and applies it with an expec
 Use the revision returned by `inspect`; `1` is only the initial example. A stale revision is rejected. User-locked parameters are protected. Browser selection is available through `context`, including the selected face, point, active feature, and geometry revision state. `inspect` returns measured geometry and face metadata without flooding the agent with triangle buffers.
 
 Do not overwrite the live `o3d.json` directly. Apply proposal files through the CLI so revision checks, locks, and history remain effective.
+
+## External workflow helpers
+
+The bundle includes checksum-checked catalog downloads, a basic orthographic PDF sheet, planar DXF sections/inspection, sampled mesh and molding measurements, limited URDF/SRDF/SDF lint, Orca preset resolution/slicing plans and Bambu application handoff plans. These work on exported or external artifacts; they do not create native studio workspaces for every format. Process reviews cite current supplier rules and retain unmeasured checks. Robot lint does not establish simulator or physical correctness. Slicing and app handoff do not start a print.
+
+Use the CAD Python environment for geometry helpers. The optional `.[skills]` extra adds ReportLab; native bootstrap and the Docker runtime include it. Setup itself remains Python-standard-library only. See [the workflow catalog and limits](docs/AGENT-SKILLS.md).
 
 ## What works
 

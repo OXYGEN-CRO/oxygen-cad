@@ -50,3 +50,9 @@ Import a supplied STEP file using `import-step FILE --expected-revision N --json
 ## Review the result
 
 Read actual numeric dimensions, validity, check state and revision from the returned evidence. Open the PNG at the returned render artifact path when image inspection is available. The CLI render currently omits imported references; review those in the studio. If geometry or a check fails, report it and repair the actual cause. A plausible preview or a successful build does not establish fit, manufacturing readiness or structural strength. State what changed, the measured outcome and any untested assumptions.
+
+## Task-specific guidance
+
+Read [design inputs](references/design-inputs.md) when modelling from prose, images or drawings; [inspection and repair](references/inspection-repair.md) for failed geometry/references; and [project handoff](references/project-handoff.md) when organizing multi-artifact work.
+
+The bundle includes separate workflows for parts search/import, PDF drawings, planar DXF, additive/process manufacturing review, SendCutSend preflight, URDF/SRDF/SDF descriptions, Orca slicing and Bambu app handoff. Route to the relevant named skill when requested; those helpers work on exported/external artifacts and do not imply native studio support for every format.

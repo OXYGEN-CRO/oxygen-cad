@@ -1,0 +1,3 @@
+# Additional dependencies used by bundled standalone CAD workflows.
+reportlab==4.5.1
+charset-normalizer==3.5.2

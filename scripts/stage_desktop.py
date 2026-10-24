@@ -21,7 +21,7 @@ def stage():
         shutil.copy2(archive, DEST / "runtime.tar.gz")
         value = {"mode":"image","image":image,"platform":"linux/amd64"}
     else:
-        files = ["Dockerfile", ".dockerignore", "requirements.lock", "mesh-requirements.lock", "pyproject.toml", "o3d"]
+        files = ["Dockerfile", ".dockerignore", "requirements.lock", "mesh-requirements.lock", "skill-requirements.lock", "pyproject.toml", "o3d"]
         directories = ["src", "examples", "tests", "third_party/solidcraft", "engine", "frontend", "skills", ".claude-plugin", ".codex-plugin"]
         for name in files:
             shutil.copy2(ROOT/name, DEST/name)

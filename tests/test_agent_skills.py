@@ -78,3 +78,26 @@ def test_update_owned_skill_and_reject_symlinks(tmp_path, monkeypatch):
     (target / name / "unowned-link").symlink_to(tmp_path / "outside")
     with pytest.raises(ValueError, match="symlink"):
         skills.install(target)
+
+
+def test_expanded_bundle_installs_helpers_and_references_without_checkout_paths(tmp_path, monkeypatch):
+    full = skills.bundled()
+    original = {name: files for name, files in full.items() if name in {'oxygen-cad-setup','oxygen-cad-model','oxygen-cad-verify'}}
+    target = tmp_path / 'relocated skills'
+    monkeypatch.setattr(skills, 'bundled', lambda: original)
+    skills.install(target)
+    monkeypatch.setattr(skills, 'bundled', lambda: full)
+    result = skills.install(target)
+    assert sum(item['action']=='install' for item in result['skills']) == 11
+    robot = tmp_path / 'robot.urdf'
+    robot.write_text('<robot name="fixture"><link name="base"/></robot>')
+    srdf = tmp_path / 'robot.srdf'
+    srdf.write_text('<robot name="fixture"><group name="base"><link name="base"/></group></robot>')
+    # The installed SRDF helper really locates and calls its installed URDF dependency.
+    value = json.loads(subprocess.check_output(['python3',str(target/'oxygen-cad-srdf/scripts/planning_check.py'),str(srdf),'--urdf',str(robot)]))
+    assert value['ok']
+    assert (target/'oxygen-cad-model/references/inspection-repair.md').is_file()
+    assert (target/'oxygen-cad-drawing/requirements.txt').is_file()
+    assert not any('__pycache__' in name for files in skills.bundled().values() for name in files)
+    # Executing helpers can produce bytecode; it must not make managed instructions look edited.
+    assert all(item['action']=='unchanged' for item in skills.install(target)['skills'])

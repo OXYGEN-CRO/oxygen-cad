@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = ["build123d==0.13.0", "fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1", "pydantic>=2.10,<3", "typer>=0.15,<1", "numpy>=2,<3", "pillow>=11,<13", "python-multipart>=0.0.20,<1", "trimesh>=4.6,<5"]
 
 [project.optional-dependencies]
+skills = ["reportlab>=4.4,<5"]
 test = ["pytest>=8,<10", "httpx>=0.28,<1"]
 catalog = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1"]
 catalog-semantic = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1", "fastembed>=0.7,<1"]
