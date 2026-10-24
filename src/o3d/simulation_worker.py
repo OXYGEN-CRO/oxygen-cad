@@ -19,7 +19,7 @@ def numerical_checks(result,study):
     settings=study.settings
     checks=result["checks"]
     failures=[]
-    if checks.get("residual",1)>max(settings.residual_tolerance,.005 if result.get("solver")=="CalculiX" else 0):failures.append("equation residual")
+    if checks.get("residual",1)>settings.residual_tolerance:failures.append("equation residual")
     for metric in ("force_balance_error","moment_balance_error","heat_balance_error"):
         if checks.get(metric,0)>settings.balance_tolerance:failures.append(metric)
     if checks.get("energy_balance_error",0)>settings.energy_tolerance:failures.append("energy balance")
@@ -39,12 +39,19 @@ def solve(request,directory,cancel=None):
     from .simulation_mesh import validate_boundary
     domain=SimulationDomain.model_validate(request["data"])
     study=next(s for s in domain.studies if s.id==request["study_id"])
+    from .simulation_provenance import software_fingerprint
+    actual_software=software_fingerprint(study.type)
+    if request.get("software",actual_software)!=actual_software:raise ValueError("Solver software changed after snapshot; resubmit the study")
     model=next(m for m in domain.models if m.id==study.model_id)
     case=next(c for c in study.cases if c.id==request["case_id"])
+    if study.settings.large_deformation and study.type!="nonlinear_static":raise ValueError("Large deformation requires the CalculiX nonlinear-static adapter")
+    if study.settings.inertial_relief and study.type not in {"linear_static","thermal_stress","topology","generative"}:raise ValueError("Inertial relief is unavailable for this study type")
+    if study.type=="modal" and any(b.preload_n for b in study.bolts):raise ValueError("Preloaded modal connector transfer is unavailable")
+    if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and any(i.kind=="thermal" for i in study.interfaces):raise ValueError("Thermal interfaces require a thermal or thermal-stress study")
     if study.type in {"steady_thermal","electronics_cooling"} and (case.loads or study.bolts):raise ValueError("Mechanical loads/bolts are not translated into a thermal study")
     if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and case.thermal:raise ValueError("Thermal boundaries require a thermal or thermal-stress study")
     if study.type=="modal" and case.loads:raise ValueError("Preloaded modal transfer is unavailable; remove mechanical loads for free/constrained modes")
-    if study.type not in {"dynamic_event","quasi_static_event"} and case.history:raise ValueError("Time-dependent/unload histories are currently available only in the event adapter")
+    if study.type not in {"dynamic_event","quasi_static_event","nonlinear_static"} and case.history:raise ValueError("Load histories require an event or nonlinear-static study")
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
     materials={m.id:m for m in domain.materials}
@@ -96,11 +103,16 @@ def solve(request,directory,cancel=None):
         converged=bool(changes) and all(v<=study.settings.convergence_tolerance for v in changes.values())
         iterations.append({"mesh_id":mesh.id,"nodes":len(mesh.nodes),"elements":len(mesh.elements),"mesh_size_mm":mesh.mesh_size_mm,"minimum_mean_ratio_quality":system.quality,"values":quantities,"relative_changes":changes})
         previous=convergence_quantities
+    from .simulation_mesh import exterior_triangles
+    result["field"]["boundary_triangles"]=exterior_triangles(mesh.nodes,mesh.elements)
+    result["field"]["element_connectivity"]={e.id:list(e.nodes) for e in mesh.elements}
     result=clean(result)
     failures=numerical_checks(result,study)
     if result["checks"].get("time_step_change",0)>study.settings.convergence_tolerance:failures.append("time-step sensitivity")
     if result["checks"].get("load_step_change",0)>study.settings.convergence_tolerance:failures.append("load-step sensitivity")
+    result["checks"]["residual_tolerance_used"]=study.settings.residual_tolerance
     result["checks"]["mesh_converged"]=converged
+    result["checks"]["converged_quantities"]=list(iterations[-1]["relative_changes"]) if converged else []
     if not converged:failures.append("mesh convergence not demonstrated")
     findings=[]
     for limit in study.limits:
@@ -108,7 +120,8 @@ def solve(request,directory,cancel=None):
         met=None if value is None else bool(value<=limit.value if limit.operator=="le" else value>=limit.value)
         strength_screening=limit.quantity=="max_von_mises_mpa"
         findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"operator":limit.operator,"satisfied":met,"source":limit.source,"evidence":"screening peak stress; no nonsingular stress probe convergence" if strength_screening else "specified numerical model","verified":not failures and not strength_screening and met is not None})
-    result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version()},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
+    result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
+    if software_fingerprint(study.type)!=actual_software:raise ValueError("Solver software changed during execution; results refused")
     result.setdefault("solver","Oxygen C3D4 NumPy/SciPy reference worker")
     result.setdefault("warnings",[])
     result["warnings"].extend(["Numerical verification applies only to the stated discretization, inputs and assumptions; no hardware correlation was supplied.","Linear tetrahedra can be overly stiff in bending and near incompressibility; demonstrate mesh convergence for the requested quantity."])

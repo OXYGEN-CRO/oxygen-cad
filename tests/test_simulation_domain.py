@@ -296,3 +296,170 @@ def test_frictionless_gap_contact_transmits_load_and_no_tension():
     assert np.mean(tip)==pytest.approx(-.1025,rel=1e-5)
     case.loads[0].vector=(100,0,0)
     with pytest.raises(ValueError,match="rigid|singular"):static_solve(system,case)
+
+
+def test_calculix_unloading_leaves_expected_permanent_strain(tmp_path):
+    from o3d.extended_solver import calculix_solve
+    _,domain,study,case,system=fixture(divisions=(2,1,1),kind="nonlinear_static")
+    material=domain.materials[0];material.plastic_curve=[(250,0),(350,.01)];material.plastic_source="Synthetic reference only"
+    case.loads[0].vector=(1200,0,0)
+    case.history=[(0,0),(1,1),(2,0)]
+    result=calculix_solve(system,case,tmp_path)
+    assert max(u[0] for u in result["field"]["displacements_mm"].values())==pytest.approx(.05,rel=1e-5)
+    assert result["values"]["max_equivalent_plastic_strain"]==pytest.approx(.005,rel=1e-5)
+    assert result["checks"]["increments"][-1]["total_time"]==2
+    assert result["load_displacement_history"][-1]["time"]==2
+    assert result["values"]["max_displacement_mm"]>result["values"]["final_displacement_mm"]
+    assert result["checks"]["force_balance_error"]<1e-8
+
+
+def test_large_mesh_single_point_fixture_refuses_free_rotations():
+    from o3d.simulation_models import Region
+    _,_,study,case,original=fixture()
+    mesh=block_mesh(original.mesh.geometry_key,divisions=(7,7,7))
+    mesh.regions.append(Region(id="point",node_ids=[1]))
+    system=System(mesh,study,original.materials)
+    case.supports=[Support(id="point",region_id="point")]
+    case.loads=[Load(id="pull",kind="remote",region_id="part:xmax",vector=(100,0,0),source="Test")]
+    with pytest.raises(ValueError,match="rigid|singular|conditioned"):static_solve(system,case)
+
+
+def test_event_historical_extrema_cannot_decrease_when_duration_extends():
+    _,_,study,case,system=fixture(divisions=(2,1,1),kind="dynamic_event")
+    study.settings.time_step_s=4e-9
+    case.history=[(0,0),(1e-6,1),(2e-6,0),(5e-5,0)]
+    study.settings.duration_s=5e-6
+    short=event_solve(system,case)
+    study.settings.duration_s=1e-5
+    long=event_solve(system,case)
+    for quantity in ("max_displacement_mm","max_von_mises_mpa"):
+        assert long["values"][quantity]>=short["values"][quantity]*(1-1e-10)
+    assert long["field"]["field_state"]=="final"
+    assert max(long["field"]["element_von_mises_envelope_mpa"].values())==long["values"]["max_von_mises_mpa"]
+
+
+def test_filtered_simp_evaluates_density_and_preserves_load_regions():
+    from o3d.simulation_search import optimize
+    _,_,study,case,original=fixture()
+    mesh=block_mesh(original.mesh.geometry_key,size=(30,6,4),divisions=(6,3,2))
+    case.supports=[Support(id="root",region_id="part:xmin")]
+    case.loads[0].vector=(0,0,-10)
+    boundary={n for r in mesh.regions if r.id in {"part:xmin","part:xmax"} for t in r.triangles for n in t}
+    preserve=[e.id for e in mesh.elements if set(e.nodes)&boundary]
+    study.search=SearchSettings(volume_fraction=.8,iterations=6,filter_radius_mm=4,preserved_element_ids=preserve)
+    result=optimize(System(mesh,study,original.materials),case)
+    assert len(result["optimization_history"])==6
+    assert all(result["field"]["element_density"][e]==1 for e in preserve)
+    assert result["checks"]["density_volume_fraction"]<=.8+1e-10
+    assert all(h["compliance_n_mm"]>0 and h["residual"]<1e-7 for h in result["optimization_history"])
+    assert result["checks"]["threshold_reanalysis_available"]
+    assert result["reanalysis"]["checks"]["force_balance_error"]<1e-7
+    assert result["reanalysis"]["checks"]["energy_balance_error"]<1e-7
+    study.search.volume_fraction=.65
+    disconnected=optimize(System(mesh,study,original.materials),case)
+    assert not disconnected["checks"]["threshold_reanalysis_available"]
+    assert "rigid" in disconnected["reanalysis"]["error"]
+
+
+def test_native_step_netgen_transfer_has_real_volume_and_selected_regions(tmp_path):
+    from o3d.model import Profile,Extrude
+    from o3d.simulation_fem import tetra
+    _,domain,study,case,_=fixture(divisions=(2,1,1))
+    project=Project(geometry_engine="occt",features=[Profile(id="profile",width=2,height=2,plane="YZ"),Extrude(id="part",profile="profile",distance=10)])
+    domain.models[0].geometry_key=geometry_key(project);domain.models[0].mesh=None
+    case.supports=[Support(id="root",region_id="part:xmin")]
+    store=Store(tmp_path/"mesh-project");store.init(project)
+    result=execute(store,project,"mesh",{"data":domain.model_dump(mode="json"),"mesh_size_mm":1.5,"refinements":2})
+    generated=SimulationDomain.model_validate(result["data"]).models[0]
+    assert result["changed"] and generated.refinements[0].geometry_key==geometry_key(project)
+    assert len(generated.refinements[0].elements)>len(generated.mesh.elements)
+    for mesh in [generated.mesh,*generated.refinements]:
+        assert {r.id for r in mesh.regions}=={"part:xmin","part:xmax"}
+        volume=sum(tetra([mesh.nodes[n] for n in e.nodes])[0] for e in mesh.elements)
+        assert volume==pytest.approx(40,rel=1e-8)
+        for r in mesh.regions:
+            expected=0 if r.id.endswith("min") else 10
+            assert all(mesh.nodes[n][0]==pytest.approx(expected,abs=1e-8) for t in r.triangles for n in t)
+
+
+def test_cancelling_simulation_worker_cleans_nested_solver_process(tmp_path):
+    import os,signal,subprocess,sys,time
+    project,domain,study,_,_=fixture(divisions=(2,1,1),kind="nonlinear_static")
+    study.settings.large_deformation=True
+    pidfile=tmp_path/"solver.pid"
+    executable=tmp_path/"ccx-blocking"
+    executable.write_text(f"#!{sys.executable}\nimport os,time\nfrom pathlib import Path\nPath({str(pidfile)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n")
+    executable.chmod(0o755)
+    request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":input_key(project,domain,study),"geometry_key":geometry_key(project),"revision":1}
+    path=tmp_path/"request.json";path.write_text(json.dumps(request))
+    environment=dict(os.environ,CCX_BINARY=str(executable))
+    process=subprocess.Popen([sys.executable,"-m","o3d.simulation_worker",str(path),str(tmp_path/"result.json")],env=environment,start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    child=None
+    try:
+        deadline=time.monotonic()+10
+        while not pidfile.exists() and time.monotonic()<deadline:time.sleep(.02)
+        assert pidfile.exists(),"Nested solver did not start"
+        child=int(pidfile.read_text())
+        os.killpg(process.pid,signal.SIGTERM)
+        process.wait(timeout=5)
+        with pytest.raises(ProcessLookupError):os.kill(child,0)
+        assert not (tmp_path/"result.json").exists()
+    finally:
+        if process.poll() is None:os.killpg(process.pid,signal.SIGKILL);process.wait()
+        if child:
+            try:os.kill(child,signal.SIGKILL)
+            except ProcessLookupError:pass
+
+
+def test_calculix_independent_buckling_on_identical_discretization(tmp_path):
+    import re
+    from o3d.extended_solver import write_calculix
+    from o3d.solver import run_process,solver_binary
+    _,_,study,case,original=fixture(kind="buckling")
+    case.supports=[Support(id="root",region_id="part:xmin")];case.loads[0].vector=(-100,0,0)
+    mesh=block_mesh(original.mesh.geometry_key,size=(40,2,2),divisions=(10,2,2))
+    system=System(mesh,study,original.materials)
+    write_calculix(tmp_path/"analysis.inp",system,case,nonlinear=False)
+    header=(tmp_path/"analysis.inp").read_text().split("*STEP,")[0]
+    lines=["*STEP","*BUCKLE","6","*CLOAD"]
+    f=system.loads(case)
+    for i,n in enumerate(system.ids):
+        for axis in range(3):
+            if abs(f[i*3+axis])>1e-14:lines.append(f"{n},{axis+1},{f[i*3+axis]}")
+    (tmp_path/"analysis.inp").write_text(header+"\n".join(lines+["*NODE FILE","U","*END STEP"])+"\n")
+    run_process([solver_binary(),"analysis"],tmp_path,tmp_path/"solver.log")
+    factors=[float(value) for _,value in re.findall(r"^\s+(\d+)\s+([\d.]+E[+-]\d+)\s*$",(tmp_path/"analysis.dat").read_text(),re.M)]
+    assert len(factors)==6
+    actual=buckling_solve(system,case)
+    assert actual["values"]["min_buckling_factor"]==pytest.approx(min(factors),rel=1e-6)
+
+
+def test_fully_restrained_thermal_expansion_has_hydrostatic_stress():
+    from o3d.simulation_models import Region
+    _,_,study,case,system=fixture(kind="thermal_stress")
+    system.mesh.regions.append(Region(id="all",node_ids=system.ids));system.regions["all"]=system.mesh.regions[-1]
+    case.supports=[Support(id="all",region_id="all")];case.loads=[]
+    study.stress_free_temperature_k=300
+    result=static_solve(system,case,temperatures=np.full(len(system.ids),400.))
+    for stress in result["field"]["stress_mpa"].values():assert stress==pytest.approx([-600,-600,-600,0,0,0],abs=1e-9)
+    assert result["values"]["max_displacement_mm"]==0
+    assert result["checks"]["force_balance_error"]<1e-10
+
+
+def test_generative_material_alternatives_are_actually_evaluated():
+    from o3d.simulation_search import generative
+    _,_,study,case,original=fixture()
+    mesh=block_mesh(original.mesh.geometry_key,size=(30,6,4),divisions=(6,3,2))
+    case.supports=[Support(id="root",region_id="part:xmin")];case.loads[0].vector=(0,0,-10)
+    boundary={n for r in mesh.regions if r.id in {"part:xmin","part:xmax"} for t in r.triangles for n in t}
+    preserve=[e.id for e in mesh.elements if set(e.nodes)&boundary]
+    alternate=original.materials["test"].model_copy(update={"id":"alternate","youngs_modulus_mpa":70000,"density_g_cm3":2.7,"source":"Second synthetic numerical reference"})
+    materials=original.materials|{"alternate":alternate}
+    study.search=SearchSettings(volume_fraction=.8,iterations=4,filter_radius_mm=4,preserved_element_ids=preserve,candidate_material_ids=["test","alternate"])
+    study.limits=[Limit(id="screen",quantity="max_displacement_mm",value=1,source="Numerical reference screening limit")]
+    result=generative(System(mesh,study,materials),case)
+    assert result["values"]["evaluated_outcomes"]==2
+    first,second=result["outcomes"]
+    assert second["result"]["values"]["mass_g"]<first["result"]["values"]["mass_g"]
+    assert second["result"]["values"]["max_displacement_mm"]>first["result"]["values"]["max_displacement_mm"]
+    assert all(any(f["id"]=="target-volume" for f in o["findings"]) for o in result["outcomes"])

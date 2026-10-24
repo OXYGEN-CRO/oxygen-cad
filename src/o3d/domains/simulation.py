@@ -7,6 +7,8 @@ import json
 import re
 import sys
 import zipfile
+import secrets
+from ..simulation_provenance import software_fingerprint
 from pathlib import Path
 from ..model import digest,geometry_key
 from ..simulation_models import SimulationDomain,StudyRecord,AnalysisModel,MeshRecord,Region
@@ -57,7 +59,7 @@ def _study(domain,study_id):
 def input_key(project,domain,study):
     model=next(m for m in domain.models if m.id==study.model_id)
     material_ids={a.material_id for a in study.assignments}|set(study.search.candidate_material_ids if study.search else [])
-    return digest({"adapter":ADAPTER_VERSION,"geometry":geometry_key(project),"native_document":getattr(project,"native_document",None),"model":model.model_dump(mode="json"),"study":study.model_dump(mode="json"),"materials":[m.model_dump(mode="json") for m in domain.materials if m.id in material_ids]})
+    return digest({"adapter":ADAPTER_VERSION,"software":software_fingerprint(study.type),"geometry":geometry_key(project),"native_document":getattr(project,"native_document",None),"model":model.model_dump(mode="json"),"study":study.model_dump(mode="json"),"materials":[m.model_dump(mode="json") for m in domain.materials if m.id in material_ids]})
 
 
 def preflight(project,domain,study,model):
@@ -105,8 +107,9 @@ def _mesh(store,project,domain,study,model,payload,cancel):
         if model.body_ids!=["part"]:raise ValueError("Legacy geometry build has no authoritative multi-body sidecar")
         parts=[{"body_id":"part","step":str(store.artifact(built["artifacts"]["step"]))}]
         faces=[{**f,"body_id":"part"} for f in built["faces"]]
-    required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal] if item.region_id}
-    region_requests={r["id"]:r for r in payload.get("regions",[])}
+    required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal] if item.region_id}|{r.id for r in model.regions}
+    region_requests={r.id:r.model_dump(mode="json") for r in model.regions}
+    region_requests.update({r["id"]:r for r in payload.get("regions",[])})
     regions=[]
     for name in sorted(required):
         reference=region_requests.get(name,{"id":name,"selection":name})
@@ -120,7 +123,7 @@ def _mesh(store,project,domain,study,model,payload,cancel):
     steps=int(payload.get("refinements",2))
     if not 0<size<100000 or not 1<=steps<=4:raise ValueError("Mesh size must be positive and refinement count 1..4")
     signature=digest({"geometry":gkey,"bodies":model.body_ids,"regions":regions,"size":size,"steps":steps})
-    destination=store.cache/"domains"/"simulation"/"meshes"/signature
+    destination=store.cache/"domains"/"simulation"/"meshes"/signature/secrets.token_hex(8)
     destination.mkdir(parents=True,exist_ok=True)
     meshes=[]
     for i in range(steps):
@@ -142,9 +145,10 @@ def _run(store,project,domain,study,model,payload,cancel):
     errors=preflight(project,domain,study,model)
     if errors:raise ValueError("; ".join(errors))
     key=input_key(project,domain,study)
-    destination=store.cache/"domains"/"simulation"/"runs"/key
+    run_id=secrets.token_hex(8)
+    destination=store.cache/"domains"/"simulation"/"runs"/key/run_id
     destination.mkdir(parents=True,exist_ok=True)
-    snapshot={"data":domain.model_dump(mode="json"),"study_id":study.id,"input_key":key,"geometry_key":geometry_key(project),"revision":project.revision}
+    snapshot={"data":domain.model_dump(mode="json"),"study_id":study.id,"input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":software_fingerprint(study.type),"run_id":run_id}
     write_json(destination/"inputs.json",snapshot)
     cases=[c for c in study.cases if not payload.get("case_id") or c.id==payload["case_id"]]
     if not cases:raise ValueError("Load case does not exist")
@@ -165,7 +169,7 @@ def _run(store,project,domain,study,model,payload,cancel):
         result["artifact"]=str((case_dir/"result.json").relative_to(store.cache))
         write_json(case_dir/"result.json",result)
         results.append(result)
-    aggregate={"schema_version":1,"study_id":study.id,"input_key":key,"revision":project.revision,"geometry_key":geometry_key(project),"results":results,"completed_at":now(),"stale":False}
+    aggregate={"schema_version":1,"study_id":study.id,"input_key":key,"run_id":run_id,"revision":project.revision,"geometry_key":geometry_key(project),"results":results,"completed_at":now(),"stale":False}
     # Original snapshot remains inspectable if geometry changed while the worker ran.
     try:
         current=store.load()
@@ -249,6 +253,7 @@ def execute(store,project,operation,payload,cancel=None):
 
 
 def _handoff(store,project,domain,study,model,last):
+    if last["stale"]:raise ValueError("Study inputs changed; recompute before exporting a current analysis package. Historical result artifacts remain available.")
     key=input_key(project,domain,study)
     destination=store.cache/"domains"/"simulation"/"handoff"/key
     destination.mkdir(parents=True,exist_ok=True)

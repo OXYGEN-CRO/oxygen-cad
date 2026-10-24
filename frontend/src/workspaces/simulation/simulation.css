@@ -1,0 +1,141 @@
+.simulation-panel {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+  min-width: 0;
+}
+.simulation-panel label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.simulation-panel label input,
+.simulation-panel select {
+  max-width: 100%;
+  width: 100%;
+}
+.simulation-panel details {
+  border-top: 1px solid var(--border, #8884);
+  padding-top: 9px;
+  min-width: 0;
+}
+.simulation-panel summary {
+  cursor: pointer;
+  font-weight: 550;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.simulation-panel details[open] > :not(summary) {
+  margin-bottom: 9px;
+}
+.sim-toolbar,
+.sim-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sim-toolbar > strong {
+  margin-right: auto;
+}
+.sim-tabs [aria-selected="true"] {
+  background: var(--surface-active, #8883);
+}
+.sim-help {
+  opacity: 0.7;
+  line-height: 1.5;
+  margin: 0;
+}
+.sim-notice {
+  border-left: 2px solid #c19033;
+  padding: 7px 9px;
+  background: #c1903312;
+  line-height: 1.5;
+}
+.sim-boundary {
+  border: 1px solid var(--border, #8884);
+  border-radius: 7px;
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+}
+.sim-boundary code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.sim-vector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 6px;
+}
+.simulation-panel .sim-checkbox {
+  display: flex;
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.simulation-panel input[type="checkbox"] {
+  width: auto;
+  margin-top: 2px;
+}
+.simulation-panel textarea {
+  box-sizing: border-box;
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--border, #8884);
+  border-radius: 5px;
+  padding: 7px;
+  min-height: 70px;
+  width: 100%;
+  font: 11px monospace;
+}
+.simulation-panel .sim-json {
+  min-height: 300px;
+}
+.simulation-panel pre {
+  font: 10px/1.5 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 250px;
+  overflow: auto;
+}
+.sim-values {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.sim-values > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sim-values dt {
+  opacity: 0.7;
+}
+.sim-values dd {
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.simulation-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.simulation-panel th,
+.simulation-panel td {
+  text-align: left;
+  border-bottom: 1px solid var(--border, #8884);
+  padding: 5px;
+}
+.simulation-panel a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.sim-field {
+  min-height: 230px;
+  width: 100%;
+  border-radius: 7px;
+  background: #8881;
+}

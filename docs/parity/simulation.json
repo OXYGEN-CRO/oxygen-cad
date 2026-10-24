@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "domain": "simulation",
+  "date": "2026-10-24",
+  "row_id_convention": "SIM-01 through SIM-20 follow the order and exact family names of the audited 20-family simulation inventory; they are local stable implementation-register identifiers.",
+  "physics_status": "Bounded numerical implementation; full audited parity is incomplete.",
+  "physical_validation": "not_supplied",
+  "platform_tested": "Linux",
+  "dependencies": {
+    "numpy": "application dependency",
+    "scipy": ">=1.15,<2 required centrally",
+    "CalculiX": "external GPL executable; existing runtime, nonlinear studies only",
+    "Netgen": "existing isolated mesher environment; separate OCCT runtime"
+  },
+  "executed_checks": [
+    "PYTHONPATH=$PWD/src .venv/bin/python -m pytest tests/test_simulation_domain.py -q",
+    "npm run build --prefix frontend",
+    "O3D_BROWSER_URL=http://127.0.0.1:9013 npx playwright test tests/simulation.spec.ts (isolated form fixture)",
+    "Full backend suite:62 passed; simulation numerical subset27 passed; isolated browser setup/actual-field preview2 passed; frontend TypeScript/Vite build passed."
+  ],
+  "rows": [
+    {
+      "row_id": "SIM-01",
+      "audited_family": "Linear static stress",
+      "status": "experimental",
+      "implemented_scope": "C3D4 isotropic multi-body/multi-case linear elasticity; mesh refinement and equation/equilibrium checks",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Quadratic elements, nonsingular stress probes and strength-criterion validation; production mesh benchmarks and hardware correlation."
+    },
+    {
+      "row_id": "SIM-02",
+      "audited_family": "Loads and supports",
+      "status": "experimental",
+      "implemented_scope": "Planar traction/pressure, conservative moments/remote forces, gravity, bearing-direction traction and hydrostatic pressure; fixed/partial/frictionless/cylindrical pin",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Native edges/vertices, local frames, true cylindrical bearing-pressure integration and curved-face CAD-to-mesh mappings; current bearing is a direction-weighted traction approximation."
+    },
+    {
+      "row_id": "SIM-03",
+      "audited_family": "Inertial relief",
+      "status": "experimental",
+      "implemented_scope": "Free connected isotropic static solid; explicit translation/angular acceleration and six rigid gauge constraints",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Assemblies/connectors, nonlinear relief and qualified additional eligible study variants; current relief is a connected free linear solid."
+    },
+    {
+      "row_id": "SIM-04",
+      "audited_family": "Assembly contact",
+      "status": "experimental",
+      "implemented_scope": "Sourced paired-node elastic bonded and frictionless separation penalties; gap/active-set checks; no general sliding/friction/self-contact",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "General sliding/friction, rough/offset surface contact, self-contact, automatic surface pairing and pressure/contact qualification."
+    },
+    {
+      "row_id": "SIM-05",
+      "audited_family": "Bolts/connectors",
+      "status": "experimental",
+      "implemented_scope": "Axial elastic truss connector with sourced preload/stiffness; no thread/washer/bending/torque-derived preload",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Thread/nut/washer models, torque conversion, tightening sequence, bending and nonlinear/event connector translation."
+    },
+    {
+      "row_id": "SIM-06",
+      "audited_family": "Nonlinear static",
+      "status": "experimental",
+      "implemented_scope": "CalculiX C3D4 finite deformation and supplied J2 isotropic-hardening curves; dead loads and axis supports; no translated contact/bolts",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Nonlinear contact/bolts, hyperelasticity, constitutive calibration, broader mesh/formulation validation and platform packaging."
+    },
+    {
+      "row_id": "SIM-07",
+      "audited_family": "Modal",
+      "status": "experimental",
+      "implemented_scope": "Lumped mass eigenpairs, rigid modes, participation, residual and mass orthogonality; bonded elastic interfaces; no preload transfer",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Preload transfer, mode tracking across remesh/design changes and modal physical-test correlation."
+    },
+    {
+      "row_id": "SIM-08",
+      "audited_family": "Structural buckling",
+      "status": "experimental",
+      "implemented_scope": "Initial-stress generalized eigenproblem with explicit sign/load-factor convention; no imperfect collapse/postbuckling",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Qualified refined-column accuracy envelope, large-system eigenworkers, imperfections/collapse and bolt geometric stiffness."
+    },
+    {
+      "row_id": "SIM-09",
+      "audited_family": "Steady thermal",
+      "status": "experimental",
+      "implemented_scope": "Solid conduction, heat power/flux, convection, nonlinear radiation, thermal pair conductance and energy balance",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Temperature-dependent properties, broader thermal contact geometries and calibrated thermal correlation."
+    },
+    {
+      "row_id": "SIM-10",
+      "audited_family": "Thermal stress",
+      "status": "experimental",
+      "implemented_scope": "Sequential same-mesh temperature/expansion transfer with stress-free reference temperature",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Nonmatching-mesh associative temperature transfer, nonlinear thermal constitutive coupling and calibrated expansion datasets."
+    },
+    {
+      "row_id": "SIM-11",
+      "audited_family": "Quasi-static Event",
+      "status": "experimental",
+      "implemented_scope": "Small-strain explicit transient subset; timestep sensitivity, energy and final kinetic/internal ratio; no large-motion event parity",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Large motion, prescribed-motion histories, evolving general surface contact, rate calibration and explicit-event solver qualification."
+    },
+    {
+      "row_id": "SIM-12",
+      "audited_family": "Dynamic Event",
+      "status": "experimental",
+      "implemented_scope": "Small-strain lumped-mass central difference, piecewise-linear load histories, initial velocity and frictionless paired contact; no deletion/damage",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Large motion, failure/deletion/rate models, general frictional impact, prescribed motion and dedicated explicit-event adapter."
+    },
+    {
+      "row_id": "SIM-13",
+      "audited_family": "Electronics cooling",
+      "status": "experimental",
+      "implemented_scope": "Prescribed-film solid/power thermal subset; no air domain/fan/flow/CHT adapter",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Air-domain extraction, fan/buoyancy/flow and conjugate heat transfer, PCB/package abstractions and temperature correlation."
+    },
+    {
+      "row_id": "SIM-14",
+      "audited_family": "Shape/topology optimization",
+      "status": "experimental",
+      "implemented_scope": "Filtered SIMP compliance/volume, preserve/obstacle cells and thresholded-solid reanalysis; no editable CAD conversion",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Editable CAD reconstruction, manufacturing/minimum-feature constraints, volume-preserving connected threshold reconstruction and final-CAD reanalysis."
+    },
+    {
+      "row_id": "SIM-15",
+      "audited_family": "Generative design",
+      "status": "experimental",
+      "implemented_scope": "Evaluated unrestricted SIMP/material alternatives and post-search displacement/mass/modal/buckling limit checks; no manufacturing-specific/global optimum claim",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Manufacturing-specific outcomes, simultaneous modal/buckling-constrained search, global/local displacement regions, editable CAD and final-CAD reanalysis."
+    },
+    {
+      "row_id": "SIM-16",
+      "audited_family": "General CFD",
+      "status": "unavailable",
+      "implemented_scope": "Outside ordinary Fusion native scope; no integrated flow adapter",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "No integrated general CFD adapter; optional scope beyond ordinary native Fusion study parity."
+    },
+    {
+      "row_id": "SIM-17",
+      "audited_family": "Fatigue, harmonic/random response, transient heat transfer",
+      "status": "unavailable",
+      "implemented_scope": "Additional engineering scope; calibrated histories/models and dedicated adapters not integrated",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "No fatigue, harmonic/random response or transient-heat adapters; additional engineering scope requires histories and calibrated laws."
+    },
+    {
+      "row_id": "SIM-18",
+      "audited_family": "Study models, comparisons and reports",
+      "status": "implemented",
+      "implemented_scope": "Independent versioned models/materials/studies/cases, clone, exact snapshots, stale detection, comparisons, HTML reports and downloadable fields",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Full host integration acceptance, mesh overlays/probes and cross-platform packaging; physical validation remains separate."
+    },
+    {
+      "row_id": "SIM-19",
+      "audited_family": "Analysis handoff",
+      "status": "experimental",
+      "implemented_scope": "Versioned neutral study package and restricted CalculiX deck with explicit transfer-loss report; no Ansys .sdz authoring",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "Ansys versioned study/geometry/condition transfer and .sdz authoring; neutral ZIP+restricted CalculiX decks only."
+    },
+    {
+      "row_id": "SIM-20",
+      "audited_family": "Injection molding/process analysis",
+      "status": "unavailable",
+      "implemented_scope": "No polymer filling/packing/warpage solver or calibrated material/process adapter",
+      "implementation": [
+        "src/o3d/domains/simulation.py",
+        "src/o3d/simulation_models.py",
+        "src/o3d/simulation_fem.py",
+        "src/o3d/simulation_worker.py",
+        "src/o3d/extended_solver.py",
+        "src/o3d/simulation_search.py",
+        "frontend/src/workspaces/simulation/Panel.tsx"
+      ],
+      "tests": [
+        "tests/test_simulation_domain.py"
+      ],
+      "remaining_work": "No polymer filling/packing/cooling/warpage process solver, material library or calibrated molding workflow."
+    }
+  ],
+  "known_limits": [
+    "No physical calibration or validation evidence supplied.",
+    "No qualified general sliding/friction/self-contact or nonlinear joint adapter.",
+    "No large-motion/damage/deletion event adapter.",
+    "No conjugate cooling/air/fan CFD, molding, fatigue, harmonic or transient-heat adapter.",
+    "No manufacturing-specific generative constraints or editable optimized-CAD reconstruction.",
+    "No preloaded modal transfer or automatic mode tracking.",
+    "No converged nonsingular stress probe; strength findings remain screening.",
+    "No Ansys .sdz adapter; neutral package carries explicit transfer losses."
+  ]
+}

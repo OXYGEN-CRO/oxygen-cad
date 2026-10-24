@@ -162,8 +162,6 @@ class System:
                     if abs(basis[axis, j]) > 1e-14:
                         rows.append(i*3+axis); cols.append(c); data.append(basis[axis, j])
                 c += 1
-        if c == 0:
-            raise ValueError("Every mechanical degree of freedom is restrained")
         return sparse.coo_matrix((data, (rows, cols)), shape=(3*len(self.ids), c)).tocsr()
 
     def loads(self, case):
@@ -315,12 +313,18 @@ class System:
 
 
 def solve_reduced(k, rhs, t):
+    if t.shape[1]==0:return np.zeros(t.shape[0]),0.
     reduced = (t.T@k@t).tocsc()
     force = np.asarray(t.T@rhs).ravel()
     with warnings.catch_warnings():
         warnings.simplefilter("error", sla.MatrixRankWarning)
         try:
-            q = sla.spsolve(reduced, force)
+            factor = sla.splu(reduced)
+            stiffness_scale=max(float(np.max(np.abs(reduced).sum(axis=1))),1e-30)
+            pivots=np.abs(factor.U.diagonal())
+            if len(pivots)!=len(force) or pivots.min()<stiffness_scale*1e-13:
+                raise ValueError("Unrestrained rigid body modes or ill-conditioned stiffness; repair supports/load paths")
+            q = factor.solve(force)
         except (sla.MatrixRankWarning, RuntimeError) as exc:
             raise ValueError("Mechanical system is singular; repair missing supports or disconnected load paths") from exc
     if not np.isfinite(q).all():
@@ -339,6 +343,14 @@ def solve_reduced(k, rhs, t):
 def relief_load(system, f):
     if system.mass.min() <= 0:
         raise ValueError("Inertial relief requires positive sourced mass on every body")
+    parents={n:n for n in system.ids}
+    def root(n):
+        while parents[n]!=n:parents[n]=parents[parents[n]];n=parents[n]
+        return n
+    for e,*_ in system.elements:
+        first=root(e.nodes[0])
+        for n in e.nodes[1:]:parents[root(n)]=first
+    if len({root(n) for n in system.ids})!=1:raise ValueError("Inertial relief currently requires one connected solid mesh")
     xyz, m = system.xyz, system.mass
     center = (xyz*m[:,None]).sum(axis=0)/m.sum()
     r = xyz-center
@@ -418,7 +430,7 @@ def static_solve(system, case, cancel=None, temperatures=None):
     moment_error=float(np.linalg.norm(np.cross(system.xyz,reactions+applied).sum(axis=0))/(force_scale*characteristic))
     fields,kg=system.strain_fields(u,temperatures,system.study.stress_free_temperature_k)
     fields.update({"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":{n:u[3*i:3*i+3].tolist() for i,n in enumerate(system.ids)},"reactions_n":{n:reactions[i].tolist() for i,n in enumerate(system.ids)}})
-    values={"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(fields["von_mises_mpa"].values()),"mass_g":float(system.mass.sum()*1e6),"strain_energy_n_mm":float(.5*u@(system.k@u))}
+    values={"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(fields["von_mises_mpa"].values()),"mass_g":float(system.mass.sum()*1e6) if all(m.density_g_cm3 is not None for m in system.assignments.values()) else None,"strain_energy_n_mm":float(.5*u@(system.k@u))}
     checks={"residual":residual,"force_balance_error":force_error,"moment_balance_error":moment_error,"contact_iterations":history}
     if not system.study.interfaces and not system.study.bolts and temperatures is None:
         external_work=float(.5*u@f)
@@ -441,6 +453,7 @@ def thermal_solve(system, case, cancel=None):
     for interface in system.study.interfaces:
         if interface.kind=="disabled":
             continue
+        if interface.kind in {"bonded","separation"} and system.study.type=="thermal_stress":continue
         if interface.kind!="thermal" or interface.conductance_w_k is None:
             raise ValueError("Thermal solve requires explicit thermal pair conductance interfaces")
         for a,b in interface.node_pairs:
@@ -535,6 +548,7 @@ def modal_solve(system,case,cancel=None):
     ki,_,_=system.interface_stiffness()
     k=(t.T@(system.k+ki)@t).tocsc()
     m=(t.T@sparse.diags(system.m)@t).tocsc()
+    if k.shape[0]==0:raise ValueError("Modal study has no unconstrained mechanical degrees of freedom")
     count=min(system.study.settings.mode_count,k.shape[0])
     if k.shape[0]>2500:
         vals,vecs=sla.eigsh(k,k=min(count,k.shape[0]-1),M=m,which="SM",tol=1e-8,maxiter=10000)
@@ -565,6 +579,7 @@ def buckling_solve(system,case,cancel=None):
     t=base["t"]
     a=(t.T@base["k"]@t).toarray()
     b=-(t.T@base["kg"]@t).toarray()
+    if not len(a):raise ValueError("Buckling study has no unconstrained mechanical degrees of freedom")
     if len(a)>1500:raise ValueError("Reference buckling worker limited to 1500 unconstrained degrees; use a qualified large-model adapter")
     vals,vecs=linalg.eig(a,b)
     modes=[]
@@ -587,6 +602,7 @@ def event_solve(system,case,cancel=None,step_scale=1.):
     if system.study.settings.inertial_relief:raise ValueError("Events assemble physical inertia; inertial relief is inapplicable")
     t=system.transformation(case)
     # Orthogonal node-local bases retain a diagonal lumped mass after reduction.
+    if t.shape[1]==0:raise ValueError("Event study has no unconstrained mechanical degrees of freedom")
     mass=np.asarray(t.power(2).T@system.m).ravel()
     initial_k,_,_=system.interface_stiffness(activate_all=True)
     k=(t.T@(system.k+initial_k)@t).tocsr()
@@ -617,6 +633,10 @@ def event_solve(system,case,cancel=None,step_scale=1.):
     work,dissipation=0.,0.
     history=[]
     max_error=0.
+    peak_displacement=0.;peak_stress=0.;peak_energy_scale=max(initial_energy,1e-12);peak_energy_residual=0.
+    stress_operators=np.array([d@b for _,_,_,_,_,b,d in system.elements])
+    element_dofs=np.array([dofs for _,_,dofs,*_ in system.elements])
+    stress_envelope=np.zeros(len(system.elements));energy_pairs=[]
     for step in range(steps+1):
         if step%100==0:check_cancel(cancel)
         kinetic=float(.5*np.dot(mass*velocity,velocity))
@@ -630,6 +650,17 @@ def event_solve(system,case,cancel=None,step_scale=1.):
                 if interface.kind=="bonded":strain+=.5*interface.stiffness_n_mm*float(delta@delta)
                 else:strain+=.5*interface.stiffness_n_mm*min(0,float(delta@unit(interface.normal))+interface.initial_gap_mm)**2
         if system.study.bolts:raise ValueError("Event bolt pretension sequence is unavailable; use static bolt analysis")
+        step_displacement=float(np.linalg.norm(u.reshape(-1,3),axis=1).max())
+        peak_displacement=max(peak_displacement,step_displacement)
+        sigma=np.einsum("eij,ej->ei",stress_operators,u[element_dofs])
+        sx,sy,sz,xy,yz,xz=sigma.T
+        equivalent=np.sqrt(.5*((sx-sy)**2+(sy-sz)**2+(sz-sx)**2)+3*(xy*xy+yz*yz+xz*xz))
+        stress_envelope=np.maximum(stress_envelope,equivalent)
+        peak_stress=max(peak_stress,float(equivalent.max()))
+        if not np.isfinite(peak_stress+step_displacement+kinetic+strain):raise ValueError("Event integration diverged")
+        energy_pairs.append((kinetic,strain))
+        peak_energy_scale=max(peak_energy_scale,abs(work),kinetic+strain)
+        peak_energy_residual=max(peak_energy_residual,abs(kinetic+strain+dissipation-work-initial_energy))
         error=abs(kinetic+strain+dissipation-work-initial_energy)/max(abs(work),abs(initial_energy),abs(strain),1e-12)
         max_error=max(max_error,error)
         if step==steps or step%max(1,steps//200)==0:
@@ -644,12 +675,12 @@ def event_solve(system,case,cancel=None,step_scale=1.):
         work+=float(.5*(force+next_force)@(next_q-q))
         dissipation+=float(settings.damping_per_s*np.dot(mass*((velocity+next_velocity)/2),(velocity+next_velocity)/2)*dt)
         q,velocity,acc,force=next_q,next_velocity,next_acc,next_force
-    energy_scale=max([abs(initial_energy),1e-12]+[max(abs(h["external_work_n_mm"]),h["kinetic_energy_n_mm"]+h["strain_energy_n_mm"]) for h in history])
+    energy_scale=peak_energy_scale
     for h in history:h["relative_energy_error"]=abs(h["energy_residual_n_mm"])/energy_scale
-    max_error=max(h["relative_energy_error"] for h in history)
+    max_error=peak_energy_residual/energy_scale
     fields,_=system.strain_fields(u)
-    fields.update({"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":{n:u[3*i:3*i+3].tolist() for i,n in enumerate(system.ids)},"time_history":history})
+    fields.update({"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":{n:u[3*i:3*i+3].tolist() for i,n in enumerate(system.ids)},"time_history":history,"field_time_s":settings.duration_s,"field_state":"final","element_von_mises_envelope_mpa":{e.id:float(stress_envelope[i]) for i,(e,*_) in enumerate(system.elements)}})
     ratio=history[-1]["kinetic_energy_n_mm"]/max(history[-1]["strain_energy_n_mm"],1e-12)
-    significant=[h for h in history if h["strain_energy_n_mm"]>.05*max(x["strain_energy_n_mm"] for x in history)]
-    max_ratio=max((h["kinetic_energy_n_mm"]/max(h["strain_energy_n_mm"],1e-12) for h in significant),default=0.)
-    return {"values":{"max_displacement_mm":max(h["max_displacement_mm"] for h in history),"final_displacement_mm":history[-1]["max_displacement_mm"],"max_von_mises_mpa":max(fields["von_mises_mpa"].values())},"checks":{"residual":0.,"energy_balance_error":float(max_error),"final_kinetic_internal_ratio":float(ratio),"max_kinetic_internal_ratio":float(max_ratio),"time_step_s":dt,"stability_limit_s":stable,"time_steps":steps,"mass_scaling":False},"field":fields,"time_history":history,"interfaces":interfaces,"warnings":["Small-strain central-difference event; no damage, element deletion or rate-dependent material model."]}
+    peak_internal=max(pair[1] for pair in energy_pairs)
+    max_ratio=max((kinetic/max(strain,1e-12) for kinetic,strain in energy_pairs if strain>.05*peak_internal),default=0.)
+    return {"values":{"max_displacement_mm":peak_displacement,"final_displacement_mm":history[-1]["max_displacement_mm"],"max_von_mises_mpa":peak_stress},"checks":{"residual":0.,"energy_balance_error":float(max_error),"final_kinetic_internal_ratio":float(ratio),"max_kinetic_internal_ratio":float(max_ratio),"time_step_s":dt,"stability_limit_s":stable,"time_steps":steps,"mass_scaling":False},"field":fields,"time_history":history,"interfaces":interfaces,"warnings":["Small-strain central-difference event; no damage, element deletion or rate-dependent material model."]}

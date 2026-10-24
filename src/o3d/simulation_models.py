@@ -104,6 +104,7 @@ class AnalysisModel(Record):
     geometry_key: str
     body_ids: list[str] = Field(default_factory=lambda: ["part"])
     simplifications: list[str] = Field(default_factory=list)
+    regions: list[Region] = Field(default_factory=list)
     mesh: MeshRecord | None = None
     refinements: list[MeshRecord] = Field(default_factory=list, max_length=4)
 

@@ -50,23 +50,27 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     lines.extend(["*NSET,NSET=SUPPORTS"])
     for i in range(0,len(fixed),16):lines.append(",".join(map(str,sorted(fixed)[i:i+16])))
     increment=study.settings.nonlinear_initial_increment*increment_scale
-    lines.extend(["*STEP,INC=1000"+(",NLGEOM" if study.settings.large_deformation else ""),"*STATIC",f"{increment},1,1e-7,{increment}","*CLOAD"])
-    for i,n in enumerate(system.ids):
-        for axis in range(3):
-            if abs(force[i*3+axis])>1e-15:lines.append(f"{n},{axis+1},{force[i*3+axis]:.15g}")
-    lines.extend(["*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","U","*NODE PRINT,NSET=SUPPORTS,FREQUENCY=1","RF","*EL PRINT,ELSET=BODY0,FREQUENCY=1","S,PEEQ,ENER","*NODE FILE,FREQUENCY=1","U,RF","*EL FILE,FREQUENCY=1","S,PEEQ","*END STEP"])
+    history=case.history or [(0.,0.),(1.,1.)]
+    if history[0]!=(0.,0.):raise ValueError("Nonlinear load history must start at time zero and zero multiplier")
+    for (previous_time,_),(time,factor) in zip(history,history[1:]):
+        duration=time-previous_time
+        lines.extend(["*STEP,INC=1000"+(",NLGEOM" if study.settings.large_deformation else ""),"*STATIC",f"{increment*duration},{duration},{1e-7*duration},{increment*duration}","*CLOAD,OP=NEW"])
+        for i,n in enumerate(system.ids):
+            for axis in range(3):
+                if abs(force[i*3+axis])>1e-15:lines.append(f"{n},{axis+1},{force[i*3+axis]*factor:.15g}")
+        lines.extend(["*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","U","*NODE PRINT,NSET=SUPPORTS,FREQUENCY=1","RF","*EL PRINT,ELSET=BODY0,FREQUENCY=1","S,PEEQ,ENER","*NODE FILE,FREQUENCY=1","U,RF","*EL FILE,FREQUENCY=1","S,PEEQ","*END STEP"])
     path.write_text("\n".join(lines)+"\n")
     return force
 
 
-def _last_increment(path):
+def _last_increment(path,expected_time=1.):
     rows=[]
     for line in path.read_text(errors="replace").splitlines():
         values=line.split()
         if len(values)>=7 and all(x.isdigit() for x in values[:3]):
             try:rows.append({"step":int(values[0]),"increment":int(values[1]),"attempt":values[2],"iterations":int(values[3]),"total_time":float(values[4]),"step_time":float(values[5]),"increment_time":float(values[6])})
             except ValueError:continue
-    if not rows or abs(rows[-1]["step_time"]-1)>1e-6:
+    if not rows or abs(rows[-1]["total_time"]-expected_time)>max(1e-7,expected_time*1e-6):
         raise RuntimeError("CalculiX did not complete the entire load step; partial results refused")
     return rows
 
@@ -102,6 +106,20 @@ def _parse_node_print(path):
     return displacement,reactions
 
 
+def _displacement_history(path):
+    rows=[];current=None
+    for line in path.read_text(errors="replace").splitlines():
+        if line.strip().lower().startswith("displacements ("):
+            current={"time":float(line.split()[-1]),"max_displacement_mm":0.}
+            rows.append(current)
+        elif current is not None:
+            parts=line.split()
+            if len(parts)==4 and parts[0].isdigit():current["max_displacement_mm"]=max(current["max_displacement_mm"],float(np.linalg.norm([float(v.replace("D","E")) for v in parts[1:]])))
+            elif parts:current=None
+    if not rows:raise RuntimeError("Missing load-displacement history")
+    return rows
+
+
 def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increment_scale=1.):
     directory.mkdir(parents=True,exist_ok=True)
     force=write_calculix(directory/"analysis.inp",system,case,nonlinear,increment_scale)
@@ -109,25 +127,25 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     log=(directory/"solver.log").read_text(errors="replace")
     if "*ERROR" in log.upper() or "JOB FINISHED" not in log.upper():
         raise RuntimeError("CalculiX did not report a completed job; inspect solver.log")
-    increments=_last_increment(directory/"analysis.sta")
+    increments=_last_increment(directory/"analysis.sta",case.history[-1][0] if case.history else 1.)
     convergence=_convergence(directory/"analysis.cvg")
     displacement,reactions=_parse_node_print(directory/"analysis.dat")
     if set(displacement)!=set(system.ids):raise RuntimeError("CalculiX result misses mesh nodes")
     stress=parse_stress(directory/"analysis.frd")
     u=np.array([displacement[n] for n in system.ids]).ravel()
-    applied=force.reshape(-1,3)
+    applied=force.reshape(-1,3)*(case.history[-1][1] if case.history else 1.)
     reacted=np.zeros_like(applied)
     for support in case.supports:
         components=(True,True,True) if support.kind=="fixed" else support.components
         for i in system.region_nodes(support.region_id):
             for axis,active in enumerate(components):
                 if active:reacted[i,axis]=reactions.get(system.ids[i],[0,0,0])[axis]
-    scale=max(np.linalg.norm(applied,axis=1).sum(),1e-12)
+    scale=max(np.linalg.norm(applied,axis=1).sum(),np.linalg.norm(force.reshape(-1,3),axis=1).sum(),1e-12)
     force_error=float(np.linalg.norm((applied+reacted).sum(axis=0))/scale)
     coordinates=system.xyz+(u.reshape(-1,3) if system.study.settings.large_deformation else 0)
     length=max(np.linalg.norm(np.ptp(coordinates,axis=0)),1e-12)
     moment_error=float(np.linalg.norm(np.cross(coordinates,applied+reacted).sum(axis=0))/(scale*length))
-    last_by_increment={r["increment"]:r for r in convergence}
+    last_by_increment={(r["step"],r["increment"]):r for r in convergence}
     residual=max((abs(r["force_residual_percent"])/100 for r in last_by_increment.values()),default=None)
     if residual is None and not nonlinear:
         transform=system.transformation(case)
@@ -140,4 +158,5 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         elif active and line.startswith(" -1"):
             values=re.findall(r"[+-]?\d\.\d+(?:[ED][+-]\d+)",line[13:])
             plastic_values.extend(float(v.replace("D","E")) for v in values)
-    return {"values":{"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(stress.values()),"max_equivalent_plastic_strain":max(plastic_values,default=0.)},"checks":{"residual":float(residual),"force_balance_error":force_error,"moment_balance_error":moment_error,"increments":increments,"nonlinear_convergence":convergence},"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":displacement,"nodal_extrapolated_von_mises_mpa":stress,"support_reactions_n":{n:reacted[i].tolist() for i,n in enumerate(system.ids)}},"solver":"CalculiX","warnings":["Nodal stress is extrapolated; fixture peaks can be singular.","J2 isotropic hardening follows supplied true-stress/plastic-strain data; no cyclic/rate calibration is inferred."]}
+    history=_displacement_history(directory/"analysis.dat")
+    return {"load_displacement_history":history,"values":{"max_displacement_mm":max(h["max_displacement_mm"] for h in history),"final_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(stress.values()),"max_equivalent_plastic_strain":max(plastic_values,default=0.)},"checks":{"residual":float(residual),"force_balance_error":force_error,"moment_balance_error":moment_error,"increments":increments,"nonlinear_convergence":convergence},"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":displacement,"nodal_extrapolated_von_mises_mpa":stress,"support_reactions_n":{n:reacted[i].tolist() for i,n in enumerate(system.ids)}},"solver":"CalculiX","warnings":["Nodal stress is extrapolated; fixture peaks can be singular.","J2 isotropic hardening follows supplied true-stress/plastic-strain data; no cyclic/rate calibration is inferred."]}

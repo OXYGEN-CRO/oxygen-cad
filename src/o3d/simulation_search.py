@@ -108,7 +108,7 @@ def generative(system,case,cancel=None):
         candidate.assignments[0].material_id=material_id
         try:
             result=optimize(System(system.mesh,candidate,system.materials),case,cancel)
-            findings=[]
+            findings=[{"id":"target-volume","quantity":"retained_volume_fraction","value":result["checks"]["retained_volume_fraction"],"limit":search.volume_fraction,"satisfied":result["checks"]["retained_volume_fraction"]<=search.volume_fraction+1e-8}]
             for limit in candidate.limits:
                 value=result["values"].get(limit.quantity)
                 findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"satisfied":bool(value is not None and (value<=limit.value if limit.operator=="le" else value>=limit.value))})
