@@ -55,6 +55,17 @@ def create_app(dsn: str | None = None):
         except KeyError as error:
             raise HTTPException(404, "Part not found") from error
 
+    @app.get("/v1/parts/{part_id}/engineering")
+    def engineering_contract(part_id: UUID):
+        from ..joints import contract_from_catalog
+        try:
+            with Catalog(dsn) as catalog:
+                return contract_from_catalog(catalog.get(str(part_id)))
+        except KeyError as error:
+            raise HTTPException(404, "Part not found") from error
+        except ValueError as error:
+            raise HTTPException(422, "Part lacks a valid exact-identity engineering contract") from error
+
     @app.post("/v1/bom/check")
     def bom_check(bom: BOM):
         try:

@@ -124,6 +124,9 @@ def create_app(root=None):
                 await asyncio.sleep(1)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
+    from .joint_routes import mount as mount_joints
+    mount_joints(app, store)
+
     frontend = Path(os.environ.get("O3D_FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend/dist"))
     if frontend.exists():
         app.mount("/", StaticFiles(directory=frontend, html=True), name="studio")

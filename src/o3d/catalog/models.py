@@ -85,6 +85,16 @@ class Part(Model):
     observed_at: datetime = Field(default_factory=utcnow)
 
 
+    @model_validator(mode="after")
+    def engineering_identity(self):
+        if "engineering_contract" in self.attributes:
+            from ..joint_models import ActuatorContract
+            contract = ActuatorContract.model_validate(self.attributes["engineering_contract"])
+            if contract.manufacturer != self.manufacturer or contract.mpn != self.mpn:
+                raise ValueError("Catalog identity does not match engineering contract")
+        return self
+
+
 class NumericFilter(Model):
     key: str
     unit: str

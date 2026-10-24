@@ -48,6 +48,7 @@ import {
   type State,
   type DisplayField,
 } from "./api";
+import { JointPanel } from "./JointPanel";
 import { FeatureNavigator } from "./components/FeatureNavigator";
 import { InspectorSection } from "./components/InspectorSection";
 import { StudyPanel } from "./components/StudyPanel";
@@ -727,6 +728,7 @@ export default function App() {
               {[
                 ["project", Settings2, "Project settings"],
                 ["verify", ShieldCheck, "Study setup"],
+                ["joints", Activity, "Joint selection"],
                 ["source", Code2, "Source"],
                 ["history", History, "History"],
               ].map(([id, Icon, label]: any) => (
@@ -1193,15 +1195,17 @@ export default function App() {
           >
             <div className="panel-heading">
               <span>
-                {tab === "verify"
-                  ? "Engineering study"
-                  : tab === "history"
-                    ? "Revision history"
-                    : tab === "source"
-                      ? "Project source"
-                      : tab === "project"
-                        ? "Project"
-                        : "Properties"}
+                {tab === "joints"
+                  ? "Joint selection"
+                  : tab === "verify"
+                    ? "Engineering study"
+                    : tab === "history"
+                      ? "Revision history"
+                      : tab === "source"
+                        ? "Project source"
+                        : tab === "project"
+                          ? "Project"
+                          : "Properties"}
               </span>
               <Button
                 aria-label="Close properties"
@@ -1213,6 +1217,14 @@ export default function App() {
               </Button>
             </div>
             <div className="properties">
+              {tab === "joints" && (
+                <JointPanel
+                  project={current}
+                  dirty={dirty}
+                  blocked={Boolean(busy || pending)}
+                  onEdit={edit}
+                />
+              )}
               {tab === "design" && (
                 <>
                   {feature ? (

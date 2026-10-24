@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .joint_models import ActuatorContract, JointRequirement
 
 BriefID = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")]
 Signature = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
@@ -64,10 +65,12 @@ class EngineeringBrief(BriefModel):
     task: str = Field(default="", max_length=10000)
     inputs: list[BriefInput] = Field(default_factory=list, max_length=200)
     links: list[BriefLink] = Field(default_factory=list, max_length=200)
+    joint_requirements: list[JointRequirement] = Field(default_factory=list, max_length=50)
+    components: list[ActuatorContract] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def distinct_ids(self):
-        for name in ("inputs", "links"):
+        for name in ("inputs", "links", "joint_requirements", "components"):
             ids = [item.id for item in getattr(self, name)]
             if len(ids) != len(set(ids)):
                 raise ValueError(f"Duplicate brief {name} IDs")

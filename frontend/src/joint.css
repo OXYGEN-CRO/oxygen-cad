@@ -1,0 +1,96 @@
+.joint-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.joint-panel p {
+  margin: 4px 0 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.joint-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.joint-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.joint-task,
+.joint-contracts {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.joint-task > summary {
+  margin-bottom: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.joint-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.joint-quantity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px;
+  gap: 4px;
+}
+.joint-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--input-bg, transparent);
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+.joint-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.joint-candidate {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+.joint-candidate summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.joint-check {
+  margin: 12px 0;
+}
+.joint-check p {
+  font-size: 12px;
+}
+.joint-limit,
+.joint-panel small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+@media (max-width: 480px) {
+  .joint-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.joint-panel .field input {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 9px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.joint-panel .field > .joint-quantity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px;
+}
+.joint-panel .joint-quantity select {
+  min-width: 0;
+  width: 100%;
+}

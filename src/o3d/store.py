@@ -121,6 +121,14 @@ class Store:
                                     for index, value in enumerate(before):
                                         check_bindings(value, after[index] if isinstance(after, (list, tuple)) and index < len(after) else None, f"{path}.{index}")
                             check_bindings(feature.model_dump(), replacements.get(feature.id), feature.id)
+                old_joint = current.engineering_brief.joint_requirements if current.engineering_brief else []
+                new_joint = updated.engineering_brief.joint_requirements if updated.engineering_brief else []
+                by_id = {r.id: r for r in new_joint}
+                for requirement in old_joint:
+                    if requirement.state == "accepted":
+                        other = by_id.get(requirement.id)
+                        if other is None or other.model_dump(exclude={"selected_component_id"}) != requirement.model_dump(exclude={"selected_component_id"}):
+                            raise Conflict(f"Joint requirement {requirement.id} is user-owned")
                 requirements = {r.id: r.model_dump() for r in updated.requirements}
                 for requirement in current.requirements:
                     if requirements.get(requirement.id) != requirement.model_dump():
@@ -157,6 +165,7 @@ class Store:
 
     def state(self):
         from .analysis import capabilities
+        from .joints import status as joint_status
         project = self.load()
         gkey, skey = geometry_key(project), study_key(project)
         build_path = self.cache / "builds" / gkey / "build.json"
@@ -176,7 +185,7 @@ class Store:
                 "build": build, "last_build": last_build, "analysis": analysis, "checks": checks,
                 "geometry_state": "current" if build else "stale" if last_build else "not_run",
                 "analysis_state": active["state"], "studies": studies,
-                "history": self.history(), "context": context, "simulation_capabilities": capabilities()}
+                "history": self.history(), "context": context, "simulation_capabilities": capabilities(), "joint_selection": joint_status(self, project)}
 
     def study_states(self, project=None):
         project = self.load() if project is None else project
