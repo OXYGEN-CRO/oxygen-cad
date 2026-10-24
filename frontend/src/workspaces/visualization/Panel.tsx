@@ -1054,13 +1054,14 @@ export default function VisualizationPanel(props: DomainPanelProps) {
           onChange={(e) => setAdvanced(e.target.value)}
         />
         <Button
-          onClick={() => {
-            try {
-              setData(JSON.parse(advanced));
-            } catch (e) {
-              props.setError(String(e));
-            }
-          }}
+          onClick={() =>
+            void act(async () => {
+              const candidate = JSON.parse(advanced);
+              await props.saveDomain("visualization", candidate);
+              setData(candidate);
+              setStatus("Scene settings validated and saved");
+            })
+          }
         >
           Apply scene JSON
         </Button>

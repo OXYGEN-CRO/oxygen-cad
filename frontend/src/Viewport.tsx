@@ -144,9 +144,14 @@ export function Viewport(props: Props) {
         ),
         camera,
       );
-      const hit = ray
-        .intersectObjects(model.children, true)
-        .find((h) => h.object.visible && h.object.userData.face);
+      const hit = ray.intersectObjects(model.children, true).find((h) => {
+        if (!h.object.visible || !h.object.userData.face) return false;
+        const material = (h.object as THREE.Mesh)
+          .material as THREE.MeshStandardMaterial;
+        return !(material.clippingPlanes ?? []).some(
+          (plane) => plane.distanceToPoint(h.point) < 0,
+        );
+      });
       if (hit) {
         const info = hit.object.userData;
         latest.current.onSelect({
@@ -344,7 +349,12 @@ export function Viewport(props: Props) {
             (
               props.geometry as
                 (Geometry & { native_scene?: NativeScene }) | null
-            )?.native_scene
+            )?.native_scene ??
+            ((props.project as Project & { native_document?: unknown })
+              .native_document
+              ? (props.geometry as (Geometry & { scene?: NativeScene }) | null)
+                  ?.scene
+              : undefined)
           )?.bodies
         : undefined;
     const nativePoints =
@@ -352,6 +362,12 @@ export function Viewport(props: Props) {
         (b) =>
           b.mesh?.positions ?? b.mesh?.faces?.flatMap((f) => f.vertices) ?? [],
       ) ?? [];
+    host.current!.dataset.visualBodies=String(nativeBodies?.length??1);
+    if(nativeBodies?.length===0){
+      host.current!.dataset.fieldReady="true";
+      r.renderer.render(r.scene,r.camera);
+      return;
+    }
     const geometry = nativePoints.length
       ? {
           bounds: [0, 1].map((side) =>
