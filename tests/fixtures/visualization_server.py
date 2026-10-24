@@ -20,4 +20,4 @@ if __name__ == "__main__":
             {"id":"p","type":"profile","width":20,"height":16},
             {"id":"b","type":"extrude","profile":"p","distance":12}]))
         build(store,store.load())
-        uvicorn.run(create_app(folder,project_windows=False),host="127.0.0.1",port=port)
+        uvicorn.run(create_app(folder,project_windows=False),host=os.environ.get("O3D_TEST_HOST","127.0.0.1"),port=port)

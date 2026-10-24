@@ -19,6 +19,18 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
+FIXTURES = {
+    "platform-lifecycle.spec.ts": {
+        "server": "tests/platform_browser_server.py", "port": 9371,
+        "port_env": "O3D_PLATFORM_TEST_PORT", "host_env": "O3D_PLATFORM_TEST_HOST",
+        "enable_env": "O3D_PLATFORM_BROWSER_FIXTURE",
+    },
+    "visualization-integration.spec.ts": {
+        "server": "tests/fixtures/visualization_server.py", "port": 8954,
+        "port_env": "O3D_TEST_PORT", "host_env": "O3D_TEST_HOST",
+        "enable_env": "O3D_VISUALIZATION_INTEGRATION",
+    },
+}
 
 
 def available_port(selected: int | None) -> int:
@@ -71,22 +83,25 @@ def prepare_fixture(base: str, alive, timeout: int, template: Path | None) -> No
 
 
 @contextmanager
-def fixture(args, directory: Path, env: dict[str, str], template: Path | None, platform: bool):
+def fixture(args, directory: Path, env: dict[str, str], template: Path | None, spec: str):
     port = available_port(args.port)
     base = f"http://127.0.0.1:{port}"
     process = None
     name = "oxygen-browser-" + uuid.uuid4().hex[:12]
     docker = shlex.split(args.docker_command)
+    settings = FIXTURES.get(spec)
+    server = settings["server"] if settings else "scripts/test_server.py"
     with (directory / "fixture.log").open("w") as log:
         try:
             if args.mode == "docker":
-                container_port = 9371 if platform else 8787
-                platform_command = ["python", "tests/platform_browser_server.py"] if platform else []
-                platform_env = ["-e", "O3D_PLATFORM_TEST_HOST=0.0.0.0", "-e", "O3D_PLATFORM_TEST_PORT=9371"] if platform else []
+                container_port = settings["port"] if settings else 8787
+                fixture_command = ["python", server] if settings else []
+                fixture_env = ["-e", f"{settings['host_env']}=0.0.0.0",
+                               "-e", f"{settings['port_env']}={container_port}"] if settings else []
                 subprocess.run(
                     docker + ["run", "--rm", "-d", "--name", name,
                               "-p", f"127.0.0.1:{port}:{container_port}", "--tmpfs", "/projects:rw,nosuid,nodev"]
-                    + platform_env + [args.image] + platform_command,
+                    + fixture_env + [args.image] + fixture_command,
                     check=True, stdout=log, stderr=subprocess.STDOUT,
                 )
                 alive = lambda: subprocess.run(
@@ -94,11 +109,11 @@ def fixture(args, directory: Path, env: dict[str, str], template: Path | None, p
                     capture_output=True, text=True,
                 ).stdout.strip() == "true"
             else:
-                fixture_env = env | {"O3D_TEST_PORT": str(port), "O3D_PLATFORM_TEST_PORT": str(port),
-                                     "O3D_PLATFORM_TEST_HOST": "127.0.0.1"}
-                server = ROOT / ("tests/platform_browser_server.py" if platform else "scripts/test_server.py")
+                fixture_env = env | {"O3D_TEST_PORT": str(port)}
+                if settings:
+                    fixture_env |= {settings["port_env"]: str(port), settings["host_env"]: "127.0.0.1"}
                 process = subprocess.Popen(
-                    [str(args.python), str(server)],
+                    [str(args.python), str(ROOT / server)],
                     cwd=ROOT, env=fixture_env, stdout=log, stderr=subprocess.STDOUT,
                     start_new_session=True,
                 )
@@ -181,16 +196,16 @@ def main() -> int:
             result = {"spec": spec, "mode": args.mode, "status": "failed"}
             try:
                 template = ROOT / "examples/assemblies/slider.json" if spec == "assemblies.spec.ts" else None
-                platform = spec == "platform-lifecycle.spec.ts"
-                with fixture(args, directory, env, template, platform) as base:
+                with fixture(args, directory, env, template, spec) as base:
                     result["fixture_url"] = base
                     browser_env = env | {
                         "O3D_BROWSER_URL": base,
                         "O3D_BROWSER_DISPOSABLE": "1",
                         "O3D_BROWSER_EVIDENCE": str(directory / "artifacts"),
                         "O3D_TEST_PORT": base.rsplit(":", 1)[1],
-                        "O3D_PLATFORM_BROWSER_FIXTURE": "1" if platform else "",
                     }
+                    for fixture_spec, settings in FIXTURES.items():
+                        browser_env[settings["enable_env"]] = "1" if spec == fixture_spec else ""
                     if args.mode == "docker":
                         # Some specs generate native source files outside the API.
                         # Execute the exact image engine; mount only their working

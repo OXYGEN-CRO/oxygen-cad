@@ -56,6 +56,11 @@ temporary project catalog, real imported STEP reference, and child projects are
 removed together. The runner explicitly enables that test in both modes. Docker
 binds this API to container port 9371 and publishes only the selected loopback
 host port; native mode uses `O3D_PLATFORM_TEST_PORT`.
+Integrated render/publishing acceptance uses its own
+`tests/fixtures/visualization_server.py` project and is explicitly enabled too.
+It covers actual render jobs, publication, cancellation, and retained stale
+snapshot images; Docker publishes its container port 8954 on the selected
+loopback host port.
 The CI workflow runs these commands, preserves browser evidence, packages the
 tested runtime, and retains the Apple Silicon build, ad-hoc signing, and archive
 jobs. The independent parts-catalog workflow is unchanged.
