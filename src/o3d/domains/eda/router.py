@@ -1,11 +1,12 @@
 """Deterministic bounded single-layer walkaround router (no shove claims)."""
 import heapq
 import math
-from .checks import copper, net_map, pad_world, effective, capsule, poly_distance, inside, edges, segment_distance
+from .checks import copper, net_map, pad_world, placed_layers, effective, capsule, poly_distance, inside, edges, segment_distance
 from .schema import Track
 
 
 def route(doc, payload, cancel=None):
+    if cancel and (cancel() if callable(cancel) else cancel.is_set()):raise RuntimeError('Electronics routing cancelled before starting')
     net_id=payload['net_id']; layer=payload.get('layer','F.Cu'); aliases,pins=net_map(doc)
     if net_id not in aliases: raise ValueError('Unknown route net')
     layers=[l.id for l in doc.board.stackup if l.kind=='copper']
@@ -16,8 +17,8 @@ def route(doc, payload, cancel=None):
     def endpoint(ref):
         cid,pid=ref['component_id'],ref['pin_id']
         if pins.get(f'{cid}/{pid}')!=net or cid not in placed: raise ValueError('Route endpoint must be a placed pin on the selected net')
-        c=comps[cid]; pad=next((p for p in parts[c.library_id,c.library_version].pads if p.pin_id==pid),None)
-        if pad is None: raise ValueError('Pin has no physical pad')
+        c=comps[cid]; pad=next((p for p in parts[c.library_id,c.library_version].pads if p.pin_id==pid and layer in placed_layers(p,placed[cid],layers)),None)
+        if pad is None: raise ValueError('Endpoint pin has no pad on the selected copper layer; add an explicit layer transition')
         return pad_world(pad,placed[cid])
     start,end=endpoint(payload['start']),endpoint(payload['end'])
     obstacles=[]

@@ -280,6 +280,9 @@ test("electrical source survives human editing, real solve/fabrication, agent lo
     .getByRole("button", { name: "Switch to light mode", exact: true })
     .click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(
+    panel.getByRole("tab", { name: "Board", exact: true }),
+  ).toHaveCSS("color", "rgb(38, 38, 38)");
   await page.screenshot({
     path: test.info().outputPath("electronics-board-light.png"),
   });

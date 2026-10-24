@@ -15,7 +15,7 @@
   "executed_tests": [
     {
       "command": "PYTHONPATH=$PWD/src:/tmp/oxygen-eda-verification .venv/bin/python -m pytest -q tests/test_electronics.py --basetemp /tmp/oxygen-eda-tests",
-      "result": "24 passed; two harmless Gerbonara G90 header-position warnings",
+      "result": "25 passed; two harmless Gerbonara G90 header-position warnings",
       "tools": {
         "kicad-cli": "9.0.2",
         "ngspice": "44.2",
@@ -28,7 +28,7 @@
     },
     {
       "command": "O3D_BROWSER_URL=http://127.0.0.1:8958 npx playwright test tests/electronics.spec.ts --reporter=line",
-      "result": "1 passed (10.6s); real integrated UI, no page errors; direct and whole-project locks, forged actor rejection, stale source/revision, actual ngspice/fabrication artifacts and reopen persistence"
+      "result": "1 passed (11.0s); integrated UI, dark/light and390px no overflow, no page errors; direct and whole-project locks, forged actor rejection, stale source/revision, actual ngspice/fabrication artifacts and reopen persistence"
     },
     {
       "command": "Fresh Python process: Store(disposable_project).load()",

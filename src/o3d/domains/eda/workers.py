@@ -22,6 +22,7 @@ def cancelled(cancel):return bool(cancel and (cancel() if callable(cancel) else 
 
 def run(argv,cwd,cancel=None,timeout=120,allowed=(0,)):
     """No shell; process output stays bounded on disk and is exposed as an artifact."""
+    if cancelled(cancel):raise RuntimeError('Electronics worker cancelled before starting')
     log=Path(cwd)/('tool-'+str(time.time_ns())+'.log')
     with log.open('w') as output:
         proc=subprocess.Popen([str(a) for a in argv],cwd=cwd,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
@@ -36,6 +37,7 @@ def run(argv,cwd,cancel=None,timeout=120,allowed=(0,)):
             import signal
             os.killpg(proc.pid,signal.SIGKILL);proc.wait();raise
     text=log.read_text(errors='replace')
+    if cancelled(cancel):raise RuntimeError('Electronics worker cancelled')
     if proc.returncode not in allowed:raise RuntimeError(f'{Path(argv[0]).name} exited {proc.returncode}: {text[-3000:]}')
     return text
 

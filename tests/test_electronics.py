@@ -269,3 +269,11 @@ def test_release_reproducibility_checked_layer_job_drawing_dimensions_and_hashes
         drawing=xml.fromstring(bundle.read('top-drawing.svg'));assert drawing.attrib['width']=='60.0mm' or drawing.attrib['width']=='60mm'
         assert len(drawing.findall('.//{http://www.w3.org/2000/svg}polygon'))>=6
         assert not any('external-tool-originals' in name or 'tool-' in name for name in bundle.namelist())
+
+
+def test_router_rejects_fast_path_cancellation_and_unreachable_layer_endpoint(design,workspace):
+    payload={'id':'route','net_id':'vin','layer':'F.Cu','start':{'component_id':'v1','pin_id':'p1'},'end':{'component_id':'r1','pin_id':'p1'}}
+    design.library[0].pads[1].at=(-2,4)  # no obstacle on the direct route
+    with pytest.raises(RuntimeError,match='cancelled before starting'):eda.execute(workspace,project(design),'route',payload,cancel=lambda:True)
+    payload.update(net_id='vout',start={'component_id':'r1','pin_id':'p2'},end={'component_id':'c1','pin_id':'p1'})
+    with pytest.raises(ValueError,match='no pad on the selected copper layer'):eda.execute(workspace,project(design),'route',payload)
