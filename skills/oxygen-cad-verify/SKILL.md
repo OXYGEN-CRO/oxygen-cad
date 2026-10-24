@@ -47,6 +47,16 @@ The returned `artifact` and `report` paths resolve under the selected project's 
 
 The release ZIP contains STEP, STL, project JSON, BOM CSV and HTML/JSON reports; native builds can also include the native design and engine script. When current analysis exists, `analysis/` preserves its input package, analysis STEP, mesh/decks, raw solver outputs/logs and normalized fields. Other current studies are included under `analyses/<id>/`; stale studies have no package. Inspect provenance and recorded numerical/physical-validation state. The BOM identifies reference sources; original imported reference STEP assets still require the original project and `assets/` for an editable handoff. GLB, 3MF, DXF, drawings, slicer output, purchasing and sending to printers are not provided by this command.
 
+For a combined editable package with a nominal PDF drawing, planar DXF section, mesh screen and the reference assets/notices, use the revision-bound handoff command:
+
+```sh
+# Choose a project-coordinate Z plane that intersects the desired solid section.
+./o3d handoff create --section-z 1.5 --json
+./o3d handoff status --json
+```
+
+Read the returned findings and inspect the rendered PDF and DXF. `current` means the project, reference inputs, generator/toolchain and packaged files still match; it does not mean the engineering checks passed. Edits make old packages stale (status exits 2); rebuild and rerun affected studies before deliberately regenerating. Check an older package with `--manifest handoffs/<id>/manifest.json`. After unpacking, select that project and use `handoff status --manifest manifest.json --json`. See `docs/HANDOFF.md` for evidence and boundaries. Robot files and slices still require their separate workflows.
+
 Report the project revision, paths, measured checks, analysis state and remaining assumptions. Do not describe an exported design as manufactured, certified or ordered.
 
 For printability/process checks use oxygen-cad-dfam/oxygen-cad-dfm and the selected supplier rules; existing geometry checks are not comprehensive DFM. For derivative drawings, DXF or robot files, inspect their separate output evidence and consumer checks. Slicer/app handoff success does not establish manufacturing success.

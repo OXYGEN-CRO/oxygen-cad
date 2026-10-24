@@ -85,3 +85,11 @@ The CLI initializes the `plastic-unload` template, solves the complete eight-obs
 ![Nonlinear plastic strain at peak load](analysis-nonlinear.png)
 
 Six study types now have executable experimental subsets. No contact, damage, cyclic calibration, independent second FE solver, physical test, Windows/macOS runtime execution or complete Fusion parity is established. The remaining completion requirements stay open in [SIMULATION.md](SIMULATION.md).
+
+## Sensor-mount handoff acceptance (2026-10-24)
+
+The real catalog-to-handoff acceptance passed all 23 steps on `dev-one`: new project/skill workspace, licensed sensor STEP import, measured mounting interface, rejected stale/locked proposals, native build/check, actual Netgen/CalculiX solves, Chromium manual edit/face selection, stale derivative detection, regeneration and an unpacked-project rebuild/freshness check. The PDF was rendered with PDFium and its dimension text checked; the studio and drawing images were visually inspected. [Commands, fixture and limitations](HANDOFF.md) describe the repeatable run.
+
+All 72 noncatalog backend tests pass, including five real handoff tests for reopening, regeneration, artifact/archive tampering, reference notice changes, failed derivatives and concurrent edits. After integrating the latest catalog source, 205 catalog tests and 12 subtests pass; 40 optional database-backed cases skip without a disposable test database. All 15 ordinary browser flows pass in 1.6 minutes on a disposable project. The dedicated sensor browser case passes through its own driver and deliberately skips in the ordinary suite. Production build/TypeScript, verification-skill validation and authored whitespace checks pass.
+
+The first driver attempt exposed a harness error parsing an expected CLI rejection from stdout instead of stderr; the corrected second run passed. An initial broad browser invocation used the wrong working directory and could not find existing fixture files; the normal frontend-directory invocation passed. Neither failed attempt is counted as a successful run. The runtime was already installed, the workflow was scripted, and numerical material/load inputs were synthetic. Cold installation, independent agent discovery, physical hardware, other operating systems and external slicer/robot consumers remain untested by this case.

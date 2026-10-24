@@ -16,6 +16,7 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 | Radix Primitives | Accessible dropdown menu foundation | MIT — https://github.com/radix-ui/primitives; installed package notices retained |
 | React, Three.js, Vite, FastAPI, Pydantic, Typer, Trimesh | UI and application/runtime libraries | See installed package license files and upstream projects |
 | ReportLab | Standalone engineering-sheet PDF renderer | BSD-style license; installed package license retained; https://www.reportlab.com/opensource/ |
+| pypdfium2 / PDFium | Optional acceptance-test PDF rendering (`acceptance` extra) | See the installed package's wrapper, PDFium and bundled dependency notices; https://github.com/pypdfium2-team/pypdfium2 |
 | charset-normalizer | ReportLab text dependency | MIT; installed package notices retained; https://github.com/jawah/charset_normalizer |
 | Geist Sans / Geist Mono | Locally served variable fonts | SIL Open Font License — `frontend/public/fonts/Geist-LICENSE.txt` and `Geist-Mono-LICENSE.txt`; https://fontsource.org/fonts/geist |
 

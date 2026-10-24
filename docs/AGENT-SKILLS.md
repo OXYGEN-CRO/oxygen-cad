@@ -6,7 +6,7 @@ The plugin packages the same instructions that ship with the checkout. It uses t
 | --- | --- |
 | `oxygen-cad-setup` | Runtime/project selection, studio and diagnostics |
 | `oxygen-cad-model` | Revision-checked editing, native-command discovery, briefs and repair |
-| `oxygen-cad-verify` | Current geometry/available-study evidence and standard export |
+| `oxygen-cad-verify` | Current geometry/study evidence, standard export and revision-bound derivative handoff |
 | `oxygen-cad-parts` | Native catalog search/licensed import first; optional direct API helper with checksum/provenance |
 | `oxygen-cad-drawing` | Basic A3 orthographic PDF with hidden edges and nominal overall dimensions |
 | `oxygen-cad-dxf` | Planar STEP cross-section DXF and limited entity/contour inspection; no unfolding |
@@ -59,6 +59,8 @@ All eleven newly covered domains have original workflow instructions and focused
 Run helpers from their own skill directory with the appropriate interpreter. Each skill documents exact examples and output limits. Keep the full bundle installed: SRDF/SDF helpers reuse the packaged URDF XML/numeric routines, and molding screening reuses the packaged mesh ray helper. Paths are resolved relative to those installed files, not a hardcoded checkout.
 
 External OrcaSlicer, Bambu applications, ROS/MoveIt, Gazebo/libsdformat and supplier/catalog services are not installed automatically. Instructions require checking actual consumer versions and retain missing/unperformed checks. Helper lint `ok` refers only to its stated coverage; it does not establish simulation, tool accessibility or manufacturing certification. Basic PDF sheets omit hole callouts, sections and GD&T; DXF export is a horizontal section, not a bent sheet's flat pattern. Additional workflows do not silently extend the standard export ZIP or native studio schema.
+
+The explicit `handoff create` command connects the native release with the drawing, DXF and mesh-screen helpers and copies reference geometry/provenance for reopening. `handoff status` verifies source, generator and output hashes. This freshness check covers that package; independently authored robot files and sliced jobs remain separate. See [HANDOFF.md](HANDOFF.md) for commands and a rerunnable catalog-to-browser acceptance case.
 
 Slicer and Bambu helpers default to plans. `--run` requests local slicing and `--open` requests the vendor application opener; neither helper supplies print/start commands. Windows handoff uses the system opener without interpolating a file path into a shell command.
 

@@ -29,6 +29,27 @@ engine_app = typer.Typer(help="Discover and use the vendored Rust modelling engi
 app.add_typer(engine_app, name="engine")
 study_app = typer.Typer(help="Create, clone, select, compare and inspect persistent engineering studies.")
 app.add_typer(study_app, name="study")
+handoff_app = typer.Typer(help="Generate and verify revision-bound derivative handoff packages.")
+app.add_typer(handoff_app, name="handoff")
+
+
+@handoff_app.command("create")
+def handoff_create(ctx: typer.Context, section_z: float = typer.Option(...), overhang_degrees: float = 45,
+                   json_output: bool = typer.Option(False, "--json")):
+    from .handoff import create
+    result = create(ctx.obj, section_z, overhang_degrees)
+    emit(result)
+    if result["state"] != "current":
+        raise typer.Exit(2)
+
+
+@handoff_app.command("status")
+def handoff_status(ctx: typer.Context, manifest: str | None = None, json_output: bool = typer.Option(False, "--json")):
+    from .handoff import status
+    result = status(ctx.obj, manifest)
+    emit(result)
+    if result["state"] != "current":
+        raise typer.Exit(2)
 
 
 @study_app.command("create")
