@@ -25,7 +25,7 @@
     },
     {
       "command": "cd frontend && PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<native-engine> O3D_TEST_PORT=8964 npx playwright test --config tests/modeling/playwright.config.ts",
-      "result": "6 passed in 16.4 seconds on disposable Store/Vite ports 8964/5194; actual native transaction routes, no engine mocks; includes measured plastic operation dialogs"
+      "result": "7 passed in 16.5 seconds against the integrated production API on disposable Store/Vite ports 8964/5194; includes migrated human lock/unlock, preservation of native document/context/checkpoint, synchronized legacy/native lock flags, agent refusal without revision change and cold reopen; no engine mocks"
     }
   ],
   "rows": [
@@ -158,8 +158,8 @@
     {
       "id": "MOD-022",
       "status": "partial",
-      "implemented": "Native equation/unit parameters, model/user filtering, rename/change/delete, dependency inspection/graph, CSV/JSON import and CSV export; measured inch/mm equation and cycle rejection tests. Human lock/unlock controls save versioned modeling metadata; strict validation preserves native context/checkpoints and refuses agent lock weakening.",
-      "remaining": "Integrated legacy lock mirroring/unlock browser regression depends on the platform Store synchronization patch. Broad rename/import/recompute workflows remain unaccepted."
+      "implemented": "Native equation/unit parameters, model/user filtering, rename/change/delete, dependency inspection/graph, CSV/JSON import and CSV export; measured inch/mm equation and cycle rejection tests. Human lock/unlock controls save versioned modeling metadata; strict validation preserves native context/checkpoints and refuses agent lock weakening. Integrated browser acceptance verifies migrated human unlock/relock, synchronized legacy/native flags and refusal of agent edits without revision changes.",
+      "remaining": "Broad parameter rename/import/recompute workflows and performance budgets remain unaccepted."
     },
     {
       "id": "MOD-023",

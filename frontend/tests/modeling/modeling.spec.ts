@@ -50,7 +50,7 @@ test.beforeEach(async ({ request }) => {
   const response = await request.post("/api/commands", {
     data: {
       expected_revision: project.revision,
-      actor: "agent",
+      actor: "human",
       action: "replace",
       project: {
         ...project,
@@ -403,6 +403,87 @@ test("plastic operation dialogs create measured editable enclosure features", as
   ).toBeTruthy();
 });
 
+test("human unlock and lock preserve the native editing context and protect agent edits", async ({
+  page,
+  request,
+}) => {
+  const empty = await (await request.get("/api/project")).json();
+  const seeded = await request.post("/api/commands", {
+    data: {
+      expected_revision: empty.revision,
+      actor: "human",
+      action: "replace",
+      project: {
+        ...empty,
+        parameters: { width: { value: 10, unit: "mm", locked: true } },
+      },
+      summary: "Seed a migrated user lock",
+    },
+  });
+  expect(seeded.ok(), await seeded.text()).toBeTruthy();
+  await native(request, "sketch.create", {
+    plane: "XY",
+    name: "Locked sketch",
+  });
+  await native(request, "sketch.line", {
+    points: [
+      [0, 0],
+      [10, 0],
+    ],
+  });
+  const before = await (await request.get("/api/project")).json();
+  await page.goto("/tests/modeling/fixture.html");
+  await page.getByRole("button", { name: "Parameters", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Unlock parameter width", exact: true })
+    .click();
+  await idle(page);
+  await expect(
+    page.getByRole("button", { name: "Lock parameter width", exact: true }),
+  ).toBeVisible();
+  const unlocked = await (await request.get("/api/project")).json();
+  expect(unlocked.parameters.width.locked).toBeFalsy();
+  expect(unlocked.domains.modeling.parameter_locks.width).toBeFalsy();
+  expect(unlocked.domains.modeling.native_context).toEqual(
+    before.domains.modeling.native_context,
+  );
+  expect(unlocked.domains.modeling.sketch_entry).toEqual(
+    before.domains.modeling.sketch_entry,
+  );
+  expect(unlocked.native_document).toEqual(before.native_document);
+  await native(request, "parameters.change", {
+    name: "width",
+    expression: "20 mm",
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Parameters", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Lock parameter width", exact: true })
+    .click();
+  await idle(page);
+  const locked = await (await request.get("/api/project")).json();
+  expect(locked.parameters.width.locked).toBeTruthy();
+  expect(locked.domains.modeling.parameter_locks.width).toBeTruthy();
+  const refused = await request.post("/api/native/execute", {
+    data: {
+      expected_revision: locked.revision,
+      actor: "agent",
+      command: "parameters.change",
+      params: { name: "width", expression: "30 mm" },
+    },
+  });
+  expect(refused.status()).toBe(409);
+  expect((await refused.json()).detail).toMatch(/locked|lock/i);
+  expect((await (await request.get("/api/project")).json()).revision).toBe(
+    locked.revision,
+  );
+  await page.reload();
+  await page.getByRole("button", { name: "Parameters", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Unlock parameter width", exact: true }),
+  ).toBeVisible();
+});
+
 test("native history and topology work in both themes at narrow widths", async ({
   page,
   request,
@@ -414,8 +495,19 @@ test("native history and topology work in both themes at narrow widths", async (
     body_name: "Body",
   });
   await page.goto("/tests/modeling/fixture.html");
-  await page.getByRole("button", { name: "History", exact: true }).click();
-  await page.getByRole("button", { name: /Box1/ }).click();
+  await page.getByLabel("Modeling workspace").waitFor();
+  await page.evaluate(
+    (feature) =>
+      window.dispatchEvent(
+        new CustomEvent("o3d:modeling", {
+          detail: { feature, tab: "history" },
+        }),
+      ),
+    created.result.feature,
+  );
+  await expect(
+    page.getByLabel("Feature height", { exact: true }),
+  ).toBeVisible();
   await idle(page);
   await page.getByLabel("Feature height", { exact: true }).fill("12 mm");
   await page
