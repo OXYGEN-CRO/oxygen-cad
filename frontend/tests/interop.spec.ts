@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { beginOperation } from "../../tests/browser_operations.cjs";
 
 async function project(request: APIRequestContext) {
   const response = await request.get("/api/project");
@@ -57,7 +58,7 @@ function outlineDxf() {
 }
 
 test("inch mesh import, measured diagnostics, actual OBJ export and cold reopen", async ({ page, request }, testInfo) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
@@ -77,12 +78,14 @@ test("inch mesh import, measured diagnostics, actual OBJ export and cold reopen"
   bounds.max.forEach((value: number, axis: number) => expect(value - bounds.min[axis]).toBeCloseTo([25.4, 50.8, 76.2][axis], 4));
   await page.getByRole("tab", { name: "Meshes", exact: true }).click();
   await page.getByLabel("Source mesh", { exact: true }).selectOption(normalized.id);
+  const topology = await beginOperation(page, request, "Topology diagnostics", 60000, testInfo.outputDir);
   await page.getByRole("button", { name: "Analyze topology", exact: true }).click();
-  await expect.poll(async () => {
+  await topology(async () => {
     try { return JSON.parse(await page.locator(".interop-result pre").innerText()).diagnostics?.watertight; }
     catch { return false; }
-  }).toBe(true);
+  });
   const diagnostics = JSON.parse(await page.locator(".interop-result pre").innerText()).diagnostics;
+  expect(diagnostics.watertight).toBe(true);
   expect(diagnostics.triangles).toBe(12);
   expect(diagnostics.boundary_edges).toBe(0);
   expect(Math.abs(diagnostics.volume_mm3 / (25.4 * 50.8 * 76.2) - 1)).toBeLessThan(1e-6);

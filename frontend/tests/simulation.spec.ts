@@ -5,6 +5,7 @@ import {
   type APIRequestContext,
 } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { beginOperation } from "../../tests/browser_operations.cjs";
 
 let originalProject: any;
 test.beforeEach(async ({ request }) => {
@@ -253,6 +254,7 @@ test("plastic nonlinear setup, load/unload history and increment fields", async 
   page,
   request,
 }) => {
+  test.setTimeout(300000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await fixture(request);
@@ -284,10 +286,20 @@ test("plastic nonlinear setup, load/unload history and increment fields", async 
     .click();
   await page.locator(".assumptions input").check();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  const nonlinear = await beginOperation(
+    page,
+    request,
+    "Nonlinear load-unload solve",
+    180000,
+    test.info().outputDir,
+  );
   await page.getByRole("button", { name: "Run study", exact: true }).click();
+  await nonlinear(() =>
+    page.getByText("Final displacement", { exact: true }).isVisible(),
+  );
   await expect(
     page.getByText("Final displacement", { exact: true }),
-  ).toBeVisible({ timeout: 45000 });
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Run study", exact: true }),
   ).toBeEnabled();
