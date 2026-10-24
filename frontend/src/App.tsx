@@ -1043,6 +1043,37 @@ export default function App() {
                           />
                         </>
                       )}
+                      {feature.type === "native" && (
+                        <>
+                          <Field
+                            label="Native command"
+                            value={feature.command}
+                            onChange={(command: string) =>
+                              patchFeature({ command })
+                            }
+                          />
+                          <label className="source-field">
+                            Arguments
+                            <textarea
+                              aria-label="Native arguments"
+                              key={`${feature.id}-${state.project.revision}`}
+                              defaultValue={pretty(feature.params)}
+                              spellCheck={false}
+                              onBlur={(event) => {
+                                try {
+                                  patchFeature({
+                                    params: JSON.parse(event.target.value),
+                                  });
+                                } catch {
+                                  setError(
+                                    "Native arguments must be a JSON object",
+                                  );
+                                }
+                              }}
+                            />
+                          </label>
+                        </>
+                      )}
                       {feature.type === "extrude" && (
                         <>
                           <Select

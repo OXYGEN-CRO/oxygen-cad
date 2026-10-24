@@ -70,7 +70,7 @@ def select_edges(shape, selection):
     return matches
 
 
-def compile_shape(project: Project):
+def compile_occt_shape(project: Project):
     profiles = {}
     shape = None
     for feature in project.features:
@@ -131,6 +131,8 @@ def compile_shape(project: Project):
                     raise ValueError("Edge selection is empty")
                 size = project.resolve(feature.size)
                 shape = shape.fillet(size, edges) if feature.type == "fillet" else shape.chamfer(size, None, edges)
+            elif feature.type == "native":
+                raise ValueError("Native command features require geometry_engine=solidcraft")
             if shape is not None and not shape.is_valid:
                 raise ValueError("Kernel reports invalid geometry")
         except Exception as error:
@@ -138,6 +140,15 @@ def compile_shape(project: Project):
     if shape is None or len(shape.solids()) != 1 or shape.volume <= 0:
         raise ValueError("The project must produce exactly one connected, positive-volume solid")
     return shape.moved(bd.Location(project.placement.translation, project.placement.rotation))
+
+
+def compile_shape(project: Project):
+    if project.geometry_engine == "occt":
+        return compile_occt_shape(project)
+    import tempfile
+    from .native import compile_native
+    with tempfile.TemporaryDirectory(prefix="oxygen-geometry-") as folder:
+        return compile_native(project, Path(folder))[0]
 
 
 def face_metadata(shape):
@@ -168,10 +179,15 @@ def build(store: Store, project: Project):
     key = geometry_key(project)
     destination = store.cache / "builds" / key
     destination.mkdir(parents=True, exist_ok=True)
-    shape = compile_shape(project)
+    if project.geometry_engine == "solidcraft":
+        from .native import compile_native
+        shape, engine = compile_native(project, destination.resolve())
+    else:
+        shape, engine = compile_occt_shape(project), {"engine": "occt"}
     if not bd.export_brep(shape, destination / "part.brep"):
         raise ValueError("BREP export failed")
-    bd.export_step(shape, destination / "part.step")
+    if project.geometry_engine == "occt":
+        bd.export_step(shape, destination / "part.step")
     bd.export_stl(shape, destination / "part.stl", tolerance=0.05, angular_tolerance=0.1)
     faces = face_metadata(shape)
     references = []
@@ -182,12 +198,14 @@ def build(store: Store, project: Project):
             face["id"] = f"asset:{ref.sha256}:{index}"
         references.append({"id": ref.id, "name": ref.name, "faces": ref_faces, "visible": ref.visible})
     bbox = shape.bounding_box()
-    result = {"key": key, "revision": project.revision, "volume_mm3": shape.volume,
+    result = {"key": key, "revision": project.revision, "engine": engine, "volume_mm3": shape.volume,
               "dimensions_mm": vector(bbox.size), "bounds": [vector(bbox.min), vector(bbox.max)],
               "center_of_mass": vector(shape.center(bd.CenterOf.MASS)),
               "faces": faces, "references": references,
               "edges": [{"id": f"edge:{signature(e)}", "center": vector(e.center()), "length_mm": e.length} for e in shape.edges()],
               "artifacts": {name: f"builds/{key}/part.{extension}" for name, extension in (("step", "step"), ("stl", "stl"), ("brep", "brep"))}}
+    if project.geometry_engine == "solidcraft":
+        result["artifacts"].update({"native_design": f"builds/{key}/part.solidcraft", "engine_script": f"builds/{key}/engine-script.json"})
     write_json(destination / "build.json", result)
     write_json(store.cache / "last-build.json", result)
     return result

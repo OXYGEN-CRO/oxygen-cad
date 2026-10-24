@@ -322,6 +322,49 @@
       "title": "Material",
       "type": "object"
     },
+    "NativeFeature": {
+      "additionalProperties": false,
+      "description": "A serializable modelling command executed by the vendored Rust engine.",
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "suppressed": {
+          "default": false,
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "native",
+          "default": "native",
+          "title": "Type",
+          "type": "string"
+        },
+        "command": {
+          "pattern": "^(solid|sketch)\\.[a-z][a-z0-9_.]*$",
+          "title": "Command",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "command"
+      ],
+      "title": "NativeFeature",
+      "type": "object"
+    },
     "Parameter": {
       "additionalProperties": false,
       "properties": {
@@ -742,6 +785,15 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "geometry_engine": {
+      "default": "solidcraft",
+      "enum": [
+        "solidcraft",
+        "occt"
+      ],
+      "title": "Geometry Engine",
+      "type": "string"
+    },
     "revision": {
       "default": 1,
       "minimum": 1,
@@ -776,6 +828,7 @@
             "extrude": "#/$defs/Extrude",
             "fillet": "#/$defs/EdgeTreatment",
             "hole": "#/$defs/Hole",
+            "native": "#/$defs/NativeFeature",
             "profile": "#/$defs/Profile"
           },
           "propertyName": "type"
@@ -792,6 +845,9 @@
           },
           {
             "$ref": "#/$defs/EdgeTreatment"
+          },
+          {
+            "$ref": "#/$defs/NativeFeature"
           }
         ]
       },

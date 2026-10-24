@@ -64,10 +64,13 @@ def export_bundle(store, project):
     folder.mkdir(parents=True, exist_ok=True)
     for name in ("step", "stl"):
         shutil.copy2(store.artifact(state["build"]["artifacts"][name]), folder / f"part.{name}")
+    for kind, filename in (("native_design", "part.solidcraft"), ("engine_script", "engine-script.json")):
+        if kind in state["build"]["artifacts"]:
+            shutil.copy2(store.artifact(state["build"]["artifacts"][kind]), folder / filename)
     write_json(folder / "o3d.json", project.model_dump(mode="json"))
     analysis = state["analysis"]
     report = {"project": project.name, "revision": project.revision, "geometry_key": geometry_key(project), "study_key": study_key(project),
-              "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": analysis,
+              "geometry_engine": state["build"].get("engine"), "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": analysis,
               "dimensions_mm": state["build"]["dimensions_mm"], "volume_mm3": state["build"]["volume_mm3"]}
     write_json(folder / "report.json", report)
     (folder / "report.html").write_text("<!doctype html><meta charset='utf-8'><title>Oxygen CAD engineering report</title>"

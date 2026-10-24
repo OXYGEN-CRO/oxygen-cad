@@ -1,0 +1,24 @@
+[package]
+name = "oxygen-engine"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+publish = false
+
+[dependencies]
+solidcraft-engine = { path = "../third_party/solidcraft/crates/engine" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+strip = "debuginfo"
+
+[patch.crates-io]
+truck-geometry = { path = "../third_party/solidcraft/vendor/truck-geometry" }
+truck-shapeops = { path = "../third_party/solidcraft/vendor/truck-shapeops" }
+truck-stepio = { path = "../third_party/solidcraft/vendor/truck-stepio" }
+truck-meshalgo = { path = "../third_party/solidcraft/vendor/truck-meshalgo" }
+matext4cgmath = { path = "../third_party/solidcraft/vendor/matext4cgmath" }

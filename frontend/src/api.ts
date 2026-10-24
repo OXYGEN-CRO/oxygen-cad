@@ -23,7 +23,7 @@ export const artifact = (path: string) =>
   `/api/artifacts/${path.split("/").map(encodeURIComponent).join("/")}`;
 export type Feature = {
   id: string;
-  type: "profile" | "extrude" | "hole" | "fillet" | "chamfer";
+  type: "profile" | "extrude" | "hole" | "fillet" | "chamfer" | "native";
   name: string;
   suppressed: boolean;
   [key: string]: any;

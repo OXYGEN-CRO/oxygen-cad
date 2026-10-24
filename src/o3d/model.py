@@ -74,7 +74,35 @@ class EdgeTreatment(FeatureBase):
     size: Scalar = 1
 
 
-Feature = Annotated[Profile | Extrude | Hole | EdgeTreatment, Field(discriminator="type")]
+class NativeFeature(FeatureBase):
+    """A serializable modelling command executed by the vendored Rust engine."""
+    type: Literal["native"] = "native"
+    command: str = Field(pattern=r"^(solid|sketch)\.[a-z][a-z0-9_.]*$")
+    params: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def modelling_only(self):
+        from .native_commands import PROJECT_COMMANDS
+        if self.command not in PROJECT_COMMANDS:
+            raise ValueError("This command is unavailable in a saved native feature")
+        # Saved projects describe geometry; filesystem/network commands are never project features.
+        def validate(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key.lower() in {"path", "file", "filename", "url", "font", "script", "commands"}:
+                        raise ValueError("File, font and script access is unavailable in native feature parameters")
+                    validate(item)
+            elif isinstance(value, list):
+                for item in value:
+                    validate(item)
+        validate(self.params)
+        if len(json.dumps(self.params, allow_nan=False)) > 100_000:
+            raise ValueError("Native feature parameters exceed 100 KB")
+        return self
+
+
+Feature = Annotated[Profile | Extrude | Hole | EdgeTreatment | NativeFeature, Field(discriminator="type")]
+
 
 
 class Placement(Model):
@@ -128,6 +156,7 @@ class Study(Model):
 
 class Project(Model):
     schema_version: Literal[1] = 1
+    geometry_engine: Literal["solidcraft", "occt"] = "solidcraft"
     revision: int = Field(default=1, ge=1)
     name: str = "Untitled mounting part"
     units: Literal["mm"] = "mm"
@@ -213,8 +242,9 @@ def digest(value) -> str:
 
 
 def geometry_key(project: Project) -> str:
-    return digest({"toolchain": "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features],
+    return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-v1-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features],
                    "parameters": {k: v.value for k, v in project.parameters.items()},
+                   "native_material": {"name": project.material.name, "density_g_cm3": project.material.density_g_cm3} if project.geometry_engine == "solidcraft" and project.material else None,
                    "references": [r.model_dump(exclude={"visible"}) for r in project.references],
                    "placement": project.placement.model_dump()})
 

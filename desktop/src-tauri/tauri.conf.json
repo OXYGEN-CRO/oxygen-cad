@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Oxygen CAD",
+  "version": "0.2.0",
+  "identifier": "io.oxygen.cad",
+  "build": {
+    "frontendDist": "../bootstrap",
+    "beforeBuildCommand": "python3 ../scripts/stage_desktop.py",
+    "beforeDevCommand": "python3 ../scripts/stage_desktop.py"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{"label":"main","title":"Oxygen CAD","width":1400,"height":900,"minWidth":720,"minHeight":540,"backgroundColor":"#0e1014"}],
+    "security": {"csp":"default-src 'self'; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"}
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "resources": {"../resources/runtime/":"runtime/"},
+    "icon": ["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon.icns","icons/icon.ico"],
+    "macOS": {"minimumSystemVersion":"13.0","infoPlist":"Info.plist"}
+  }
+}

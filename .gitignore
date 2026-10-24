@@ -12,3 +12,10 @@ projects/*
 test-results/
 *.log
 .DS_Store
+
+engine/target/
+third_party/solidcraft/target/
+
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/resources/

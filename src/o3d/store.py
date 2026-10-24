@@ -111,9 +111,16 @@ class Store:
                     if parameter.locked:
                         replacements = {f.id: f.model_dump() for f in updated.features}
                         for feature in current.features:
-                            for field, value in feature.model_dump().items():
-                                if value == f"${name}" and replacements.get(feature.id, {}).get(field) != value:
-                                    raise Conflict(f"Parameter {name} binding on {feature.id}.{field} is locked by the user")
+                            def check_bindings(before, after, path):
+                                if isinstance(before, str) and before == f"${name}" and after != before:
+                                    raise Conflict(f"Parameter {name} binding on {path} is locked by the user")
+                                if isinstance(before, dict):
+                                    for key, value in before.items():
+                                        check_bindings(value, after.get(key) if isinstance(after, dict) else None, f"{path}.{key}")
+                                elif isinstance(before, (list, tuple)):
+                                    for index, value in enumerate(before):
+                                        check_bindings(value, after[index] if isinstance(after, (list, tuple)) and index < len(after) else None, f"{path}.{index}")
+                            check_bindings(feature.model_dump(), replacements.get(feature.id), feature.id)
                 requirements = {r.id: r.model_dump() for r in updated.requirements}
                 for requirement in current.requirements:
                     if requirements.get(requirement.id) != requirement.model_dump():

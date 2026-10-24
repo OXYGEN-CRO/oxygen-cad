@@ -49,6 +49,15 @@ export type Material = {
   source: string;
 };
 
+export type NativeFeature = {
+  id: string;
+  name: string;
+  suppressed: boolean;
+  type: "native";
+  command: string;
+  params: Record<string, unknown>;
+};
+
 export type Parameter = {
   value: number;
   unit: "mm" | "deg" | "g" | "N" | "MPa" | "dimensionless";
@@ -107,11 +116,12 @@ export type Study = {
 
 export type Project = {
   schema_version: 1;
+  geometry_engine: "solidcraft" | "occt";
   revision: number;
   name: string;
   units: "mm";
   parameters: Record<string, Parameter>;
-  features: (Profile | Extrude | Hole | EdgeTreatment)[];
+  features: (Profile | Extrude | Hole | EdgeTreatment | NativeFeature)[];
   references: ReferenceAsset[];
   placement: Placement;
   material: Material | null;

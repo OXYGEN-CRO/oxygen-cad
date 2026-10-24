@@ -9,3 +9,10 @@ frontend/dist
 frontend/test-results
 projects
 *.egg-info
+
+engine/target/
+third_party/solidcraft/target/
+
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/resources/

@@ -34,3 +34,11 @@ cd frontend && npm ci && npm run build
 ```
 
 Native development uses `.venv/bin/python`, `.mesh-venv/bin/python`, and `O3D_NATIVE=1`. See README for setup and browser tests.
+
+## Native geometry and desktop
+
+- The default geometry engine is the in-repository Rust core, built with `cargo build --release --locked --manifest-path engine/Cargo.toml` (Rust 1.95). Source provenance and imported-file hashes are in `third_party/solidcraft/UPSTREAM.json`; keep upstream namespaces and licence notices.
+- Update the native toolchain marker in `geometry_key` when changing geometry semantics or pinned kernel dependencies. Preserve explicit errors; never silently fall back to OCCT.
+- Native project features describe modelling commands only. Preserve the command allowlist, filesystem restrictions and recursive user-owned parameter bindings.
+- `desktop/` is a Tauri launcher for the same React UI and local Docker runtime. `scripts/stage_desktop.py` is the only resource staging path; never bundle user projects, virtual environments, credentials or build caches.
+- Use `O3D_TEST_PORT` for an isolated browser fixture; never point acceptance tests at a user's project. Test an actual native-command edit as well as the original editing and study flows.

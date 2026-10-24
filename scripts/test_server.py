@@ -1,5 +1,6 @@
 """Dedicated disposable project for browser acceptance tests."""
 import tempfile
+import os
 from pathlib import Path
 import uvicorn
 from o3d.api import create_app
@@ -13,4 +14,4 @@ if __name__ == "__main__":
         store = Store(folder)
         store.init(Project.model_validate_json((root / "examples/bracket.json").read_text()))
         build(store, store.load())
-        uvicorn.run(create_app(folder), host="127.0.0.1", port=8877)
+        uvicorn.run(create_app(folder), host="127.0.0.1", port=int(os.environ.get("O3D_TEST_PORT", "8877")))

@@ -1,10 +1,11 @@
 import { defineConfig } from "@playwright/test";
+const fixtureUrl = `http://127.0.0.1:${process.env.O3D_TEST_PORT ?? "8877"}`;
 export default defineConfig({
   testDir: "./tests",
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: process.env.O3D_BROWSER_URL ?? "http://127.0.0.1:8877",
+    baseURL: process.env.O3D_BROWSER_URL ?? fixtureUrl,
     viewport: { width: 1512, height: 982 },
     headless: true,
     launchOptions: {
@@ -21,7 +22,7 @@ export default defineConfig({
     : {
         webServer: {
           command: "../.venv/bin/python ../scripts/test_server.py",
-          url: "http://127.0.0.1:8877/api/project",
+          url: `${fixtureUrl}/api/project`,
           reuseExistingServer: false,
           timeout: 60000,
         },

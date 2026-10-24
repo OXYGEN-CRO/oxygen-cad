@@ -14,6 +14,17 @@ jobs:
         run: docker build -t oxygen-cad .
       - name: Geometry, editing and numerical tests
         run: docker run --rm oxygen-cad pytest -q
+      - name: Package the local desktop runtime
+        run: |
+          docker tag oxygen-cad oxygen-cad:desktop-runtime
+          mkdir -p desktop-runtime
+          docker image inspect oxygen-cad --format '{{.Id}}' > desktop-runtime/image-id.txt
+          docker save oxygen-cad:desktop-runtime | gzip -1 > desktop-runtime/runtime.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-runtime
+          path: desktop-runtime/
+          compression-level: 0
       - name: Start disposable browser fixture
         run: |
           docker run -d --name oxygen-browser -p 127.0.0.1:8877:8787 oxygen-cad
@@ -48,3 +59,41 @@ jobs:
       - name: Stop fixture
         if: always()
         run: docker rm -f oxygen-browser || true
+
+  desktop-macos:
+    needs: verify
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-runtime
+          path: desktop-runtime
+      - name: Build Apple Silicon desktop app
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+          O3D_DESKTOP_RUNTIME_ARCHIVE: ${{ github.workspace }}/desktop-runtime/runtime.tar.gz
+        run: |
+          test "$(uname -m)" = arm64
+          export O3D_DESKTOP_RUNTIME_IMAGE="$(cat desktop-runtime/image-id.txt)"
+          npm ci --prefix desktop
+          cd desktop
+          npm run build -- --target aarch64-apple-darwin --bundles app
+      - name: Ad-hoc sign and archive test app
+        run: |
+          APP="desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Oxygen CAD.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          mkdir -p desktop-download
+          ditto -c -k --sequesterRsrc --keepParent "$APP" desktop-download/Oxygen-CAD-Apple-Silicon.zip
+          shasum -a 256 desktop-download/Oxygen-CAD-Apple-Silicon.zip > desktop-download/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Oxygen-CAD-Apple-Silicon
+          path: desktop-download/
+          compression-level: 0

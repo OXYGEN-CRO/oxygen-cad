@@ -278,3 +278,68 @@ test("a real study runs through the browser and exposes current field results", 
   expect(state.analysis.max_displacement_mm).toBeLessThan(0.168);
   expect(errors).toEqual([]);
 });
+
+test("native Rust features remain editable through the same studio document", async ({
+  page,
+  request,
+}) => {
+  const current = await (await request.get("/api/project")).json();
+  const fixture = {
+    revision: current.revision,
+    name: "Rust enclosure",
+    geometry_engine: "solidcraft",
+    features: [
+      {
+        id: "block",
+        name: "Block",
+        type: "native",
+        command: "solid.box",
+        params: { length: 30, width: 20, height: 10 },
+      },
+      {
+        id: "shell",
+        name: "Shell",
+        type: "native",
+        command: "solid.shell",
+        params: { faces: [[15, 10, 10]], thickness: 2 },
+      },
+    ],
+  };
+  expect(
+    (
+      await request.post("/api/commands", {
+        data: {
+          expected_revision: current.revision,
+          actor: "human",
+          project: fixture,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Build model", exact: true }).click();
+  await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
+    { timeout: 30000 },
+  );
+  await page.getByRole("button", { name: "Shell", exact: false }).click();
+  await expect(page.getByLabel("Native command")).toHaveValue("solid.shell");
+  await page
+    .getByLabel("Native arguments")
+    .fill(JSON.stringify({ faces: [[15, 10, 10]], thickness: 1.5 }));
+  await page.getByLabel("Native command").click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get("/api/project")).json()).features[1].params
+          .thickness,
+    )
+    .toBe(1.5);
+  await page.getByRole("button", { name: "Build model", exact: true }).click();
+  await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
+    { timeout: 30000 },
+  );
+  const state = await (await request.get("/api/state")).json();
+  expect(state.build.engine.engine).toBe("solidcraft");
+  expect(state.build.volume_mm3).toBeCloseTo(6000 - 27 * 17 * 8.5, 4);
+});

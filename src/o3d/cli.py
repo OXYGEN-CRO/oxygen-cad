@@ -22,6 +22,34 @@ def main(ctx: typer.Context, project: Path = typer.Option(Path(os.environ.get("O
     ctx.obj = Store(project)
 
 
+engine_app = typer.Typer(help="Discover and use the vendored Rust modelling engine.")
+app.add_typer(engine_app, name="engine")
+
+
+@engine_app.command("commands")
+def engine_commands(json_output: bool = typer.Option(False, "--json")):
+    from .native import NativeSession
+    from .native_commands import PROJECT_COMMANDS
+    with NativeSession() as engine:
+        emit({"version": engine.execute("oxygen.version"), "commands": engine.execute("engine.commands"),
+              "project_commands": sorted(PROJECT_COMMANDS)})
+
+
+@engine_app.command("describe")
+def engine_describe(command: str):
+    from .native import NativeSession
+    with NativeSession() as engine:
+        emit(engine.execute("engine.describe", {"command": command}))
+
+
+@engine_app.command("stdio")
+def engine_stdio():
+    """Raw local JSON-lines engine session; saved projects use the restricted command surface."""
+    import subprocess
+    from .native import engine_binary
+    raise typer.Exit(subprocess.call([engine_binary()]))
+
+
 @app.command()
 def init(ctx: typer.Context, template: Path | None = None, json_output: bool = typer.Option(False, "--json")):
     if template:
@@ -123,6 +151,9 @@ def doctor(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")
     result = {"python": os.sys.version.split()[0], "project_exists": (ctx.obj.root / "o3d.json").exists(),
               "build123d": importlib.metadata.version("build123d"), "mesher_python": mesher_python()}
     try:
+        from .native import NativeSession
+        with NativeSession() as engine:
+            result["geometry_engine"] = engine.execute("oxygen.version")
         result["solver"] = solver_binary()
         result["ok"] = Path(mesher_python()).is_file()
     except RuntimeError as error:

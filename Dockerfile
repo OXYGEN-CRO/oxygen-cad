@@ -5,6 +5,13 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
+FROM rust:1.95-slim-trixie AS engine
+WORKDIR /build
+COPY engine/Cargo.toml engine/Cargo.lock engine/
+COPY engine/src/ engine/src/
+COPY third_party/solidcraft/ third_party/solidcraft/
+RUN cargo build --release --locked --manifest-path engine/Cargo.toml --jobs 2
+
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 && rm -rf /var/lib/apt/lists/*
@@ -15,6 +22,9 @@ RUN curl -fsSL https://deb.debian.org/debian/pool/main/c/calculix-ccx/calculix-c
  && echo 'e82c4173706d831a490439bf5b31dae5194dca07482ac8632bc219514372ac3c  /tmp/spooles.deb' | sha256sum -c - \
  && dpkg-deb -x /tmp/ccx.deb /opt/solver && dpkg-deb -x /tmp/spooles.deb /opt/solver && rm /tmp/*.deb
 ENV CCX_BINARY=/opt/solver/usr/bin/ccx LD_LIBRARY_PATH=/opt/solver/usr/lib/x86_64-linux-gnu
+COPY --from=engine /build/engine/target/release/oxygen-engine /usr/local/bin/oxygen-engine
+COPY third_party/solidcraft/LICENSE-MIT third_party/solidcraft/LICENSE-APACHE third_party/solidcraft/NOTICE third_party/solidcraft/THIRD-PARTY-LICENSES.txt /usr/share/doc/oxygen-solidcraft/
+COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/oxygen-solidcraft/OFL.txt
 WORKDIR /app
 COPY requirements.lock mesh-requirements.lock pyproject.toml ./
 RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requirements.lock \

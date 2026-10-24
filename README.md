@@ -2,13 +2,21 @@
 
 **A lean, local CAD IDE for coding agents and the people working with them.**
 
-An editable text project. A JSON CLI. An interactive browser studio. Your coding agent and your manual edits work on the same parametric model.
+A Rust CAD engine. An editable text project. A JSON CLI. Our interactive studio. Your coding agent and your manual edits work on the same parametric model.
 
 The workflow is familiar from code-driven creative tools such as Hyperframes and Remotion: author files, preview the result, inspect it, revise, and export. Here the output is exact CAD geometry, with measurements and engineering checks alongside the preview.
 
 ![Oxygen CAD studio](docs/studio.png)
 
 The studio uses [Oxygen Graphite](docs/UI.md): a black-and-grey interface with compact graphite controls, subtle highlights, Geist typography and floating tools around the real CAD viewport. The same design extends to engineering studies, history and source editing, with an adaptive layout on smaller screens.
+
+## Apple Silicon desktop preview
+
+The desktop app uses the same Oxygen interface, feature tree, property editor and review tools. A small Rust/Tauri launcher runs the CAD and simulation backend locally through Docker Desktop; it does not connect to the development server. Install and start Docker Desktop before opening the app.
+
+The [CAD and browser checks workflow](https://github.com/OXYGEN-CRO/oxygen-cad/actions/workflows/ci.yml) builds an **Oxygen-CAD-Apple-Silicon** download artifact. The ZIP contains the test app and its local runtime. Unzip, move **Oxygen CAD.app** to Applications and open it. This preview is ad-hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** on first launch. Projects live under `~/Library/Application Support/io.oxygen.cad/projects` and survive app updates and closing Docker.
+
+The initial runtime is Linux AMD64 because the pinned mesher stack has no Linux ARM64 wheels. Docker Desktop translates it on Apple Silicon. The app window is native ARM64; this is a local desktop preview, not a fully native standalone macOS solver distribution. See [desktop setup](docs/DESKTOP.md) for development and packaging.
 
 ## Quickstart
 
@@ -141,3 +149,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Reproducible geometric examples and meas
 ## License
 
 Oxygen CAD's original code is [MIT licensed](LICENSE). CAD, meshing, solver, UI, and font dependencies retain their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md). The Dockerfile fetches unmodified solver packages from Debian with pinned checksums.
+
+## Vendored Rust engine
+
+`third_party/solidcraft/` contains the actual headless SolidCraft source and required truck patches, pinned to `0520910bfd4ff6d24c850f4a20a604f6128f87bf`. Original copyright, MIT/Apache-2.0 licences, attribution and dependency notices are retained. `engine/` builds our small JSON-lines boundary; no upstream CLI download is used at runtime.
+
+The default `geometry_engine` is `solidcraft`. Existing profiles, extrusions, holes, fillets and chamfers compile to the native engine. `type: "native"` features expose additional filesystem-free sketch/solid commands and remain editable in the same inspector and source document. OCCT independently checks STEP validity and volume, supplies review topology, and remains an explicit `geometry_engine: "occt"` compatibility option. Errors never silently select a different engine. Netgen/CalculiX verification remains in separate processes.
+
+```sh
+cargo build --release --locked --manifest-path engine/Cargo.toml
+O3D_NATIVE=1 ./o3d engine commands --json
+O3D_NATIVE=1 ./o3d engine describe solid.shell
+```
+
+The raw `o3d engine stdio` command provides a persistent local engine session for trusted developer tooling. Saved project features use a restricted modelling command set and cannot open/export arbitrary files. See [engine architecture](docs/ENGINE.md) and [third-party notices](THIRD_PARTY.md).

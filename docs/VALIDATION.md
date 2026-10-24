@@ -4,12 +4,12 @@ This is an early open-source CAD IDE, not a claim of complete CAD or engineering
 
 ## Verified in the Linux development environment
 
-- 23 backend tests pass, including ten distinct parts with twenty alternating human/agent edits each, measured volume/dimensions and STEP re-import after every edit.
+- 29 backend tests pass with the Rust compiler, including ten mounting-plate dimension variants with twenty alternating human/agent edits each, measured volume/dimensions and STEP re-import after every edit.
 - Lock enforcement, concurrent revision conflicts, undo/redo, invalid input rejection, semantic-reference preservation and explicit strict-reference failure.
 - STEP asset integrity, actual interference detection, independent exported-mesh checks and stale-export rejection.
 - Quadratic boundary-load integration preserves total force and applied moment.
 - A real CalculiX 2.23 cantilever solve, using Netgen meshing, predicts 0.1589 mm maximum displacement versus the analytical 0.1600 mm. Mesh refinement converges; force and moment balance errors are below 1%.
-- Five Playwright flows cover native property editing, save/rebuild/check/export, real viewport selection reaching agent context, source editing/persistence protection against overwriting a concurrent agent revision, and an actual browser-run stress study with field visualization. The additional appearance and accessibility-of-tools flows cover dark form controls, actual production glass blur, menu navigation and no page overflow across Design, Verify, History and Source at 320/390/768/1024/1512px.
+- Six Playwright flows cover native property editing, save/rebuild/check/export, real viewport selection reaching agent context, source editing/persistence protection against overwriting a concurrent agent revision, and an actual browser-run stress study with field visualization. The additional appearance and accessibility-of-tools flows cover dark form controls, actual production glass blur, menu navigation and no page overflow across Design, Verify, History and Source at 320/390/768/1024/1512px.
 - Production frontend build and the Docker image build complete successfully. All 23 backend tests also pass inside the Python 3.12 Docker runtime, including the real numerical solve.
 
 ## Dark glass integration (2026-10-24)
@@ -35,3 +35,11 @@ The compact breadcrumb header removes branding, the project-title input, mode ta
 Only a homogeneous linear-elastic single-solid static study with fully fixed planar faces and distinct planar distributed-force regions is supported. No contact, bolt preload, impact, fatigue or calibrated additive-material model is implied.
 
 Mesh convergence is reported for displacement and, when supplied, the named stress probe. Unconverged or unbalanced studies are inconclusive. Stress peaks at constraints or sharp corners may be singular. Exported reports retain these qualifications and the exact inputs.
+
+## Rust core and desktop integration (2026-10-24)
+
+- The vendored Rust core and Oxygen JSON-lines executable build from source with Rust 1.95 and a pinned Cargo.lock. No downloaded upstream executable supplies the application engine.
+- All 29 backend tests pass with Rust as the default, including 200 alternating edits, native shell/STEP/native-container export, transformed coordinate frames/placements checked against the explicit OCCT compiler, protected nested bindings, filesystem-command rejection, and the actual mounting-bracket geometry.
+- All six browser flows pass against a fresh fixture, including editing a Rust-native shell through the same UI and measuring the rebuilt volume. The real static study and field visualization continue to pass.
+- OCCT remains an independent STEP/volume validator and an explicit compatibility backend; Netgen/CalculiX remain separate processes. Broader upstream functionality and universal kernel robustness are not inferred.
+- The desktop launcher preserves the current React studio and packages a local Docker runtime. Apple Silicon artifacts are built on macOS CI; Linux native-window smoke verification and macOS build results are recorded separately from physical Mac testing.
