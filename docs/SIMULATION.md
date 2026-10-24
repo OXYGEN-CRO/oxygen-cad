@@ -174,7 +174,12 @@ relevant requirement inputs. Changing backend code/binary invalidates old result
 Static results expose displacement, screening stress, fixed-point probes, reaction
 force/moment balance and mesh changes. Nonlinear results preserve each load observation, displacement/stress/plastic-strain fields, peak-over-path metrics and distinct final-state metrics. Requirement displacement/stress checks use the whole path, so unloading cannot hide an earlier overload. Large-deformation moment balance uses deformed node positions. Thermal results expose temperature, heat
 reactions and heat balance. Eigenstudies expose requested values and complete mode
-vectors; amplitudes are explicitly arbitrary. The studio renders temperature
+vectors; amplitudes are explicitly arbitrary. Four additional spectral guard
+modes are solved and retained to detect a requested window that cuts a repeated
+family. CalculiX buckling output starts with the static reference-load response
+at factor zero; it is excluded from eigenmodes. Every remaining displacement
+frame's recorded factor/frequency must match the corresponding DAT eigenvalue.
+The studio renders temperature
 ranges including negative values and allows selection of a mode with a relative
 deformation scale. It does not label modal amplitudes as physical millimetres.
 
@@ -243,9 +248,64 @@ The current fixtures agree below 0.00004% in displacement/temperature and below
 
 These are numerical cross-checks on the **same** material/geometry/BC idealization,
 not physical validation or independent approval of the setup. Stress averaging,
-nonlinear/contact/modal/buckling and other study families are not independently
-qualified by this checker. CI installs the optional hash-pinned wheel into a
+nonlinear/contact/buckling and other study families are not independently
+qualified by those four cases. Two further unloaded-modal cases use independent
+stiffness and mass assembly plus a SciPy generalized eigensolve. Rectangle and
+square-section beams cover distinct and repeated bending modes through Netgen
+and Gmsh. Compare full common-mesh nodal subspaces (minimum squared principal
+cosine >0.995), frequency differences (<0.2%), eigen-equation residuals (<1e-7)
+and integration-order sensitivity (<2%). This nodal subspace check is separate
+from the application's volume-weighted cross-mesh tracker. Neither establishes
+measured modal accuracy. CI installs the optional hash-pinned wheel into a
 disposable container for a separate check; production startup does not require it.
+
+## Eigenmode tracking during mesh refinement
+
+Frequency order alone cannot identify a mode across remeshing. The adapter maps
+complete quadratic eigenvector fields onto common physical quadrature points
+from **every cell** of the preceding mesh. A bounding-volume hierarchy and damped
+Newton inversion use the full C3D10 geometry; node IDs are unrelated and points
+outside the new mesh refuse correlation rather than being moved/extrapolated.
+Positive physical volume weights define an L2 inner product. Constant isotropic
+density cancels here; this convention does not cover multi-material assemblies.
+
+Squared normalized inner products (MAC) and maximum-weight one-to-one assignment
+match sign/scale-independent shapes. A transitive 1% relative spectral-gap rule
+on either mesh groups close/repeated families. Their **whole subspaces** are
+compared with principal angles, so rotating a repeated pair's basis is allowed.
+Rank-deficient duplicate vectors refuse. Every requested family must have minimum
+squared principal cosine >=0.98, and matched scalar values must meet the user's
+convergence tolerance. Eigenvalues inside a close family are compared as sorted
+sets; mode labels remain in the current solver's ascending order.
+
+Positive tensor Gauss4/Gauss5 quadrature under a Duffy tetrahedron map checks all
+coarse cells. Gauss5 exactly integrates the preceding quadratic field products
+times its cubic geometry determinant; transferred piecewise fields are sampled
+numerically. The two orders' MAC entries touching requested modes must differ
+by <=0.005, and both shape checks must pass. This is a practical integration
+sensitivity check, not a rigorous bound on every unresolved oscillation.
+The combined cloud is limited to 1,000,000 points per comparison. Missing points,
+exceeded resources, a low score, or a family crossing the requested mode window
+prevent that comparison from establishing convergence. A later complete passing
+comparison may establish convergence after further refinement; the earlier failed
+audit is preserved. The real curved hollow-tube fixture exercises this case: a
+coarse comparison misses four physical points, while the final comparison covers
+all points and passes. Without a passing comparison the study is **inconclusive**.
+Increase the mode count to include a complete
+family; use a coarser initial mesh if the comparison resource limit is exceeded.
+
+`mode-tracking.json` retains source/target mesh hashes, cloud hashes, volumes,
+counts, both MAC matrices, matching, family/rank/window diagnostics, scalar
+changes, thresholds and integration sensitivity. It is included in study exports.
+The study panel shows correlation status and per-family agreement. Arbitrary
+eigenvector amplitudes remain relative. Mode shapes are not physical dynamic
+displacements, and linear buckling is not nonlinear collapse prediction.
+
+`tests/test_mode_tracking.py` covers crossings, repeated-family rotations,
+truncated windows, duplicate/missing/zero fields, changed topology/node IDs,
+curved geometry, outside-point refusal and real modal/buckling beam families.
+The optional independent reference and the browser modal workflow check the
+actual computed fields and exposed correlation evidence.
 
 ## Remaining completion requirements
 
@@ -254,8 +314,10 @@ disposable container for a separate check; production startup does not require i
   curved-element/region checks, and four independent static/conduction comparisons.
 - [ ] Actual customer-part/edit fixtures, assembly/repeated-occurrence topology,
   broader independent FE families and physical validation remain required.
-- [ ] Mode-shape correlation during refinement for repeated/crossing modes;
-  currently comparisons use mode order and report that limitation.
+- [x] Volume-weighted mode-shape correlation during refinement, repeated-family
+  subspaces, spectral guard modes and refusal of a cut requested window.
+- [ ] Adaptive correlation integration/error bounds for unresolved oscillations,
+  larger resource budgets, multi-material mass products and measured modal data.
 - [ ] Assembly load paths, connectors/contact, material frames and anisotropic/process
   datasets, nonlinear laws and failure criteria.
 - [x] Nonlinear single-solid large-deformation/plastic-hardening slice, full load-path evidence and numerical reference cases.

@@ -20,7 +20,7 @@ from .analysis_mesh import exterior_triangles, generate_mesh, prepare_geometry
 from .model import digest, geometry_key, study_key
 from .store import now, write_json
 
-ADAPTER_VERSION = "calculix-studies-v4"
+ADAPTER_VERSION = "calculix-studies-v5"
 LABELS = {"linear_static": "Static stress", "modal": "Modal frequencies", "buckling": "Structural buckling",
           "thermal": "Steady thermal", "thermal_stress": "Thermal stress", "nonlinear_static": "Nonlinear static stress",
           "quasistatic_event": "Quasi-static event", "dynamic_event": "Dynamic event", "shape_optimization": "Shape optimization",
@@ -202,9 +202,11 @@ def write_deck(path, mesh, project, thermal=False, temperatures=None):
     else:
         lines += ["*STEP"]
     if study.type == "modal":
-        lines += ["*FREQUENCY", str(study.mode_count)]
+        from .mode_tracking import computed_mode_count
+        lines += ["*FREQUENCY", str(computed_mode_count(study.mode_count))]
     elif study.type == "buckling":
-        lines += ["*BUCKLE", str(study.mode_count)]
+        from .mode_tracking import computed_mode_count
+        lines += ["*BUCKLE", str(computed_mode_count(study.mode_count))]
     else:
         lines += ["*STATIC"]
         if study.type == "nonlinear_static":
@@ -283,21 +285,42 @@ def parse_eigenvalues(path, kind):
     return values
 
 
+def eigenmode_fields(frames, values, kind):
+    displacements = [f for f in frames if f["name"] == "DISP"]
+    if kind == "buckling":
+        # CalculiX writes the reference-load static solution at factor zero
+        # before its eigenvectors. It is not the first buckling mode.
+        if len(displacements) != len(values)+1 or displacements[0]["time"] != 0:
+            raise RuntimeError("Missing or ambiguous buckling reference-load field")
+        displacements = displacements[1:]
+    if len(displacements) != len(values):
+        raise RuntimeError("Solver eigenvalues and displacement frames do not correspond")
+    for index, (frame, value) in enumerate(zip(displacements, values)):
+        if frame["time"] is None or not math.isclose(frame["time"], value, rel_tol=2e-6, abs_tol=1e-10):
+            raise RuntimeError(f"Eigenmode {index+1} field factor/frequency does not match its DAT eigenvalue")
+    return [frame["values"] for frame in displacements]
+
+
 @lru_cache(maxsize=512)
 def _binary_hash(path, mtime, size):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def solver_identity():
+    import scipy
+    from scipy.optimize import _lsap
+    from numpy.linalg import _umath_linalg
     from .solver import solver_binary,mesher_python
     path = Path(solver_binary()).resolve()
     stat = path.stat()
     files = [Path(__file__), Path(__file__).with_name("solver.py"), Path(__file__).with_name("model.py"), Path(__file__).with_name("analysis_mesh.py"),
              Path(__file__).with_name("mesh_worker.py"), Path(__file__).with_name("gmsh_worker.py"),
-             Path(__file__).with_name("mesh_quality_worker.py"),Path(__file__).with_name("quadratic.py")]
+             Path(__file__).with_name("mesh_quality_worker.py"),Path(__file__).with_name("quadratic.py"),
+             Path(__file__).with_name("mode_tracking.py")]
     manifest = {p.name: _binary_hash(str(p),p.stat().st_mtime_ns,p.stat().st_size) for p in files}
-    lock = Path(__file__).resolve().parents[2]/"mesh-requirements.lock"
-    if lock.exists():manifest[lock.name] = _binary_hash(str(lock),lock.stat().st_mtime_ns,lock.stat().st_size)
+    for name in ("mesh-requirements.lock", "requirements.lock"):
+        lock = Path(__file__).resolve().parents[2]/name
+        if lock.exists():manifest[lock.name] = _binary_hash(str(lock),lock.stat().st_mtime_ns,lock.stat().st_size)
     python=Path(shutil.which(mesher_python()) or mesher_python()).absolute()
     root=python.parent.parent
     runtime_files={}
@@ -308,8 +331,17 @@ def solver_identity():
         for dependency in sorted(root.glob(pattern)):
             actual=dependency.resolve();details=actual.stat()
             runtime_files[str(dependency.relative_to(root))]=_binary_hash(str(actual),details.st_mtime_ns,details.st_size)
+    correlation_files = {}
+    for dependency in [Path(_lsap.__file__), Path(_umath_linalg.__file__), Path(np.polynomial.legendre.__file__)]:
+        stat_dependency = dependency.stat()
+        correlation_files[dependency.name] = _binary_hash(str(dependency),stat_dependency.st_mtime_ns,stat_dependency.st_size)
+    for package in (np, scipy):
+        for dependency in sorted((Path(package.__file__).parent.parent/f"{package.__name__}.libs").glob("*.so*")):
+            details = dependency.stat()
+            correlation_files[dependency.name] = _binary_hash(str(dependency),details.st_mtime_ns,details.st_size)
     return {"name": "CalculiX", "binary_sha256": _binary_hash(str(path), stat.st_mtime_ns, stat.st_size),
-            "adapter_version": ADAPTER_VERSION, "adapter_files": manifest,"mesher_runtime_files":runtime_files}
+            "adapter_version": ADAPTER_VERSION, "adapter_files": manifest,"mesher_runtime_files":runtime_files,
+            "correlation_runtime":{"numpy":np.__version__,"scipy":scipy.__version__,"files":correlation_files}}
 
 
 def run_solver(run, mesh, project, name, cancel=None, thermal=False, temperatures=None):
@@ -481,6 +513,7 @@ def simulate(store, project, cancel=None):
                "solver":identity,"regions":portable_transfer,
                "geometry_sha256":hashlib.sha256((geometry/"part.step").read_bytes()).hexdigest()})
     previous,iterations,converged = None,[],False
+    previous_eigen = None
     start = time.monotonic()
     warnings = ["Numerical results apply to the recorded model and conditions; physical validation has not been performed."]
     for i in range(project.study.refinement_steps):
@@ -495,6 +528,7 @@ def simulate(store, project, cancel=None):
                  "schema_version":1,"location":"node","coordinate_frame":"world","mesher":mesh.get("mesher"),
                  "stress_convention":"extrapolated/averaged nodal von Mises; screening field"}
         metrics,observed,balanced = {},[],True
+        mode_tracking = None
         temperature = None
         if project.study.type in THERMAL:
             (prescribed,flux),frames = run_solver(run,mesh,project,"thermal",cancel,thermal=True)
@@ -514,11 +548,13 @@ def simulate(store, project, cancel=None):
             observed.append(probe+273.15)
             balanced = error<=.01
         if project.study.type in ("modal","buckling"):
+            from .mode_tracking import computed_mode_count, track_modes
             _,frames = run_solver(run,mesh,project,"analysis",cancel)
             eigenvalues = parse_eigenvalues(run/"analysis.dat",project.study.type)
-            modes = [f["values"] for f in frames if f["name"]=="DISP"]
-            if len(eigenvalues)<project.study.mode_count or len(modes)<project.study.mode_count:
-                raise RuntimeError("Solver did not return every requested eigenmode")
+            count = computed_mode_count(project.study.mode_count)
+            if len(eigenvalues)!=count:
+                raise RuntimeError("Solver did not return every requested eigenmode and spectral guard mode")
+            modes = eigenmode_fields(frames, eigenvalues, project.study.type)
             if any(set(mode)!=set(map(int,mesh["nodes"])) for mode in modes):
                 raise RuntimeError("Solver returned an incomplete eigenvector field")
             metric_name = "frequencies_hz" if project.study.type=="modal" else "buckling_factors"
@@ -526,8 +562,18 @@ def simulate(store, project, cancel=None):
             field["modes"] = [{"index":n+1,"value":v,"vectors":modes[n]} for n,v in enumerate(metrics[metric_name])]
             field["displacements"] = modes[0]
             field["mode_amplitude"] = "arbitrary eigenvector normalization; not physical displacement"
+            field["guard_modes"] = [{"index":n+1,"value":eigenvalues[n],"vectors":modes[n]}
+                                    for n in range(project.study.mode_count,count)]
             observed = metrics[metric_name]
             balanced = all(v>0 for v in observed)
+            if previous_eigen is not None:
+                try:
+                    mode_tracking = track_modes(*previous_eigen, mesh, modes, eigenvalues, project.study.mode_count, cancel)
+                except (ValueError, np.linalg.LinAlgError) as error:
+                    mode_tracking = {"schema_version":1,"passed":False,"reason":str(error)}
+                metrics["mode_tracking"] = mode_tracking
+                write_json(run/"mode-tracking.json", mode_tracking)
+            previous_eigen = mesh, modes, eigenvalues
         elif project.study.type in ("linear_static","thermal_stress"):
             boundary,frames = run_solver(run,mesh,project,"analysis",cancel,temperatures=temperature)
             mechanical,fields,outputs,equilibrium = mechanical_result(run,mesh,project,frames,boundary,transfer)
@@ -542,10 +588,14 @@ def simulate(store, project, cancel=None):
             raise RuntimeError("Refinements returned different observation histories; convergence cannot be established")
         scales=metrics.get("convergence_scales",[0]*len(observed))
         deltas = [abs(a-b)/max(abs(a),abs(b),scale*1e-6,1e-12) for a,b,scale in zip(observed,previous,scales)] if previous is not None else None
+        if mode_tracking is not None and "quantity_changes" in mode_tracking:
+            deltas = mode_tracking["quantity_changes"]
         refinement = not iterations or (len(mesh["nodes"])>iterations[-1]["nodes"] and len(mesh["elements"])>iterations[-1]["elements"]
                      and quality["max_element_volume_mm3"]<iterations[-1]["mesh_quality"]["max_element_volume_mm3"]*.999
                      and quality["mesh_sha256"]!=iterations[-1]["mesh_quality"]["mesh_sha256"])
         converged = deltas is not None and max(deltas)<=project.study.convergence_tolerance and refinement and all(it["refinement_verified"] for it in iterations)
+        if project.study.type in ("modal","buckling"):
+            converged &= mode_tracking is not None and mode_tracking["passed"]
         iterations.append({"mesh_size_mm":refined.study.mesh_size_mm,"nodes":len(mesh["nodes"]),"elements":len(mesh["elements"]),
                            **metrics,"quantity_changes":deltas,"displacement_change":deltas[-len(outputs)] if deltas and project.study.type in ("linear_static","thermal_stress") else None,
                            "mesh_quality":quality,"refinement_verified":refinement})
@@ -579,7 +629,9 @@ def simulate(store, project, cancel=None):
         if metrics["displacement_to_extent_ratio"]>.05 and not (project.study.type=="nonlinear_static" and project.study.large_deformation):
             warnings.append("Displacement exceeds 5% of model extent: outside this adapter's small-deformation screening envelope.")
     if project.study.type in ("modal","buckling"):
-        warnings.append("Mode amplitudes are arbitrary. Mesh comparison currently uses mode order; repeated/crossing modes require shape correlation.")
+        warnings.append("Mode amplitudes are arbitrary. Refinement uses physical-volume shape correlation and repeated-family subspaces; this is numerical evidence, not measured modal validation.")
+        if mode_tracking is not None and not mode_tracking["passed"]:
+            warnings.append("Mode-shape tracking is inconclusive: " + mode_tracking.get("reason", "low correlation, quadrature sensitivity or a repeated/crossing family cut by the requested mode window; inspect mode-tracking.json and increase the number of requested modes if the window cuts a family."))
     if project.study.type=="buckling":warnings.append("Ideal linear eigenvalue buckling does not predict imperfect nonlinear collapse.")
     if project.study.type=="nonlinear_static":
         warnings.append("Quasi-static load stepping with isotropic hardening and optional large deformation; no contact, damage, rate effects or cyclic plasticity model.")

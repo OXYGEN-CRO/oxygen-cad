@@ -759,6 +759,25 @@ export function StudyPanel({
                 result.frequencies_hz ? "Hz" : "load multiplier",
               ),
           )}
+          {result.mode_tracking && (
+            <div aria-label="Mode correlation">
+              <p className="muted">
+                Mode correlation:{" "}
+                {result.mode_tracking.passed ? "verified" : "inconclusive"}
+              </p>
+              {result.mode_tracking.groups?.map((group: any, i: number) => (
+                <p className="muted" key={i}>
+                  Modes {group.previous_modes.join(", ")} →{" "}
+                  {group.current_modes.join(", ")}:{" "}
+                  {(group.minimum_squared_cosine * 100).toFixed(2)}% shape
+                  agreement
+                  {group.requested_window_cut
+                    ? " · increase the mode count to include the complete family"
+                    : ""}
+                </p>
+              ))}
+            </div>
+          )}
           <div className="two-fields">
             {result.max_stress_mpa != null && (
               <Button className="wide-button" onClick={() => onField("stress")}>

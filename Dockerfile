@@ -15,7 +15,7 @@ RUN cargo build --release --locked --manifest-path engine/Cargo.toml --jobs 2
 
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 ngspice kicad fonts-freefont-ttf cura-engine python3-opencamlib \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libxrender1 libxcursor1 libxfixes3 libxext6 libxft2 libxinerama1 libx11-6 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 ngspice kicad fonts-freefont-ttf cura-engine python3-opencamlib \
  && cd /tmp && apt-get download cura \
  && dpkg-deb -x cura_*.deb /tmp/cura-profile \
  && mkdir -p /usr/share/cura/resources/definitions /usr/share/doc/oxygen-cura-profile \
@@ -40,7 +40,8 @@ COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/
 WORKDIR /app
 COPY requirements.lock mesh-requirements.lock skill-requirements.lock pyproject.toml ./
 RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requirements.lock -r skill-requirements.lock \
- && python -m venv /opt/mesh && /opt/mesh/bin/pip install --no-cache-dir -r mesh-requirements.lock
+ && python -m venv /opt/mesh && /opt/mesh/bin/pip install --no-cache-dir -r mesh-requirements.lock \
+ && /opt/mesh/bin/python -c 'import gmsh; gmsh.initialize(["oxygen-headless", "-nopopup"]); gmsh.finalize()'
 COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
