@@ -58,7 +58,8 @@ def verify_path(path, op, setup, tool, machine):
                 violations.append({"kind": "rapid_in_stock", "move": index})
             if move["motion"] == "feed" and lo_z+tool.flute_length < setup.stock.maximum[2]-setup.tolerance_mm and sweep.intersects(stock_xy):
                 violations.append({"kind": "insufficient_flute_reach", "move": index})
-            if move["motion"] == "feed" and hi_z <= op.bottom_z+setup.tolerance_mm:
+            axial = abs(previous["x"]-move["x"])+abs(previous["y"]-move["y"]) < 1e-9
+            if move["motion"] == "feed" and (hi_z <= op.bottom_z+setup.tolerance_mm or axial and lo_z <= op.bottom_z+setup.tolerance_mm):
                 cutting.append(sweep)
         previous = move
     report = {"model": "2.5D flat cylindrical sweep + axis-aligned fixture envelopes" if machine.process == "milling" else "reference-point turning travel + fixture envelopes only",

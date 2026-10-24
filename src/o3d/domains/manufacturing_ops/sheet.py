@@ -76,15 +76,19 @@ def release_session(session, destination, body=None):
     (destination/"flat-pattern.json").write_text(json.dumps(flat, indent=2)+"\n")
     # Independent B-rep reader measures the actual exported folded solid, not metadata only.
     step = destination/"folded.step"
-    session.execute("file.export", {"path": str(step.resolve())})
+    session.execute("file.export", {"path": str(step.resolve()), "bodies":[flat["body"]]})
     import build123d as bd
     shape = bd.import_step(step)
     if not shape.is_valid or not shape.solids():
         raise ValueError("Folded sheet STEP failed independent solid validation")
-    measured = session.execute("inspect.measure", {})["total"]["volume_mm3"]
+    measurement = session.execute("inspect.measure", {})
+    body_measurement = next((b for b in measurement["bodies"] if b["name"] == flat["body"]),None)
+    if body_measurement is None:
+        raise ValueError("Selected sheet body is missing from native measurement")
+    measured = body_measurement["volume_mm3"]
     if abs(shape.volume-measured) > max(0.01, measured*0.002):
         raise ValueError("Sheet STEP volume differs from native manufacturing metadata")
-    return {"flat_pattern": flat, "bend_table": bend_table, "dxf_audit": audit,
+    return {"body":flat["body"], "flat_pattern": flat, "bend_table": bend_table, "dxf_audit": audit,
             "folded_step_volume_mm3": shape.volume, "native_volume_mm3": measured,
             "bend_allowance_model": "abs(angle_rad) * (inside_radius + k_factor * thickness)",
             "physical_bend_validated": False,

@@ -10,7 +10,7 @@
   ],
   "evidence": {
     "command": "PYTHONPATH=src O3D_CURA_ENGINE=<CuraEngine> O3D_CURA_DEFINITIONS=<definitions> python -m pytest -q tests/test_manufacturing.py",
-    "executed": "20 passed in 4.72s with real CuraEngine and OpenCAMLib; frontend npm run build passed",
+    "executed": "21 passed in5.83s with real CuraEngine/OpenCAMLib; frontend build passed; disposable integrated Playwright flow passed (save/reload, posted NC, inspection, nesting DXF, actual FFF, stale-artifact409), zero page errors and no horizontal overflow at390px",
     "external_engines": [
       {
         "name": "GEOS via Shapely",
@@ -47,8 +47,11 @@
     "fixtures": [
       "examples/manufacturing.json",
       "tests/fixtures/manufacturing/drill.ngc",
-      "tests/test_manufacturing.py"
-    ]
+      "tests/test_manufacturing.py",
+      "tests/browser_manufacturing.cjs"
+    ],
+    "browser_command": "O3D_BROWSER_DISPOSABLE=1 O3D_BROWSER_URL=http://127.0.0.1:<isolated-port> node tests/browser_manufacturing.cjs",
+    "browser_limits": "Script exercised the integrated product on a disposable bracket source with an explicitly loaded reference manufacturing process; coherent matching CAD/process handoff is independently tested by the coupon acceptance fixture. Browser checks do not establish physical manufacture."
   },
   "rows": [
     {
@@ -58,7 +61,8 @@
       "implemented": "Versioned machines/tools/stock/fixtures/WCS/setup/ordered dependent operation state; saved in Project.domains.manufacturing",
       "tests": [
         "test_schema_process_graph_rejects_invalid_inputs",
-        "test_reach_fixtures_machine_limits_and_staleness"
+        "test_reach_fixtures_machine_limits_and_staleness",
+        "browser_manufacturing.cjs saved setup reload"
       ],
       "remaining": "Native face/edge association UI, complete machine/process matrix, independent physical setup qualification"
     },
@@ -214,9 +218,10 @@
       "implemented": "Real CuraEngine slicing with saved build volume/material/settings/orientation/support request, deposited G-code, layers/segments, hashes and output reread",
       "tests": [
         "test_real_cura_slice_layers_extrusion_and_volume_fit",
-        "test_unsupported_strategy_and_missing_slicer_fail"
+        "test_unsupported_strategy_and_missing_slicer_fail",
+        "test_real_cura_thin_wall_overhang_and_support_locations"
       ],
-      "remaining": "Thin-wall/bridge/overhang/support-location qualification, multi-part arrangement, printer/material calibration and physical print. Cube slicing is bounded evidence"
+      "remaining": "Cube,0.8mm wall and stem/roof overhang support locations tested; bridge/multipart profile matrix, printer/material calibration and physical print remain"
     },
     {
       "id": "MFG-19",
@@ -246,7 +251,7 @@
       "id": "MFG-22",
       "capability": "Flat pattern, bend data and DXF",
       "status": "partial_tested",
-      "implemented": "Native flat/DXF/bend artifacts with independent ezdxf closure/units/contour/layer checks, bend allowance equation, independent folded STEP volume",
+      "implemented": "Native flat/DXF/bend artifacts with independent ezdxf closure/units/contour/layer checks, bend allowance equation, independent folded STEP volume; folded STEP isolates the selected sheet body from unrelated solids",
       "remaining": "Bent base and four-flange/circle-cutout tray reload, neutral-axis allowance, rule-change invalidation and folded STEP volume tested; hem/ellipse/spline/text options and material bend calibration remain",
       "tests": [
         "test_canonical_bent_sheet_dxf_bend_allowance_cold_reopen_and_rules",

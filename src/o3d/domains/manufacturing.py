@@ -15,7 +15,7 @@ import zipfile
 from .manufacturing_ops.schema import Manufacturing
 from .manufacturing_ops.util import cancelled
 
-VERSION = "oxygen-manufacturing-v1.1"
+VERSION = "oxygen-manufacturing-v1.2"
 
 
 def validate(data) -> dict:

@@ -65,6 +65,7 @@ def test_pocket_island_drilling_and_independent_nc_backplot(store, process_proje
     assert pocket["gouge_area_mm2"] < 0.0025
     assert pocket["unreachable_corner_area_mm2"] > 0  # honest inaccessible sharp corners
     assert out["verification"][1]["hole_count"] == 2
+    assert out["verification"][1]["removed_floor_area_mm2"] == pytest.approx(2*math.pi*2**2,rel=0.001)
 
 
 def test_reach_fixtures_machine_limits_and_staleness(store, process_project, data):
@@ -285,6 +286,7 @@ def test_multiflanged_tray_with_round_cutout_and_fold_refold(tmp_path):
     from o3d.domains.manufacturing_ops.sheet import release_session
     with NativeSession() as session:
         for command,params in [
+            ("solid.box",{"length":4,"width":5,"height":6,"corner":[200,0,0],"body_name":"Unrelated fixture"}),
             ("sheet.manage_rules",{"name":"Tray","thickness":2,"bend_radius":1,"k_factor":0.5,"active":True}),
             ("sketch.create",{"name":"Tray base","plane":"XY"}),
             ("sketch.rectangle.two_point",{"p0":[0,0],"p1":[100,60]}),
@@ -300,6 +302,8 @@ def test_multiflanged_tray_with_round_cutout_and_fold_refold(tmp_path):
         assert len(first["flat_pattern"]["cutouts"])==1
         assert first["flat_pattern"]["cutout_shapes"][0]["circle"]["radius"]==5
         assert first["dxf_audit"]["bend_lines"]==4
+        import build123d as bd
+        assert len(bd.import_step(tmp_path/"tray"/"folded.step").solids())==1
         session.execute("sheet.unfold",{})
         session.execute("sheet.refold",{})
         second=release_session(session,tmp_path/"refolded")
@@ -434,3 +438,27 @@ def test_real_cura_slice_layers_extrusion_and_volume_fit(tmp_path, data):
     domain.printer.center_xy = (1,1)
     with pytest.raises(ValueError, match="fit"):
         slice_mesh(source, tmp_path/"bad", domain.printer, domain.machines[3])
+
+
+@pytest.mark.skipif(not os.environ.get("O3D_CURA_ENGINE"),reason="real CuraEngine required")
+def test_real_cura_thin_wall_overhang_and_support_locations(tmp_path,data):
+    import build123d as bd
+    import trimesh
+    from o3d.domains.manufacturing_ops.additive import slice_mesh
+    domain=Manufacturing.model_validate(data)
+    thin=tmp_path/"thin.stl";trimesh.creation.box(extents=[15,0.8,5]).export(thin)
+    wall=slice_mesh(thin,tmp_path/"thin",domain.printer,domain.machines[3])
+    assert wall["analysis"]["layer_count"]==25
+    assert wall["analysis"]["extrusion_roles"].get("WALL-OUTER",0)>30
+    overhang=bd.Box(3,3,10).moved(bd.Location((0,0,5)))+bd.Box(20,10,2).moved(bd.Location((0,0,11)))
+    source=tmp_path/"overhang.stl";bd.export_stl(overhang,source)
+    printer=domain.printer.model_copy(update={"supports":True})
+    supported=slice_mesh(source,tmp_path/"supported",printer,domain.machines[3])
+    supports=[s for s in supported["analysis"]["preview_segments"] if s["role"].startswith("SUPPORT")]
+    assert len(supports)>100
+    # Independently known part footprint: 3x3 stem centered at100,100;
+    # 20x10 roof spans90..110 and95..105. Supports lie outside the stem below its roof.
+    assert any(s["to"][2]<9.8 and (s["to"][0]<98.4 or s["to"][0]>101.6 or s["to"][1]<98.4 or s["to"][1]>101.6) for s in supports)
+    assert all(89<=s["to"][0]<=111 and 94<=s["to"][1]<=106 for s in supports)
+    plain=slice_mesh(source,tmp_path/"unsupported",domain.printer,domain.machines[3])
+    assert not any(k.startswith("SUPPORT") for k in plain["analysis"]["extrusion_roles"])

@@ -64,7 +64,11 @@ def parse_fff(code, bounds):
     extrusion_mm = 0.0
     positive_moves = 0
     segments = []
+    role = "UNKNOWN"
+    roles = {}
     for number, raw in enumerate(code.splitlines(), 1):
+        if raw.startswith(";TYPE:"):
+            role=raw.split(":",1)[1].strip()
         line = raw.split(";", 1)[0].strip()
         if not line:
             continue
@@ -98,15 +102,16 @@ def parse_fff(code, bounds):
                 z = round(position["Z"], 5)
                 layers[z] = layers.get(z, 0)+1
                 positive_moves += 1
+                roles[role]=roles.get(role,0)+1
                 extrusion_mm += extruded
                 if len(segments) < 20000:
-                    segments.append({"from": [old[a] for a in "XYZ"], "to": [position[a] for a in "XYZ"], "extrusion_mm": extruded})
+                    segments.append({"from": [old[a] for a in "XYZ"], "to": [position[a] for a in "XYZ"], "extrusion_mm": extruded, "role":role})
     if positive_moves < 3 or not layers:
         raise ValueError("Slicer output has no usable deposited-extrusion paths")
     return {"positive_extrusion_moves": positive_moves, "extrusion_filament_mm": extrusion_mm,
             "layer_count": len(layers), "layers": [{"z_mm": z, "segments": layers[z]} for z in sorted(layers)],
             "preview_segments": segments, "preview_truncated": positive_moves > len(segments),
-            "extrusion_within_build_volume": True, "units": "mm"}
+            "extrusion_within_build_volume": True, "units": "mm", "extrusion_roles":roles}
 
 
 def slice_mesh(mesh_path, destination, printer, machine, cancel=None):
