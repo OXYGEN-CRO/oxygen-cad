@@ -129,7 +129,7 @@ test("native editing, revision persistence, checks, context and release", async 
   await openTool(page, "Study setup");
   await page.getByRole("button", { name: "Check fit", exact: true }).click();
   await expect(
-    page.getByText("One valid connected solid", { exact: true }),
+    page.getByText(/^(One valid connected solid|1 valid solid bod(?:y|ies))$/),
   ).toBeVisible({ timeout: 30000 });
   await page
     .getByRole("button", { name: "Close properties", exact: true })

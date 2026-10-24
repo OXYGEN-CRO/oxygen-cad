@@ -22,7 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
  && cp /tmp/cura-profile/usr/share/cura/resources/definitions/fdmextruder.def.json /usr/share/cura/resources/definitions/ \
  && cp /tmp/cura-profile/usr/share/doc/cura/copyright /usr/share/doc/oxygen-cura-profile/ \
  && rm -rf /tmp/cura-profile /tmp/cura_*.deb /var/lib/apt/lists/*
-ENV O3D_DRAWING_FONT=/usr/share/fonts/truetype/freefont/FreeSerif.ttf
+ENV O3D_DRAWING_FONT=/usr/share/fonts/truetype/freefont/FreeSerif.ttf \
+    O3D_CURA_ENGINE=/usr/bin/CuraEngine \
+    O3D_CURA_DEFINITIONS=/usr/share/cura/resources/definitions \
+    O3D_CAM_PYTHON=/usr/bin/python3
 # Unmodified Debian solver packages: exact binary checksums, isolated from application code.
 RUN curl -fsSL https://deb.debian.org/debian/pool/main/c/calculix-ccx/calculix-ccx_2.23-1_amd64.deb -o /tmp/ccx.deb \
  && echo '709b2d994699168f2754bd16117d51cef3241e268a7dfab185b8f78c98bd02aa  /tmp/ccx.deb' | sha256sum -c - \
