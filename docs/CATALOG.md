@@ -5,6 +5,10 @@ including custom-part capability/material search, quote handoffs and community
 JLC component snapshots. The sections below describe the original CAD dataset;
 their first-seed counts do not include the newer supply datasets.
 
+User-selected public McMaster family pages can also be imported as local
+[SKU metadata research](MCMASTER-PUBLIC.md) with `o3d-parts scrape-mcmaster urls.json`.
+These records retain proprietary reuse restrictions and do not include CAD or offers.
+
 PostgreSQL holds component identity, specifications, supplier links, provenance,
 CAD references and embeddings. A content-addressed object store holds immutable
 source responses and downloaded files. The initial implementation uses local
@@ -191,10 +195,11 @@ its name or guessed from a rendering. The first seed contains zero verified port
 
 DigiKey is registered as live-only and MISUMI as permission-required. Neither has
 an executable ingestion connector. Source storage checks enforce provider policy.
-No live price/stock connector is implemented yet, so no potentially restricted
-offer responses or invented prices are stored. A probe of ARK's previously
-documented catalog returned HTTP 403 from this machine on 2026-10-24; no bypass
-or working live adapter is claimed. Its access needs retesting before integration.
+The original seed had no live price/stock adapter and an ARK probe returned 403.
+A subsequent same-day retest succeeded through ARK's published agent catalog;
+`o3d-parts supply ingest ark` now imports metadata and `supply ark-live SKU`
+performs an ephemeral offer read. No offer values are persisted. See
+[the manufacturing feeds](MANUFACTURING.md) for current adapters and boundaries.
 
 Part IDs are deterministic UUIDs from `(provider, external_id)`. Different providers
 are intentionally distinct until exact manufacturer/MPN or a reviewed mapping
