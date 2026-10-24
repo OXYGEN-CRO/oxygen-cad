@@ -20,7 +20,7 @@ cd oxygen-cad
 ./o3d studio
 ```
 
-Open **http://localhost:8787**. A camera mounting bracket is created automatically. Click **Build model** if geometry has not yet been generated. Select a feature, edit its dimensions, save, and rebuild. The default view keeps the model and feature tree visible; selecting a feature or face opens its properties. **Verify** opens fit and stress tools. The **⋯** menu contains parameters and requirements, source, history, STEP import and agent commands. Save and rebuild controls appear when needed.
+Open **http://localhost:8787**. A camera mounting bracket is created automatically. Click **Build model** if geometry has not yet been generated. Select a feature, edit its dimensions, save, and rebuild. The default view keeps the model and feature tree visible; selecting a feature or face opens its properties. Breadcrumbs and panel icons collapse or expand either sidebar. The **⋯** menu opens **Study setup** for fit and stress tools and **Project settings** for naming, parameters and requirements, plus source, history, STEP import and agent commands. Save and rebuild controls appear when needed.
 
 From another terminal in the repository:
 

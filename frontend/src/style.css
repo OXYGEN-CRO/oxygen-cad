@@ -120,74 +120,6 @@ small {
   padding: 0 16px;
   gap: 18px;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.brand-symbol {
-  width: 30px;
-  height: 30px;
-  position: relative;
-  border: 0;
-  border-radius: 0;
-  font-size: 0;
-  transform: none;
-  color: #cccccc;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  filter: none;
-}
-.brand-symbol:after {
-  content: none;
-  position: absolute;
-  inset: 5px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-}
-.brand-symbol span {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--surface-inset);
-  right: -2px;
-  top: 2px;
-  display: none;
-}
-.brand strong {
-  font-size: 18px;
-  font-weight: 580;
-  letter-spacing: -0.6px;
-  color: var(--text);
-}
-.brand strong > span {
-  font-size: 11px;
-  font-weight: 400;
-  margin-left: 4px;
-  color: var(--text-secondary);
-  letter-spacing: 0;
-  vertical-align: super;
-}
-.project-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-}
-.project-title input {
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 12px;
-  max-width: 280px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: 8px;
-}
 .unsaved {
   font-size: 10px;
   color: var(--warning);
@@ -211,45 +143,6 @@ small {
 }
 .top-actions > button:hover {
   background: rgba(255, 255, 255, 0.05);
-}
-.nav-tabs {
-  display: flex;
-  height: 34px;
-  gap: 3px;
-  padding: 3px;
-  background: transparent;
-  border: 0;
-  border-radius: 12px;
-}
-.nav-tabs button {
-  border-radius: 6px;
-  padding: 0 13px;
-  position: relative;
-  font-size: 11px;
-  color: var(--text-muted);
-  gap: 7px;
-  border: 1px solid transparent;
-  min-height: 28px;
-}
-.nav-tabs button:hover {
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--text);
-}
-.nav-tabs button.active {
-  color: var(--text);
-  font-weight: 500;
-  background: #202020;
-  border-color: rgba(255, 255, 255, 0.065);
-  box-shadow: none;
-}
-.nav-tabs button.active:after {
-  content: none;
-  position: absolute;
-  bottom: -1px;
-  height: 2px;
-  background: var(--surface-inset);
-  left: 0;
-  right: 0;
 }
 .local-status i,
 .statusbar i {
@@ -1341,11 +1234,6 @@ textarea:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
-.brand-symbol svg {
-  width: 29px;
-  height: 29px;
-  stroke-width: 1.4;
-}
 .schema-link {
   color: var(--accent-text);
 }
@@ -1513,4 +1401,128 @@ textarea:focus-visible {
 .assumptions {
   font-size: 10px;
   line-height: 1.6;
+}
+
+/* Spatial navigation and independent panel controls. */
+.topbar {
+  height: 48px;
+  padding: 0 12px;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 8px;
+}
+.breadcrumbs {
+  flex: 1;
+  min-width: 0;
+}
+.breadcrumbs ol {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.breadcrumbs li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.breadcrumbs li > svg {
+  flex-shrink: 0;
+  color: #505050;
+}
+.breadcrumbs button {
+  min-height: 30px;
+  padding: 0 7px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+.breadcrumbs li:last-child button {
+  color: var(--text);
+}
+.breadcrumbs button[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.025);
+}
+.top-actions {
+  margin-left: auto;
+  gap: 6px;
+}
+.topbar .sidebar-toggle {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.topbar .sidebar-toggle[aria-expanded="true"] {
+  color: var(--text-secondary);
+}
+.topbar .sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+}
+.left-panel[hidden] {
+  display: none;
+}
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+@media (max-width: 700px) {
+  .topbar {
+    display: flex;
+    height: 46px;
+    padding: 0 8px;
+    gap: 3px;
+  }
+  .top-actions {
+    flex: none;
+    gap: 3px;
+  }
+  .breadcrumbs button {
+    max-width: 115px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+  .right-panel {
+    top: 56px;
+  }
+  .save-label,
+  .download-label {
+    display: none;
+  }
+  .top-actions > button {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 7px;
+  }
+  .download-link {
+    max-width: none;
+    padding: 0 5px;
+    min-height: 30px;
+  }
+}
+@media (max-width: 420px) {
+  .breadcrumbs li:first-child {
+    display: none;
+  }
+  .breadcrumbs li:last-child > svg {
+    display: none;
+  }
+  .breadcrumbs button {
+    max-width: 120px;
+  }
 }

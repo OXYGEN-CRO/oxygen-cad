@@ -18,6 +18,8 @@ import {
   Loader2,
   Lock,
   MoreHorizontal,
+  PanelLeft,
+  PanelRight,
   Play,
   Plus,
   Ruler,
@@ -43,6 +45,7 @@ import {
   type State,
 } from "./api";
 import { Viewport } from "./Viewport";
+import { Breadcrumbs } from "./components/Breadcrumbs";
 import { Button, Input, SelectControl } from "./components/ui";
 
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -155,7 +158,9 @@ export default function App() {
     [source, setSource] = useState(""),
     [showAgent, setShowAgent] = useState(false),
     [showBottom, setShowBottom] = useState(false),
-    [toolsOpen, setToolsOpen] = useState(false);
+    [toolsOpen, setToolsOpen] = useState(false),
+    [leftOpen, setLeftOpen] = useState(true),
+    [rightOpen, setRightOpen] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const upload = useRef<HTMLInputElement>(null);
@@ -282,6 +287,13 @@ export default function App() {
   }
   function select(s: Selection) {
     setSelection(s);
+    if (!measureMode) {
+      setRightOpen(true);
+      if (tab !== "verify") {
+        setTab("design");
+        setActive("");
+      }
+    }
     if (measureMode)
       setMeasure((old) => (old.length === 1 ? [old[0], s.point] : [s.point]));
   }
@@ -355,6 +367,7 @@ export default function App() {
     edit((p) => p.features.push(feature));
     setActive(id);
     setTab("design");
+    setRightOpen(true);
     setAddOpen(false);
   }
   async function importFile(file: File) {
@@ -380,17 +393,40 @@ export default function App() {
   const pending = state?.jobs.some((j) =>
     ["queued", "running"].includes(j.state),
   );
+  const inspectorVisible =
+    rightOpen && Boolean(tab !== "design" || feature || reference || selection);
+  function openPanel(panel: string) {
+    setTab(panel);
+    setRightOpen(true);
+    setToolsOpen(false);
+  }
+  function toggleInspector() {
+    if (inspectorVisible) setRightOpen(false);
+    else {
+      if (tab === "design" && !feature && !reference && !selection)
+        setTab("project");
+      setRightOpen(true);
+    }
+  }
+  const panelLabel =
+    tab === "verify"
+      ? "Study"
+      : tab === "source"
+        ? "Source"
+        : tab === "history"
+          ? "History"
+          : tab === "project"
+            ? "Project"
+            : feature?.name ||
+              reference?.name ||
+              (selection ? "Selection" : "Model");
   const lastExport = state?.jobs.find(
     (j) => j.kind === "export" && j.state === "succeeded",
   );
   if (!current || !state)
     return (
       <div className="loading-screen">
-        <div className="brand-symbol" aria-hidden="true">
-          <Box />
-        </div>
-        <h1>Oxygen CAD</h1>
-        <p>{error || "Opening your engineering workspace…"}</p>
+        <p>{error || "Opening workspace…"}</p>
         <Loader2 className="spin" />
       </div>
     );
@@ -407,41 +443,50 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand" title="Oxygen CAD">
-          <Box size={22} aria-hidden="true" />
-          <strong>oxygen</strong>
-        </div>
-        <div className="project-title">
-          <Input
-            aria-label="Project name"
-            value={current.name}
-            onChange={(e) => edit((p) => (p.name = e.target.value))}
-          />
-          {dirty && (
-            <span className="unsaved" title="Unsaved edits">
-              •
-            </span>
-          )}
-        </div>
-        <nav className="nav-tabs" aria-label="Workspace">
-          {[
-            ["design", "Design"],
-            ["verify", "Verify"],
-          ].map(([id, label]) => (
-            <Button
-              key={id}
-              className={tab === id ? "active" : ""}
-              aria-pressed={tab === id}
-              onClick={() => setTab(id)}
-            >
-              {label}
-            </Button>
-          ))}
-        </nav>
+        <Button
+          className="sidebar-toggle"
+          aria-label={
+            leftOpen ? "Collapse feature sidebar" : "Expand feature sidebar"
+          }
+          aria-expanded={leftOpen}
+          aria-controls="feature-sidebar"
+          title={
+            leftOpen ? "Collapse feature sidebar" : "Expand feature sidebar"
+          }
+          onClick={() => setLeftOpen(!leftOpen)}
+        >
+          <PanelLeft size={16} />
+        </Button>
+        <Breadcrumbs
+          items={[
+            {
+              label: "Workspace",
+              expanded: leftOpen,
+              controls: "feature-sidebar",
+              onToggle: () => setLeftOpen(!leftOpen),
+            },
+            {
+              label: panelLabel,
+              expanded: inspectorVisible,
+              controls: "inspector-sidebar",
+              onToggle: toggleInspector,
+            },
+          ]}
+        />
+        {dirty && (
+          <span
+            className="unsaved"
+            title="Unsaved edits"
+            aria-label="Unsaved edits"
+          >
+            •
+          </span>
+        )}
         <div className="top-actions">
           {dirty && (
             <Button
               variant="primary"
+              aria-label="Save changes"
               disabled={busy}
               onClick={() => {
                 try {
@@ -452,7 +497,7 @@ export default function App() {
               }}
             >
               <Save size={15} />
-              Save changes
+              <span className="save-label">Save changes</span>
             </Button>
           )}
           <Button
@@ -470,8 +515,13 @@ export default function App() {
               className="download-link"
               href={artifact(lastExport.result.artifact)}
               download
+              aria-label={`Download r${lastExport.revision}`}
+              title={`Download r${lastExport.revision}`}
             >
-              Download r{lastExport.revision}
+              <ArrowDownToLine size={13} />
+              <span className="download-label">
+                Download r{lastExport.revision}
+              </span>
             </a>
           )}
           <div className="tools-menu" ref={toolsMenu}>
@@ -484,17 +534,21 @@ export default function App() {
               <MoreHorizontal size={19} />
             </Button>
             {toolsOpen && (
-              <div className="tools-popover" aria-label="Project tools menu">
+              <div
+                className="tools-popover"
+                role="group"
+                aria-label="Project tools menu"
+              >
                 {[
-                  ["project", Settings2, "Parameters & requirements"],
+                  ["project", Settings2, "Project settings"],
+                  ["verify", ShieldCheck, "Study setup"],
                   ["source", Code2, "Source"],
                   ["history", History, "History"],
                 ].map(([id, Icon, label]: any) => (
                   <Button
                     key={id}
                     onClick={() => {
-                      setTab(id);
-                      setToolsOpen(false);
+                      openPanel(id);
                     }}
                   >
                     <Icon size={15} />
@@ -544,6 +598,24 @@ export default function App() {
               </div>
             )}
           </div>
+          <Button
+            className="sidebar-toggle"
+            aria-label={
+              inspectorVisible
+                ? "Collapse inspector sidebar"
+                : "Expand inspector sidebar"
+            }
+            aria-expanded={inspectorVisible}
+            aria-controls="inspector-sidebar"
+            title={
+              inspectorVisible
+                ? "Collapse inspector sidebar"
+                : "Expand inspector sidebar"
+            }
+            onClick={toggleInspector}
+          >
+            <PanelRight size={16} />
+          </Button>
         </div>
       </header>
       {error && (
@@ -585,7 +657,7 @@ export default function App() {
         </div>
       )}
       <main className="workspace">
-        <aside className="left-panel">
+        <aside className="left-panel" id="feature-sidebar" hidden={!leftOpen}>
           <div className="panel-heading">
             <span>Features</span>
             <Button
@@ -604,6 +676,7 @@ export default function App() {
                 onClick={() => {
                   setActive(f.id);
                   setTab("design");
+                  setRightOpen(true);
                 }}
               >
                 <span className="tree-indent" />
@@ -643,6 +716,7 @@ export default function App() {
                 onClick={() => {
                   setActive(ref.id);
                   setTab("design");
+                  setRightOpen(true);
                 }}
               >
                 <FileBox size={14} />
@@ -824,8 +898,9 @@ export default function App() {
             </div>
           )}
         </section>
-        {(tab !== "design" || feature || reference || selection) && (
+        {inspectorVisible && (
           <aside
+            id="inspector-sidebar"
             className={`right-panel ${tab === "source" ? "source-panel" : ""}`}
           >
             <div className="panel-heading">
@@ -843,9 +918,7 @@ export default function App() {
               <Button
                 aria-label="Close properties"
                 onClick={() => {
-                  setTab("design");
-                  setActive("");
-                  setSelection(null);
+                  setRightOpen(false);
                 }}
               >
                 <X size={15} />
@@ -862,9 +935,6 @@ export default function App() {
                         </div>
                         <div>
                           <h2>{feature.name || feature.id}</h2>
-                          <span>
-                            {feature.type} · {feature.id}
-                          </span>
                         </div>
                       </div>
                       <Field
@@ -1184,9 +1254,6 @@ export default function App() {
                   ) : reference ? (
                     <>
                       <h2>{reference.name}</h2>
-                      <p className="muted">
-                        Immutable STEP reference. Placement remains editable.
-                      </p>
                       <VectorField
                         label="Reference translation"
                         value={reference.placement.translation}
@@ -1249,6 +1316,11 @@ export default function App() {
               )}
               {tab === "project" && (
                 <>
+                  <Field
+                    label="Project name"
+                    value={current.name}
+                    onChange={(value: string) => edit((p) => (p.name = value))}
+                  />
                   <div className="section-heading">
                     PARAMETERS
                     <Button
@@ -1431,13 +1503,8 @@ export default function App() {
                     </div>
                     <div>
                       <h2>Static stress</h2>
-                      <span>One solid · Linear elastic</span>
                     </div>
                   </div>
-                  <p className="muted">
-                    Select planar faces in the viewport to define supports and
-                    distributed forces.
-                  </p>
                   {selection?.kind === "face" &&
                     selection.face.kind === "PLANE" &&
                     state.geometry_state === "current" && (
@@ -1787,7 +1854,7 @@ export default function App() {
                     <Button
                       className="wide-button"
                       onClick={() => {
-                        setTab("verify");
+                        openPanel("verify");
                         setActive("");
                       }}
                     >

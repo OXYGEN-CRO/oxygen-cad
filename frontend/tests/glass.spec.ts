@@ -13,13 +13,26 @@ test("graphite components stay neutral, dark and usable across studio views", as
   await page.evaluate(() => document.fonts.ready);
   for (const width of [320, 390, 768, 1024, 1512]) {
     await page.setViewportSize({ width, height: 982 });
-    for (const view of ["Design", "Verify", "History", "Source"]) {
-      if (view === "History" || view === "Source") {
+    for (const view of ["Model", "Study setup", "History", "Source"]) {
+      if (view !== "Model") {
         await page
           .getByRole("button", { name: "Project tools", exact: true })
           .click();
       }
-      await page.getByRole("button", { name: view, exact: true }).click();
+      if (view === "Model") {
+        const close = page.getByRole("button", {
+          name: "Collapse inspector sidebar",
+          exact: true,
+        });
+        if (await close.isVisible()) await close.click();
+        await page
+          .getByRole("button", { name: "Mounting plate", exact: false })
+          .click();
+      } else
+        await page
+          .getByRole("group", { name: "Project tools menu" })
+          .getByRole("button", { name: view, exact: true })
+          .click();
       await expect
         .poll(
           async () =>
@@ -80,7 +93,11 @@ test("graphite components stay neutral, dark and usable across studio views", as
         });
     }
   }
-  await page.getByRole("button", { name: "Design", exact: true }).click();
+  const closeInspector = page.getByRole("button", {
+    name: "Collapse inspector sidebar",
+    exact: true,
+  });
+  if (await closeInspector.isVisible()) await closeInspector.click();
   await page
     .getByRole("button", { name: "Mounting plate", exact: false })
     .click();

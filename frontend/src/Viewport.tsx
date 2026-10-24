@@ -92,6 +92,8 @@ export function Viewport(props: Props) {
       camera.left = -size * aspect;
       camera.right = size * aspect;
       camera.updateProjectionMatrix();
+      // Resizing clears the drawing buffer; paint the model before the next frame.
+      renderer.render(scene, camera);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(element);

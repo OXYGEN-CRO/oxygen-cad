@@ -5,7 +5,10 @@ async function openTool(page: Page, name: string) {
   await page
     .getByRole("button", { name: "Project tools", exact: true })
     .click();
-  await page.getByRole("button", { name, exact: true }).click();
+  await page
+    .getByRole("group", { name: "Project tools menu" })
+    .getByRole("button", { name, exact: true })
+    .click();
 }
 
 test("minimal studio keeps editing tools accessible across screen sizes", async ({
@@ -24,11 +27,16 @@ test("minimal studio keeps editing tools accessible across screen sizes", async 
   expect(viewport!.width * viewport!.height).toBeGreaterThan(1512 * 982 * 0.7);
   for (const width of [320, 390, 768, 1024, 1512]) {
     await page.setViewportSize({ width, height: 982 });
-    for (const view of ["Design", "Verify", "History", "Source"]) {
-      if (["Design", "Verify"].includes(view)) {
-        const tab = page.getByRole("button", { name: view, exact: true });
-        await tab.click();
-        await expect(tab).toHaveAttribute("aria-pressed", "true");
+    for (const view of ["Model", "Study setup", "History", "Source"]) {
+      if (view === "Model") {
+        const close = page.getByRole("button", {
+          name: "Collapse inspector sidebar",
+          exact: true,
+        });
+        if (await close.isVisible()) await close.click();
+        await page
+          .getByRole("button", { name: "Mounting plate", exact: false })
+          .click();
       } else await openTool(page, view);
       const appearance = await page.evaluate(() => {
         const rgb = (value: string) =>
@@ -91,6 +99,11 @@ test("native editing, revision persistence, checks, context and release", async 
     page.getByText("Geometry current", { exact: true }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toBeVisible();
+  const closeInspector = page.getByRole("button", {
+    name: "Collapse inspector sidebar",
+    exact: true,
+  });
+  if (await closeInspector.isVisible()) await closeInspector.click();
   await page
     .getByRole("button", { name: "Mounting plate", exact: false })
     .click();
@@ -113,12 +126,14 @@ test("native editing, revision persistence, checks, context and release", async 
   await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
     { timeout: 30000 },
   );
-  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await openTool(page, "Study setup");
   await page.getByRole("button", { name: "Check fit", exact: true }).click();
   await expect(
     page.getByText("One valid connected solid", { exact: true }),
   ).toBeVisible({ timeout: 30000 });
-  await page.getByRole("button", { name: "Design", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Close properties", exact: true })
+    .click();
   // Pick an actual rendered face, then verify the agent sees the selected geometry.
   const canvas = page.locator("canvas");
   const box = await canvas.boundingBox();
@@ -156,7 +171,7 @@ test("native editing, revision persistence, checks, context and release", async 
     path: "test-results/studio-design.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await openTool(page, "Study setup");
   await expect(page.getByText("Static stress", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Run static study" }),
@@ -171,8 +186,10 @@ test("native editing, revision persistence, checks, context and release", async 
   await page.waitForTimeout(2000);
   expect(JSON.parse(await source.inputValue()).name).toBe(document.name);
   await page.getByRole("button", { name: "Apply source document" }).click();
+  await openTool(page, "Project settings");
   await expect(page.getByLabel("Project name")).toHaveValue(document.name);
   await page.reload();
+  await openTool(page, "Project settings");
   await expect(page.getByLabel("Project name")).toHaveValue(document.name);
   expect(errors).toEqual([]);
 });
@@ -182,6 +199,11 @@ test("a concurrent agent edit cannot be overwritten by an old manual draft", asy
   request,
 }) => {
   await page.goto("/");
+  const closeInspector = page.getByRole("button", {
+    name: "Collapse inspector sidebar",
+    exact: true,
+  });
+  if (await closeInspector.isVisible()) await closeInspector.click();
   await page
     .getByRole("button", { name: "Mounting plate", exact: false })
     .click();
@@ -231,7 +253,7 @@ test("a real study runs through the browser and exposes current field results", 
   await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
     { timeout: 30000 },
   );
-  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await openTool(page, "Study setup");
   await expect(
     page.getByRole("button", { name: "Run static study" }),
   ).toBeEnabled();
