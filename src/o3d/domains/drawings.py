@@ -4,11 +4,9 @@ Lengths, sheet positions and tolerances are stored in millimetres; units affect
 presentation only. A published file is immutable and identifies both the exact
 source geometry and the issuing project revision.
 """
+
 from __future__ import annotations
 
-import hashlib
-import json
-import math
 import re
 from typing import Annotated, Literal
 
@@ -25,13 +23,23 @@ Point3 = tuple[float, float, float]
 
 
 class Reference(Record):
-    kind: Literal["point", "face", "edge", "hole", "parameter"] = "point"
+    kind: Literal[
+        "point", "face", "edge", "native_face", "native_edge", "hole", "parameter"
+    ] = "point"
     target: str = ""
     body: str | None = None
     point: Point3 = (0, 0, 0)
     row: int = Field(default=0, ge=0)
     column: int = Field(default=0, ge=0)
     location: Literal["center", "min", "max"] = "center"
+
+    @model_validator(mode="after")
+    def native_body(self):
+        if self.kind in ("native_face", "native_edge") and not self.body:
+            raise ValueError(
+                "A named native topology reference requires an explicit body ID"
+            )
+        return self
 
 
 class Tolerance(Record):
@@ -43,21 +51,25 @@ class Tolerance(Record):
     @model_validator(mode="after")
     def fit_required(self):
         if self.kind == "fit" and self.fit is None:
-            raise ValueError("A fit tolerance requires a fit class; supported ISO 286 range is 3–30 mm")
+            raise ValueError(
+                "A fit tolerance requires a fit class; supported ISO 286 range is 3–30 mm"
+            )
         return self
 
 
 class View(Record):
     id: Id
     kind: Literal["base", "projected", "section", "detail"] = "base"
-    orientation: Literal["front", "back", "top", "bottom", "right", "left", "isometric"] = "front"
+    orientation: Literal[
+        "front", "back", "top", "bottom", "right", "left", "isometric"
+    ] = "front"
     parent: Id | None = None
     position: Point2 = (80, 100)
     scale: float = Field(default=1, gt=0, le=100)
     hidden: bool = True
     tangent: bool = False
     label: str = Field(default="", max_length=100)
-    # Section plane equation n . (p-origin) = 0. The positive half is removed.
+    # Section plane equation n . (p-origin) = 0. The camera-facing half is removed.
     section_origin: Point3 = (0, 0, 0)
     section_normal: Point3 = (0, 1, 0)
     exclude_bodies: list[str] = Field(default_factory=list, max_length=200)
@@ -67,9 +79,11 @@ class View(Record):
 
     @model_validator(mode="after")
     def association(self):
+        if self.kind == "base" and self.parent:
+            raise ValueError("Base views cannot have a parent")
         if self.kind != "base" and not self.parent:
             raise ValueError(f"{self.kind} view requires a parent")
-        if self.kind == "section" and sum(x*x for x in self.section_normal) < 1e-12:
+        if self.kind == "section" and sum(x * x for x in self.section_normal) < 1e-12:
             raise ValueError("Section normal must be nonzero")
         return self
 
@@ -77,7 +91,24 @@ class View(Record):
 class Annotation(Record):
     id: Id
     view: Id
-    kind: Literal["linear", "aligned", "angular", "radius", "diameter", "note", "center", "centerline", "datum", "gdt", "surface", "weld", "edge", "balloon", "hole_note", "thread_note"]
+    kind: Literal[
+        "linear",
+        "aligned",
+        "angular",
+        "radius",
+        "diameter",
+        "note",
+        "center",
+        "centerline",
+        "datum",
+        "gdt",
+        "surface",
+        "weld",
+        "edge",
+        "balloon",
+        "hole_note",
+        "thread_note",
+    ]
     references: list[Reference] = Field(default_factory=list, max_length=8)
     position: Point2 = (0, -10)
     axis: Literal["x", "y"] = "x"
@@ -87,7 +118,20 @@ class Annotation(Record):
     dual_units: bool = False
     basic: bool = False
     datum: str | None = Field(default=None, pattern=r"^[A-Z]{1,3}$")
-    characteristic: Literal["position", "flatness", "straightness", "perpendicularity", "parallelism", "circularity", "cylindricity", "profile", "runout"] | None = None
+    characteristic: (
+        Literal[
+            "position",
+            "flatness",
+            "straightness",
+            "perpendicularity",
+            "parallelism",
+            "circularity",
+            "cylindricity",
+            "profile",
+            "runout",
+        ]
+        | None
+    ) = None
     tolerance_mm: float | None = Field(default=None, gt=0)
     datums: list[str] = Field(default_factory=list, max_length=3)
     material_condition: Literal["RFS", "MMC", "LMC"] = "RFS"
@@ -99,27 +143,88 @@ class Annotation(Record):
 
     @model_validator(mode="after")
     def semantics(self):
-        needed = {"linear": 2, "aligned": 2, "angular": 3, "radius": 1, "diameter": 1,
-                  "center": 1, "centerline": 2, "hole_note": 1, "thread_note": 1,
-                  "datum": 1, "gdt": 1, "surface": 1, "weld": 1, "edge": 1, "balloon": 1}
+        needed = {
+            "linear": 2,
+            "aligned": 2,
+            "angular": 3,
+            "radius": 1,
+            "diameter": 1,
+            "center": 1,
+            "centerline": 2,
+            "hole_note": 1,
+            "thread_note": 1,
+            "datum": 1,
+            "gdt": 1,
+            "surface": 1,
+            "weld": 1,
+            "edge": 1,
+            "balloon": 1,
+        }
         if len(self.references) < needed.get(self.kind, 0):
-            raise ValueError(f"{self.kind} requires {needed[self.kind]} attached references")
+            raise ValueError(
+                f"{self.kind} requires {needed[self.kind]} attached references"
+            )
+        if self.kind in needed and len(self.references) != needed[self.kind]:
+            raise ValueError(
+                f"{self.kind} requires exactly {needed[self.kind]} attached references"
+            )
+        dimensional = self.kind in ("linear", "aligned", "diameter", "radius")
+        if self.tolerance.kind != "none" and not dimensional:
+            raise ValueError(
+                "Placed length tolerances apply only to linear/aligned/radial dimensions; angular tolerances are unsupported"
+            )
+        if self.tolerance.kind == "fit" and self.kind != "diameter":
+            raise ValueError("ISO fits require a diameter dimension")
+        if self.dual_units and not dimensional:
+            raise ValueError("Dual length units require a length dimension")
         if self.kind == "datum" and not self.datum:
             raise ValueError("Datum symbol requires an identifier")
         if self.kind == "gdt":
             if self.characteristic is None or self.tolerance_mm is None:
-                raise ValueError("A feature control frame requires a characteristic and tolerance")
-            form = self.characteristic in ("flatness", "straightness", "circularity", "cylindricity")
+                raise ValueError(
+                    "A feature control frame requires a characteristic and tolerance"
+                )
+            form = self.characteristic in (
+                "flatness",
+                "straightness",
+                "circularity",
+                "cylindricity",
+            )
             if form and self.datums:
                 raise ValueError("Form tolerances cannot reference datums")
-            if self.material_condition != "RFS" and self.characteristic not in ("position", "perpendicularity", "parallelism", "straightness"):
-                raise ValueError("Material modifier is not supported for this characteristic")
+            if self.material_condition != "RFS" and self.characteristic not in (
+                "position",
+                "perpendicularity",
+                "parallelism",
+                "straightness",
+            ):
+                raise ValueError(
+                    "Material modifier is not supported for this characteristic"
+                )
         if self.kind == "balloon" and not self.item:
             raise ValueError("Balloon requires a stable BOM item key")
         if self.kind == "thread_note" and not self.text:
-            raise ValueError("Thread designation must be supplied explicitly; threads are never inferred")
+            raise ValueError(
+                "Thread designation must be supplied explicitly; threads are never inferred"
+            )
         if self.basic and self.tolerance.kind != "none":
-            raise ValueError("Basic dimensions cannot carry an explicit plus/minus tolerance")
+            raise ValueError(
+                "Basic dimensions cannot carry an explicit plus/minus tolerance"
+            )
+        if self.basic and self.kind not in (
+            "linear",
+            "aligned",
+            "angular",
+            "radius",
+            "diameter",
+        ):
+            raise ValueError("Basic formatting requires a dimension")
+        if self.kind != "note" and any(
+            r.kind in ("point", "parameter") for r in self.references
+        ):
+            raise ValueError(
+                "Manufacturing annotations require model geometry references; an authored point cannot establish a measured feature"
+            )
         return self
 
 
@@ -128,9 +233,21 @@ class Table(Record):
     kind: Literal["parts", "holes", "revision", "custom"]
     position: Point2 = (10, 20)
     columns: list[str] = Field(default_factory=list, max_length=12)
+    column_widths_mm: list[Annotated[float, Field(gt=0, le=500)]] = Field(
+        default_factory=list, max_length=12
+    )
     rows: list[list[str]] = Field(default_factory=list, max_length=200)
     view: Id | None = None
     references: list[Reference] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def rectangular(self):
+        if self.kind == "custom":
+            if not self.columns:
+                raise ValueError("Custom tables require column headings")
+            if any(len(row) != len(self.columns) for row in self.rows):
+                raise ValueError("Custom table rows must match column headings")
+        return self
 
 
 class Sheet(Record):
@@ -148,6 +265,10 @@ class Sheet(Record):
         ids = [v.id for v in self.views]
         if len(set(ids)) != len(ids):
             raise ValueError("View IDs must be unique within a sheet")
+        for field in ("annotations", "tables"):
+            items = getattr(self, field)
+            if len({item.id for item in items}) != len(items):
+                raise ValueError(f"{field} IDs must be unique within a sheet")
         prior = set()
         for view in self.views:
             if view.parent and view.parent not in prior:
@@ -209,8 +330,21 @@ class PMI(Record):
     plane_x: Point3 = (1, 0, 0)
     text: str = Field(default="", max_length=2000)
     tolerance: Tolerance = Field(default_factory=Tolerance)
-    datum: str | None = None
-    characteristic: Literal["position", "flatness", "straightness", "perpendicularity", "parallelism", "circularity", "cylindricity", "profile", "runout"] | None = None
+    datum: str | None = Field(default=None, pattern=r"^[A-Z]{1,3}$")
+    characteristic: (
+        Literal[
+            "position",
+            "flatness",
+            "straightness",
+            "perpendicularity",
+            "parallelism",
+            "circularity",
+            "cylindricity",
+            "profile",
+            "runout",
+        ]
+        | None
+    ) = None
     tolerance_mm: float | None = Field(default=None, gt=0)
     datums: list[str] = Field(default_factory=list, max_length=3)
     source_geometry_key: str
@@ -220,14 +354,39 @@ class PMI(Record):
     @model_validator(mode="after")
     def plane(self):
         n, x = self.plane_normal, self.plane_x
-        if sum(v*v for v in n) < 1e-10 or sum(v*v for v in x) < 1e-10:
+        if sum(v * v for v in n) < 1e-10 or sum(v * v for v in x) < 1e-10:
             raise ValueError("Annotation plane axes must be nonzero")
-        if abs(sum(a*b for a,b in zip(n,x))) > 1e-6:
-            raise ValueError("Annotation plane x axis must be perpendicular to its normal")
+        if (
+            abs(sum(a * b for a, b in zip(n, x)))
+            > 1e-6 * (sum(v * v for v in n) * sum(v * v for v in x)) ** 0.5
+        ):
+            raise ValueError(
+                "Annotation plane x axis must be perpendicular to its normal"
+            )
         if self.kind == "datum" and not self.datum:
             raise ValueError("3D datum requires an identifier")
-        if self.kind == "gdt" and (not self.characteristic or self.tolerance_mm is None):
+        if self.kind == "gdt" and (
+            not self.characteristic or self.tolerance_mm is None
+        ):
             raise ValueError("3D GD&T requires characteristic and tolerance")
+        if (
+            self.kind == "gdt"
+            and self.characteristic
+            in ("flatness", "straightness", "circularity", "cylindricity")
+            and self.datums
+        ):
+            raise ValueError("3D form tolerances cannot reference datums")
+        if self.kind == "thread_note" and not self.text:
+            raise ValueError("3D thread notes require an explicit thread designation")
+        if self.kind in ("size", "datum", "gdt") and self.reference.kind in (
+            "point",
+            "parameter",
+        ):
+            raise ValueError(
+                "Semantic manufacturing PMI requires a model geometry reference"
+            )
+        if self.kind != "size" and self.tolerance.kind != "none":
+            raise ValueError("3D size tolerances require a size annotation")
         return self
 
 
@@ -255,12 +414,15 @@ def validate(data: dict) -> dict:
 
 
 def data_for(project) -> Drawings:
-    return Drawings.model_validate(getattr(project, "domains", {}).get("drawings", {"schema_version": 1}))
+    return Drawings.model_validate(
+        getattr(project, "domains", {}).get("drawings", {"schema_version": 1})
+    )
 
 
 def execute(store, project, operation, payload, cancel=None) -> dict:
     """Kernel-heavy work is delayed until an explicit domain job is executed."""
     from .drawing_worker import execute as run
+
     return run(store, project, operation, payload or {}, cancel)
 
 
@@ -275,28 +437,60 @@ def read_step_pmi(text: str) -> dict:
         raise ValueError("PMI inventory accepts STEP files up to 64 MiB")
     # STEP strings can contain semicolons and doubled apostrophes. A lexical
     # scan preserves whole records instead of splitting valid source text.
-    statements=[];start=0;i=0;quoted=False;comment=False
-    while i<len(text):
-        c=text[i]
+    statements = []
+    start = 0
+    i = 0
+    quoted = False
+    comment = False
+    while i < len(text):
+        c = text[i]
         if comment:
-            if text[i:i+2]=="*/":comment=False;i+=2;continue
-        elif not quoted and text[i:i+2]=="/*":comment=True;i+=2;continue
-        elif c=="'":
-            if quoted and text[i:i+2]=="''":i+=2;continue
-            quoted=not quoted
-        elif c==";" and not quoted:
-            statements.append(text[start:i]);start=i+1
-        i+=1
-    entities={}
+            if text[i : i + 2] == "*/":
+                comment = False
+                i += 2
+                continue
+        elif not quoted and text[i : i + 2] == "/*":
+            comment = True
+            i += 2
+            continue
+        elif c == "'":
+            if quoted and text[i : i + 2] == "''":
+                i += 2
+                continue
+            quoted = not quoted
+        elif c == ";" and not quoted:
+            statements.append(text[start:i])
+            start = i + 1
+        i += 1
+    entities = {}
     for statement in statements:
-        match=re.search(r"(#\d+)\s*=\s*(.*)$",statement,re.S)
-        if match:entities[match[1]]=match[2].strip()
+        match = re.search(r"(#\d+)\s*=\s*(.*)$", statement, re.S)
+        if match:
+            entities[match[1]] = match[2].strip()
+
     def syntax(record):
-        return re.sub(r"'(?:[^']|'')*'|/\*.*?\*/", "",record,flags=re.S)
-    names = ("GEOMETRIC_TOLERANCE", "POSITION_TOLERANCE", "FLATNESS_TOLERANCE", "DATUM", "DIMENSIONAL_SIZE",
-             "DIMENSIONAL_LOCATION", "PLUS_MINUS_TOLERANCE", "TOLERANCE_VALUE", "DRAUGHTING_CALLOUT",
-             "ANNOTATION_TEXT", "GEOMETRIC_ITEM_SPECIFIC_USAGE", "ANNOTATION_OCCURRENCE", "DRAUGHTING_MODEL_ITEM_ASSOCIATION")
-    roots = {key for key, value in entities.items() if any(re.search(r"\b"+n+r"\s*\(", syntax(value)) for n in names)}
+        return re.sub(r"'(?:[^']|'')*'|/\*.*?\*/", "", record, flags=re.S)
+
+    names = (
+        "GEOMETRIC_TOLERANCE",
+        "POSITION_TOLERANCE",
+        "FLATNESS_TOLERANCE",
+        "DATUM",
+        "DIMENSIONAL_SIZE",
+        "DIMENSIONAL_LOCATION",
+        "PLUS_MINUS_TOLERANCE",
+        "TOLERANCE_VALUE",
+        "DRAUGHTING_CALLOUT",
+        "ANNOTATION_TEXT",
+        "GEOMETRIC_ITEM_SPECIFIC_USAGE",
+        "ANNOTATION_OCCURRENCE",
+        "DRAUGHTING_MODEL_ITEM_ASSOCIATION",
+    )
+    roots = {
+        key
+        for key, value in entities.items()
+        if any(re.search(r"\b" + n + r"\s*\(", syntax(value)) for n in names)
+    }
     todo, found = list(roots), set()
     while todo:
         key = todo.pop()
@@ -304,6 +498,13 @@ def read_step_pmi(text: str) -> dict:
             continue
         found.add(key)
         todo.extend(re.findall(r"#\d+", syntax(entities[key])))
-    return {"schema_version": 1, "format": "STEP AP242 entity inventory", "root_entities": sorted(roots),
-            "entities": {k: entities[k].strip() for k in sorted(found)}, "semantic_mapping": "requires_explicit_attachment",
-            "omissions": ["No automatic datum/tolerance-to-topology mapping or AP242 semantic export is claimed."]}
+    return {
+        "schema_version": 1,
+        "format": "STEP AP242 entity inventory",
+        "root_entities": sorted(roots),
+        "entities": {k: entities[k].strip() for k in sorted(found)},
+        "semantic_mapping": "requires_explicit_attachment",
+        "omissions": [
+            "No automatic datum/tolerance-to-topology mapping or AP242 semantic export is claimed."
+        ],
+    }

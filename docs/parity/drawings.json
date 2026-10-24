@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "domain": "drawings",
+  "date": "2026-10-24",
+  "environment": "Linux x86_64; Python 3.13; independent OCCT; source-built native engine; isolated disposable projects",
+  "claims": "Implemented controlled local drawing documents and vector publication with measured native associations. These bounded workflows do not certify complete Fusion, ISO GPS, ASME Y14.5, DWG or AP242 PMI parity.",
+  "evidence": {
+    "python": "17 passed, 3 dependency warnings: tests/test_drawings.py plus tests/test_drawings_native.py executed against the integrated core and actual native engine; independent pypdf/ezdxf readers enabled",
+    "native_engine": "/home/philipp/.cache/oxygen-rust/parity-core-target/release/oxygen-engine",
+    "frontend": "npm ci and npm run build passed; original bundle-size advisory remains",
+    "browser": "O3D_BROWSER_URL=http://127.0.0.1:8955 npx playwright test tests/drawings.spec.ts: 1 passed (10.2 s), actual integration shell and generic jobs, disposable OCCT fixture",
+    "example": "examples/drawing_plate.py executed in a new temporary project: ISO two-sheet PDF/SVG/DXF package, ASME inch package and semantic MBD JSON produced",
+    "native_browser": "The additional named-native-association browser test is authored but not executed at this freeze; native associations have measured backend acceptance."
+  },
+  "rows": [
+    {
+      "id": "D01",
+      "status": "implemented_local_contract",
+      "implementation": [
+        "src/o3d/domains/drawings.py:Document,Sheet,Template,Revision",
+        "src/o3d/domains/drawing_worker.py:layout",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_drawing_vectors_measured_roundtrip",
+        "test_inch_units_template_and_source_revision",
+        "test_pdf_independent_reader_dimensions_and_unicode",
+        "frontend/tests/drawings.spec.ts"
+      ],
+      "remaining": [
+        "Supplier engineering review and complete standard-specific title-block customization",
+        "Cross-platform font packaging acceptance"
+      ]
+    },
+    {
+      "id": "D02",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawing_worker.py:project_shape,layout,resolve",
+        "src/o3d/domains/drawings.py:View,Reference"
+      ],
+      "tests": [
+        "test_drawing_vectors_measured_roundtrip",
+        "test_section_detail_and_hidden_geometry",
+        "test_native_named_diameter_updates_from_independent_exact_geometry"
+      ],
+      "remaining": [
+        "Aligned projected views currently require a front parent and top/bottom/right/left/isometric target",
+        "Cosmetic thread-edge conventions and arbitrary auxiliary projections",
+        "Large multi-occurrence projection/performance corpus"
+      ]
+    },
+    {
+      "id": "D03",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawing_worker.py:section_shape,hatch,clip_circle,layout",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_section_detail_and_hidden_geometry",
+        "test_exact_assembly_section_excludes_fastener_from_cut"
+      ],
+      "remaining": [
+        "Oblique, offset, aligned and broken section-view conventions",
+        "Parent cutting-plane and child-view directions must be orthographic supported orientations",
+        "Independent supplier review of hatch/label conventions"
+      ]
+    },
+    {
+      "id": "D04",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawings.py:Annotation,Tolerance",
+        "src/o3d/domains/drawing_worker.py:dimension_text,fit_limits,layout"
+      ],
+      "tests": [
+        "test_drawing_vectors_measured_roundtrip",
+        "test_inch_units_template_and_source_revision",
+        "test_angular_aligned_radial_and_tolerance_formats",
+        "test_native_named_diameter_updates_from_independent_exact_geometry"
+      ],
+      "remaining": [
+        "ISO fit table is bounded to greater than 3 through 30 mm for H7/g6",
+        "Angular tolerance authoring and full standard-specific dimension formatting",
+        "Automatic layout, ordinate/chained dimension families and complete fits library"
+      ]
+    },
+    {
+      "id": "D05",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawings.py:Annotation,Table",
+        "src/o3d/domains/drawing_worker.py:layout",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_drawing_vectors_measured_roundtrip",
+        "test_change_detach_and_explicit_repair",
+        "examples/drawing_plate.py"
+      ],
+      "remaining": [
+        "Thread specifications are explicit supplied notes; no inferred modeled thread standard",
+        "Generalized hole callouts/countersink/counterbore/thread tables",
+        "Table wrapping/automatic placement beyond explicit column widths"
+      ]
+    },
+    {
+      "id": "D06",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawings.py:Annotation.semantics",
+        "src/o3d/domains/drawing_worker.py:layout",
+        "src/o3d/domains/drawing_vectors.py:font_for,write_pdf"
+      ],
+      "tests": [
+        "test_invalid_associations_and_standard_fields",
+        "test_pdf_independent_reader_dimensions_and_unicode",
+        "examples/drawing_plate.py"
+      ],
+      "remaining": [
+        "Full ISO GPS and ASME semantic/standard-dependent validation is not implemented",
+        "Weld/surface/edge support is a declared bounded symbol vocabulary",
+        "Independent qualified engineering review of reference prints"
+      ]
+    },
+    {
+      "id": "D07",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawing_worker.py:verify_source,resolve,execute",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_change_detach_and_explicit_repair",
+        "test_explicit_reference_repair_and_immutable_publication",
+        "test_canonical_native_document_never_uses_frozen_legacy_dimensions",
+        "test_native_scale_does_not_reuse_legacy_hole_nominal",
+        "test_native_named_diameter_updates_from_independent_exact_geometry"
+      ],
+      "remaining": [
+        "Named native analytic associations are measured; generalized topology changes still require explicit repair",
+        "Fillet suppression/recreation, feature reordering and large ambiguous-topology corpus",
+        "Graphical replacement of every annotation-reference family"
+      ]
+    },
+    {
+      "id": "D08",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawing_worker.py:bom_rows,layout",
+        "src/o3d/domains/drawings.py:Annotation,Table",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_repeated_native_component_bom_and_balloon_are_associative"
+      ],
+      "remaining": [
+        "Nested/grouped BOM descendant identity and full configured suppression/reordering corpus",
+        "Visibility is distinct from procurement exclusion; inherited native configuration semantics remain authoritative",
+        "Automatic balloon placement and expanded graphical parts-list formatting"
+      ]
+    },
+    {
+      "id": "D09",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawing_vectors.py:svg,write_pdf,write_dxf",
+        "src/o3d/domains/drawing_worker.py:execute"
+      ],
+      "tests": [
+        "test_drawing_vectors_measured_roundtrip",
+        "test_pdf_independent_reader_dimensions_and_unicode",
+        "test_explicit_reference_repair_and_immutable_publication",
+        "frontend/tests/drawings.spec.ts"
+      ],
+      "remaining": [
+        "DWG is unsupported",
+        "DXF exports editable text/vector graphics, not proprietary associative GD&T/dimension objects",
+        "DXF visual symbol appearance requires a suitable installed Unicode font",
+        "Independent commercial-reader and physical-paper supplier acceptance"
+      ]
+    },
+    {
+      "id": "D10",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawings.py:read_step_pmi,PMI",
+        "src/o3d/domains/drawing_worker.py:execute import_pmi/attach_imported_pmi/inspect_pmi"
+      ],
+      "tests": [
+        "test_pmi_semantics_and_inventory",
+        "test_step_inventory_preserves_quoted_semicolons",
+        "test_pmi_inventory_keeps_immutable_source_identity",
+        "test_mbd_reopen_refresh_and_unspecified_tolerance"
+      ],
+      "remaining": [
+        "AP242 entity inventory preserves source records but is not a complete semantic PMI decoder or viewer",
+        "Topology/tolerance mapping is explicitly supplied by the user, not inferred",
+        "Independent AP242 viewer comparison and generalized imported PMI inspection workflows"
+      ]
+    },
+    {
+      "id": "D11",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/drawings.py:PMI",
+        "src/o3d/domains/drawing_worker.py:execute export_mbd/import_mbd/refresh_pmi",
+        "frontend/src/workspaces/drawings/Panel.tsx"
+      ],
+      "tests": [
+        "test_pmi_semantics_and_inventory",
+        "test_mbd_reopen_refresh_and_unspecified_tolerance"
+      ],
+      "remaining": [
+        "Authored geometry-attached annotations and planes round-trip in declared Oxygen semantic JSON",
+        "No native 3D PMI viewport or AP242 semantic/graphical PMI export",
+        "Current Fusion build/entitlement and released-versus-preview authoring require direct product verification"
+      ]
+    }
+  ]
+}

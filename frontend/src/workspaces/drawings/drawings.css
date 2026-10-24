@@ -1,19 +1,109 @@
-.drawings-panel { padding: 16px; color: var(--text); overflow: auto; height: 100%; }
-.drawing-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
-.drawing-toolbar strong { margin-right: auto; }
-.drawing-toolbar a, .drawing-details a { color: var(--accent-text); text-decoration: underline; font-size: 12px; }
-.drawing-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.drawing-fields label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--text-secondary); }
-.drawing-fields input, .drawing-fields select { width: 100%; min-width: 0; }
-.drawing-fields .drawing-checkbox { flex-direction: row; align-items: center; }
-.drawing-checkbox input { width: auto; }
-.drawing-wide { grid-column: 1 / -1; }
-.drawing-status, .drawing-empty, .drawing-provenance { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
-.drawing-stale { color: var(--warning); font-size: 12px; }
-.drawing-details { margin: 12px 0; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); }
-.drawing-details summary { cursor: pointer; font-size: 12px; margin-bottom: 12px; }
-.drawing-details p { font-size: 12px; color: var(--text-secondary); }
-.drawing-details textarea { width: 100%; min-height: 280px; margin: 12px 0; padding: 10px; color: var(--text); background: var(--surface-inset); border: 1px solid var(--border-bright); font-family: var(--font-mono); font-size: 11px; }
-.drawing-preview { display: block; width: 100%; min-height: 420px; aspect-ratio: 297 / 210; background: white; border: 1px solid var(--border); }
-.drawing-annotations { margin: 10px 0; padding: 0; list-style: none; }
-.drawing-annotations li { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.drawings-panel {
+  padding: 16px;
+  color: var(--text);
+  overflow: auto;
+  height: 100%;
+}
+.drawing-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.drawing-toolbar strong {
+  margin-right: auto;
+}
+.drawing-toolbar a,
+.drawing-details a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  font-size: 12px;
+}
+.drawing-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.drawing-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.drawing-fields input,
+.drawing-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.drawing-fields .drawing-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+.drawing-checkbox input {
+  width: auto;
+}
+.drawing-wide {
+  grid-column: 1 / -1;
+}
+.drawing-status,
+.drawing-empty,
+.drawing-provenance {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.drawing-stale {
+  color: var(--warning);
+  font-size: 12px;
+}
+.drawing-details {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.drawing-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.drawing-details p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.drawing-details textarea {
+  width: 100%;
+  min-height: 280px;
+  margin: 12px 0;
+  padding: 10px;
+  color: var(--text);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-bright);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.drawing-preview {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  aspect-ratio: 297 / 210;
+  background: white;
+  border: 1px solid var(--border);
+}
+.drawing-annotations {
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+.drawing-annotations li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
