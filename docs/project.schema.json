@@ -1,0 +1,837 @@
+{
+  "$defs": {
+    "EdgeTreatment": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "suppressed": {
+          "default": false,
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "fillet",
+            "chamfer"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "selection": {
+          "default": "part:vertical_edges",
+          "title": "Selection",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 1,
+          "title": "Size"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "EdgeTreatment",
+      "type": "object"
+    },
+    "Extrude": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "suppressed": {
+          "default": false,
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "extrude",
+          "default": "extrude",
+          "title": "Type",
+          "type": "string"
+        },
+        "profile": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Profile",
+          "type": "string"
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 4,
+          "title": "Distance"
+        },
+        "operation": {
+          "default": "add",
+          "enum": [
+            "add",
+            "cut"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "profile"
+      ],
+      "title": "Extrude",
+      "type": "object"
+    },
+    "Force": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "title": "Face",
+          "type": "string"
+        },
+        "vector_n": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Vector N",
+          "type": "array"
+        }
+      },
+      "required": [
+        "face",
+        "vector_n"
+      ],
+      "title": "Force",
+      "type": "object"
+    },
+    "Hole": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "suppressed": {
+          "default": false,
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "hole",
+          "default": "hole",
+          "title": "Type",
+          "type": "string"
+        },
+        "center": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Center",
+          "type": "array"
+        },
+        "axis": {
+          "default": "Z",
+          "enum": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 3.2,
+          "title": "Diameter"
+        },
+        "through": {
+          "default": true,
+          "title": "Through",
+          "type": "boolean"
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 5,
+          "title": "Depth"
+        },
+        "reverse": {
+          "default": true,
+          "title": "Reverse",
+          "type": "boolean"
+        },
+        "rows": {
+          "default": 1,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "columns": {
+          "default": 1,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Columns",
+          "type": "integer"
+        },
+        "spacing": {
+          "default": [
+            10,
+            10
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Spacing",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Hole",
+      "type": "object"
+    },
+    "Material": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "User-defined material",
+          "title": "Name",
+          "type": "string"
+        },
+        "youngs_modulus_mpa": {
+          "exclusiveMinimum": 0,
+          "title": "Youngs Modulus Mpa",
+          "type": "number"
+        },
+        "poisson_ratio": {
+          "exclusiveMaximum": 0.5,
+          "exclusiveMinimum": -1,
+          "title": "Poisson Ratio",
+          "type": "number"
+        },
+        "density_g_cm3": {
+          "exclusiveMinimum": 0,
+          "title": "Density G Cm3",
+          "type": "number"
+        },
+        "yield_strength_mpa": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Yield Strength Mpa"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "youngs_modulus_mpa",
+        "poisson_ratio",
+        "density_g_cm3",
+        "source"
+      ],
+      "title": "Material",
+      "type": "object"
+    },
+    "Parameter": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "default": "mm",
+          "enum": [
+            "mm",
+            "deg",
+            "g",
+            "N",
+            "MPa",
+            "dimensionless"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "Parameter",
+      "type": "object"
+    },
+    "Placement": {
+      "additionalProperties": false,
+      "properties": {
+        "translation": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Translation",
+          "type": "array"
+        },
+        "rotation": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation",
+          "type": "array"
+        }
+      },
+      "title": "Placement",
+      "type": "object"
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "suppressed": {
+          "default": false,
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "profile",
+          "default": "profile",
+          "title": "Type",
+          "type": "string"
+        },
+        "shape": {
+          "default": "rectangle",
+          "enum": [
+            "rectangle",
+            "circle",
+            "polygon"
+          ],
+          "title": "Shape",
+          "type": "string"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 40,
+          "title": "Width"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 20,
+          "title": "Height"
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 5,
+          "title": "Radius"
+        },
+        "points": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "plane": {
+          "default": "XY",
+          "enum": [
+            "XY",
+            "XZ",
+            "YZ"
+          ],
+          "title": "Plane",
+          "type": "string"
+        },
+        "origin": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Origin",
+          "type": "array"
+        },
+        "rotation": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Profile",
+      "type": "object"
+    },
+    "ReferenceAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "placement": {
+          "$ref": "#/$defs/Placement"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "check_interference": {
+          "default": true,
+          "title": "Check Interference",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "sha256",
+        "file"
+      ],
+      "title": "ReferenceAsset",
+      "type": "object"
+    },
+    "Requirement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "max_mass",
+            "max_dimension",
+            "min_clearance",
+            "max_displacement"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "exclusiveMinimum": 0,
+          "title": "Value",
+          "type": "number"
+        },
+        "axis": {
+          "default": "X",
+          "enum": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "value"
+      ],
+      "title": "Requirement",
+      "type": "object"
+    },
+    "Study": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "linear_static",
+          "default": "linear_static",
+          "title": "Type",
+          "type": "string"
+        },
+        "fixed_faces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fixed Faces",
+          "type": "array"
+        },
+        "forces": {
+          "items": {
+            "$ref": "#/$defs/Force"
+          },
+          "title": "Forces",
+          "type": "array"
+        },
+        "mesh_size_mm": {
+          "default": 4,
+          "exclusiveMinimum": 0,
+          "title": "Mesh Size Mm",
+          "type": "number"
+        },
+        "refinement_steps": {
+          "default": 3,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Refinement Steps",
+          "type": "integer"
+        },
+        "convergence_tolerance": {
+          "default": 0.05,
+          "exclusiveMinimum": 0,
+          "maximum": 0.2,
+          "title": "Convergence Tolerance",
+          "type": "number"
+        },
+        "stress_probe_mm": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stress Probe Mm"
+        },
+        "assumptions_confirmed": {
+          "default": false,
+          "title": "Assumptions Confirmed",
+          "type": "boolean"
+        }
+      },
+      "title": "Study",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "name": {
+      "default": "Untitled mounting part",
+      "title": "Name",
+      "type": "string"
+    },
+    "units": {
+      "const": "mm",
+      "default": "mm",
+      "title": "Units",
+      "type": "string"
+    },
+    "parameters": {
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_-]{0,63}$": {
+          "$ref": "#/$defs/Parameter"
+        }
+      },
+      "title": "Parameters",
+      "type": "object"
+    },
+    "features": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "chamfer": "#/$defs/EdgeTreatment",
+            "extrude": "#/$defs/Extrude",
+            "fillet": "#/$defs/EdgeTreatment",
+            "hole": "#/$defs/Hole",
+            "profile": "#/$defs/Profile"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Profile"
+          },
+          {
+            "$ref": "#/$defs/Extrude"
+          },
+          {
+            "$ref": "#/$defs/Hole"
+          },
+          {
+            "$ref": "#/$defs/EdgeTreatment"
+          }
+        ]
+      },
+      "maxItems": 200,
+      "title": "Features",
+      "type": "array"
+    },
+    "references": {
+      "items": {
+        "$ref": "#/$defs/ReferenceAsset"
+      },
+      "maxItems": 30,
+      "title": "References",
+      "type": "array"
+    },
+    "placement": {
+      "$ref": "#/$defs/Placement"
+    },
+    "material": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Material"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "requirements": {
+      "items": {
+        "$ref": "#/$defs/Requirement"
+      },
+      "title": "Requirements",
+      "type": "array"
+    },
+    "study": {
+      "$ref": "#/$defs/Study"
+    }
+  },
+  "title": "Project",
+  "type": "object"
+}

@@ -1,0 +1,11 @@
+.git
+.venv
+.mesh-venv
+.tools
+__pycache__
+.pytest_cache
+frontend/node_modules
+frontend/dist
+frontend/test-results
+projects
+*.egg-info

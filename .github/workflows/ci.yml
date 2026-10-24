@@ -1,0 +1,50 @@
+name: CAD and browser checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build pinned local runtime
+        run: docker build -t oxygen-cad .
+      - name: Geometry, editing and numerical tests
+        run: docker run --rm oxygen-cad pytest -q
+      - name: Start disposable browser fixture
+        run: |
+          docker run -d --name oxygen-browser -p 127.0.0.1:8877:8787 oxygen-cad
+          for attempt in $(seq 1 40); do curl -fsS http://127.0.0.1:8877/api/project && break; sleep 1; done
+          python - <<'PY'
+          import json, time, urllib.request
+          base = 'http://127.0.0.1:8877/api/'
+          job = json.load(urllib.request.urlopen(urllib.request.Request(base+'jobs/build', data=b'{}', headers={'Content-Type':'application/json'})))
+          for _ in range(120):
+              state = json.load(urllib.request.urlopen(base+'jobs/'+job['id']))
+              if state['state'] == 'succeeded':
+                  break
+              if state['state'] in ('failed', 'cancelled'):
+                  raise SystemExit(state['message'])
+              time.sleep(.25)
+          else:
+              raise SystemExit('Fixture build timed out')
+          PY
+      - name: Browser acceptance tests
+        working-directory: frontend
+        env:
+          O3D_BROWSER_URL: http://127.0.0.1:8877
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence
+          path: frontend/test-results/
+      - name: Stop fixture
+        if: always()
+        run: docker rm -f oxygen-browser || true

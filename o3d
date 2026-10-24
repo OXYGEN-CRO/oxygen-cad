@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+O3D_REPO=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+cd "$O3D_REPO"
+if [ "${O3D_NATIVE:-0}" = "1" ]; then
+    exec "$O3D_REPO/.venv/bin/python" -m o3d.cli "$@"
+fi
+export O3D_UID=$(id -u)
+export O3D_GID=$(id -g)
+mkdir -p "${O3D_PROJECTS_DIR:-./projects}"
+mkdir -p "${O3D_PROJECTS_DIR:-./projects}/${O3D_PROJECT_NAME:-demo}"
+if [ "${1:-}" = "studio" ]; then
+    shift
+    exec docker compose up --build "$@"
+fi
+exec docker compose run --rm --no-deps --workdir "/projects/${O3D_PROJECT_NAME:-demo}" studio python -m o3d.cli "$@"

@@ -1,0 +1,23 @@
+services:
+  studio:
+    image: oxygen-cad:local
+    build: .
+    platform: linux/amd64
+    init: true
+    ports:
+      - "127.0.0.1:${O3D_PORT:-8787}:8787"
+    volumes:
+      - "${O3D_PROJECTS_DIR:-./projects}:/projects"
+    environment:
+      O3D_PROJECT_DIR: /projects/${O3D_PROJECT_NAME:-demo}
+    user: "${O3D_UID:-1000}:${O3D_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/api/project')"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3

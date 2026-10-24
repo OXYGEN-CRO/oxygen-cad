@@ -1,0 +1,14 @@
+.venv/
+.mesh-venv/
+.tools/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.o3d/
+node_modules/
+frontend/dist/
+projects/*
+!projects/.gitkeep
+test-results/
+*.log
+.DS_Store

@@ -1,0 +1,19 @@
+{
+  "name": "Camera mounting bracket",
+  "parameters": {
+    "width": {"value": 40, "unit": "mm", "locked": false},
+    "length": {"value": 60, "unit": "mm", "locked": false},
+    "thickness": {"value": 4, "unit": "mm", "locked": false},
+    "hole_diameter": {"value": 3.2, "unit": "mm", "locked": true}
+  },
+  "features": [
+    {"id": "base_profile", "type": "profile", "name": "Mounting plate", "width": "$length", "height": "$width"},
+    {"id": "base", "type": "extrude", "name": "Plate thickness", "profile": "base_profile", "distance": "$thickness"},
+    {"id": "upright_profile", "type": "profile", "name": "Camera flange", "plane": "YZ", "origin": [-26, 0, 12], "width": 40, "height": 24},
+    {"id": "upright", "type": "extrude", "name": "Upright flange", "profile": "upright_profile", "distance": -4},
+    {"id": "base_holes", "type": "hole", "name": "Wrist mounting pattern", "diameter": "$hole_diameter", "center": [-15, -12, 0], "columns": 2, "rows": 2, "spacing": [30, 24]},
+    {"id": "camera_holes", "type": "hole", "name": "Camera mounting holes", "axis": "X", "diameter": "$hole_diameter", "center": [0, -10, 12], "columns": 2, "spacing": [20, 10]}
+  ],
+  "requirements": [{"id": "width_limit", "kind": "max_dimension", "axis": "Y", "value": 45}],
+  "study": {"fixed_faces": ["part:xmin"], "forces": [{"face": "part:xmax", "vector_n": [0, 0, -10]}], "mesh_size_mm": 4}
+}
