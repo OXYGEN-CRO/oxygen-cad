@@ -1,0 +1,10 @@
+{
+  "process": "SLA",
+  "formats": ["step"],
+  "quantity": 2,
+  "dimensions": {"x": 80, "y": 40, "z": 20},
+  "dimension_unit": "mm",
+  "tolerance": 0.2,
+  "tolerance_unit": "mm",
+  "limit": 20
+}
