@@ -160,7 +160,7 @@ test("a named native diameter follows an agent edit and graphical association re
   const picker = page.getByLabel("Model reference 1", { exact: true });
   await expect(picker).toBeVisible();
   const side = await picker
-    .getByRole("option", { name: /Shaft.*F1:side#2/ })
+    .getByRole("option", { name: "Shaft · F1:side#2", exact: true })
     .getAttribute("value");
   await picker.selectOption(side!);
   await page
