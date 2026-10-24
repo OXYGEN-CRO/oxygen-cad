@@ -40,7 +40,13 @@ test("light surfaces stay coherent across studio views and compact widths", asyn
               return {
                 scheme: getComputedStyle(document.documentElement).colorScheme,
                 lightPanel: rgb(surface.backgroundColor).every((c) => c > 240),
-                lightField: rgb(field.backgroundColor).every((c) => c > 240),
+                lightField: rgb(
+                  field.backgroundColor === "rgba(0, 0, 0, 0)"
+                    ? getComputedStyle(
+                        document.querySelector(".feature-search")!,
+                      ).backgroundColor
+                    : field.backgroundColor,
+                ).every((c) => c > 240),
                 readable: rgb(field.color).every((c) => c < 60),
                 fits: document.documentElement.scrollWidth <= innerWidth,
               };
@@ -93,6 +99,7 @@ test("theme switching preserves the viewport and draft, persists, and keeps fiel
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.locator(".left-panel .tree-item").first().click();
+  await page.getByText("Feature details", { exact: true }).click();
   const width = page.getByLabel("Feature name", { exact: true });
   await width.fill("Theme draft");
   for (const next of ["dark", "light"]) {

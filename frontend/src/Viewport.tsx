@@ -19,7 +19,10 @@ import {
   type CameraState,
 } from "./workspaces/visualization/scene";
 
+export type ViewOrientation = "isometric" | "front" | "top" | "right";
+
 type Props = {
+  viewRequest: { name: ViewOrientation; version: number };
   theme: "dark" | "light";
   geometry: Geometry | null;
   project: Project;
@@ -334,6 +337,7 @@ export function Viewport(props: Props) {
     if (!r) return;
     let disposed = false;
     host.current!.dataset.fieldReady = "false";
+    delete host.current!.dataset.fieldArtifact;
     r.model.traverse((o: THREE.Object3D) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
         o.geometry.dispose();
@@ -588,9 +592,11 @@ export function Viewport(props: Props) {
           const values = ids.map((id) =>
             props.field === "stress"
               ? (field.stress_mpa?.[id] ?? 0)
-              : props.field === "temperature"
-                ? field.temperature_c[id]
-                : Math.hypot(...(vectors[id] ?? [0, 0, 0])),
+              : props.field === "plastic_strain"
+                ? field.equivalent_plastic_strain[id]
+                : props.field === "temperature"
+                  ? field.temperature_c[id]
+                  : Math.hypot(...(vectors[id] ?? [0, 0, 0])),
           );
           const low =
             props.field === "temperature"
@@ -620,9 +626,11 @@ export function Viewport(props: Props) {
               const value =
                 props.field === "stress"
                   ? (field.stress_mpa?.[id] ?? 0)
-                  : props.field === "temperature"
-                    ? field.temperature_c[id]
-                    : Math.hypot(...u);
+                  : props.field === "plastic_strain"
+                    ? field.equivalent_plastic_strain[id]
+                    : props.field === "temperature"
+                      ? field.temperature_c[id]
+                      : Math.hypot(...u);
               color.setHSL(
                 (1 - Math.min(Math.max((value - low) / span, 0), 1)) * 0.65,
                 0.85,
@@ -658,6 +666,7 @@ export function Viewport(props: Props) {
           );
           r.renderer.render(r.scene, r.camera);
           host.current!.dataset.fieldReady = "true";
+          host.current!.dataset.fieldArtifact = props.analysis.field_artifact;
         })
         .catch(() => {
           if (!disposed) host.current!.dataset.fieldReady = "error";
@@ -813,9 +822,23 @@ export function Viewport(props: Props) {
       .sub(new THREE.Vector3(...(bounds[0] as [number, number, number])))
       .length();
     r.controls.target.copy(center);
-    r.camera.position.copy(
-      center.clone().add(new THREE.Vector3(1, -1.5, 1).multiplyScalar(d * 1.8)),
+    const directions = {
+      isometric: new THREE.Vector3(1, -1.5, 1),
+      front: new THREE.Vector3(0, -1, 0),
+      top: new THREE.Vector3(0, -0.00001, 1),
+      right: new THREE.Vector3(1, 0, 0),
+    };
+    r.camera.position.copy(center).add(
+      directions[props.viewRequest.name]
+        .clone()
+        .normalize()
+        .multiplyScalar(d * 3),
     );
+    // Clear residual orbit damping so a chosen standard view lands precisely.
+    r.camera.up.set(0, 0, 1);
+    r.controls.enableDamping = false;
+    r.controls.update();
+    r.controls.enableDamping = true;
     const aspect = host.current!.clientWidth / host.current!.clientHeight;
     if (r.camera instanceof THREE.OrthographicCamera) {
       r.camera.top = (d * 0.7) / Math.min(aspect, 1);
@@ -823,8 +846,9 @@ export function Viewport(props: Props) {
       r.camera.left = -r.camera.top * aspect;
       r.camera.right = r.camera.top * aspect;
     }
+    r.camera.zoom = 1;
     r.camera.updateProjectionMatrix();
-  }, [props.fit]);
+  }, [props.fit, props.viewRequest]);
   return (
     <>
       <div className="webgl" ref={host} aria-label="Interactive CAD viewport" />

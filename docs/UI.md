@@ -35,12 +35,30 @@ Project settings, Study setup, Source and History are available from Project too
 
 On narrow screens, the inspector overlays the workspace; both panels remain controllable from the header. Save/export/download stay accessible as compact icon actions when space is limited.
 
+## Precision workspace
+
+`components/studio.css` owns workspace composition, navigation and inspector layout. `FeatureNavigator` provides filtering by feature name, ID and type, with an explicit empty state and clear action. Filtering preserves the selected item and its unsaved draft. The feature count always reflects the complete model.
+
+`InspectorSection` uses native keyboard-operable disclosures. Geometry controls come first; related dimensions sit together. Placement and Feature details (naming, suppression, ordering and deletion) can be expanded when needed. Collapsing a group does not discard its fields. Reading sizes, gaps and units follow the same compact rhythm in both themes.
+
+The View menu provides actual isometric, front, top and right orthographic camera directions. Fit restores framing and resets zoom while retaining the chosen standard direction. The renderer and model state survive these presentation changes. Tooltips identify viewport actions and expose their keyboard shortcuts. Unsaved edits have a quiet, explicit header state.
+
+| Shortcut | Action |
+|---|---|
+| `/` | Open the feature sidebar and focus its filter |
+| `F` | Fit the model |
+| `M` | Toggle measurement |
+| `Escape` | End measurement, clear selected faces and isolation; clear a focused feature filter |
+| `⌘S` / `Ctrl+S` | Save through the existing revision-protected command |
+
+Single-key commands yield to text/number fields, selectors, contenteditable regions, menus and dialogs. Save remains available in editors; JSON buffers commit before the latest draft is saved, and invalid JSON does not trigger a save. Shortcuts preserve the existing native editing behavior of form controls.
+
 ## Behavior
 
 The theme changes presentation and lighting. Real editing, saves, revision conflict protection, parameter locks, face selection, geometry checks, exports and studies continue through the existing application state and command service. The interface does not replace engineering results with illustrative states.
 
 ## Verification
 
-Run `npm run build` in `frontend`, then `npm test` with the disposable fixture. The UI appearance test visits the model inspector, Study setup, History and Source at 320, 390, 768, 1024 and 1512 pixels, checks both themes, actual glass blur, readable input colors and page overflow, and confirms that browsing the interface does not change the engineering document. Theme coverage also verifies the actual WebGL clear color, persistent preferences, preserved renderer and unsaved input, quiet pointer/keyboard field focus, and menu keyboard operation. The functional flows additionally exercise editing/rebuild/check/export, revision conflicts and a real static study.
+Run `npm run build` in `frontend`, then `npm test` with the disposable fixture. The UI appearance test visits the model inspector, Study setup, History and Source at 320, 390, 768, 1024 and 1512 pixels, checks both themes, actual glass blur, readable input colors and page overflow, and confirms that browsing the interface does not change the engineering document. Theme coverage also verifies the actual WebGL clear color, persistent preferences, preserved renderer and unsaved input, quiet pointer/keyboard field focus, and menu keyboard operation. Interaction coverage also checks feature filtering, disclosure state, rendered standard views, zoom restoration, shortcut guards, tooltip hints and actual keyboard saves. The functional flows additionally exercise editing/rebuild/check/export, revision conflicts and a real static study.
 
 These checks run in Linux Chromium. Physical macOS/Safari and extended-session usability remain separate validation work.

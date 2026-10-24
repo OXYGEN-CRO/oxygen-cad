@@ -339,9 +339,10 @@ class Store:
         project = self.load()
         gkey, skey = geometry_key(project), study_key(project)
         build_path = self.cache / "builds" / gkey / "build.json"
-        analysis_path = self.cache / "studies" / skey / "result.json"
         build = json.loads(build_path.read_text()) if build_path.exists() else None
-        analysis = json.loads(analysis_path.read_text()) if analysis_path.exists() else None
+        studies = self.study_states(project)
+        active = studies[project.active_study_id]
+        analysis = active["result"]
         checks_path = self.cache / "builds" / gkey / "checks.json"
         checks = json.loads(checks_path.read_text()) if checks_path.exists() else None
         if checks and checks.get("input_key") != verification_key(project):
@@ -353,8 +354,42 @@ class Store:
         return {"project": project.model_dump(mode="json"), "geometry_key": gkey, "study_key": skey,
                 "build": build, "last_build": last_build, "analysis": analysis, "checks": checks,
                 "geometry_state": "current" if build else "stale" if last_build else "not_run",
-                "analysis_state": analysis.get("state") if analysis else "stale" if (self.cache / "last-study.json").exists() else "not_run",
+                "analysis_state": active["state"], "studies": studies,
                 "history": self.history(), "context": context, "simulation_capabilities": capabilities()}
+
+    def study_states(self, project=None):
+        project = self.load() if project is None else project
+        records = {}
+        for study_id in ["default", *project.named_studies]:
+            key = study_key(project, study_id)
+            path = self.cache / "studies" / key / "result.json"
+            result = json.loads(path.read_text()) if path.exists() else None
+            marker = self.cache / "last-studies" / f"{study_id}.json"
+            legacy_path = self.cache / "last-study.json"
+            legacy = json.loads(legacy_path.read_text()) if study_id == "default" and legacy_path.exists() else None
+            stale = marker.exists() or (legacy is not None and legacy.get("study_id", "default") == "default")
+            study = project.study_config(study_id)
+            records[study_id] = {"id":study_id, "name":study.name, "type":study.type, "key":key,
+                                 "state":result["state"] if result else "stale" if stale else "not_run", "result":result}
+        return records
+
+    def compare_studies(self, study_ids):
+        project = self.load()
+        if len(study_ids) < 2 or len(study_ids) > 8 or len(set(study_ids)) != len(study_ids):
+            raise ValueError("Compare two to eight distinct studies")
+        states = self.study_states(project)
+        for study_id in study_ids:
+            project.study_config(study_id)
+        metrics = {"max_displacement_mm":"mm", "stress_probe_mpa":"MPa", "max_temperature_c":"degC",
+                   "min_temperature_c":"degC", "frequencies_hz":"Hz", "buckling_factors":"dimensionless"}
+        rows = []
+        for metric, unit in metrics.items():
+            values = {i:(states[i]["result"] or {}).get(metric) for i in study_ids}
+            if sum(v is not None for v in values.values()) >= 2:
+                rows.append({"metric":metric, "unit":unit, "values":values})
+        return {"revision":project.revision, "geometry_key":geometry_key(project),
+                "studies":{i:states[i] for i in study_ids}, "quantities":rows,
+                "warnings":["Only current results are compared. Loads, supports and assumptions may differ; inspect each study."]}
 
     def _agent_files(self):
         write_json(self.root / "project.schema.json", Project.model_json_schema())

@@ -34,7 +34,8 @@ class Jobs:
         project = self.store.load()
         if expected_revision is not None and project.revision != expected_revision:
             raise Conflict("Project changed; inspect before submitting an operation")
-        job = Job(id=uuid.uuid4().hex, kind=kind, revision=project.revision, created_at=now())
+        job = Job(id=uuid.uuid4().hex, kind=kind, revision=project.revision, created_at=now(),
+                  study_id=project.active_study_id if kind == "simulate" else None)
         path = self.path(job.id)
         write_json(path / "job.json", job.model_dump())
         write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json"), "workspace": request})

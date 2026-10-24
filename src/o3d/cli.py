@@ -76,6 +76,40 @@ def workspace_run(ctx: typer.Context, domain: str, operation: str, input: Path |
     result = execute(ctx.obj, project, domain, operation, json.loads(input.read_text()) if input else {}, actor=actor)
     emit(finalize(ctx.obj, project, domain, result, actor))
 
+study_app = typer.Typer(help="Create, clone, select, compare and inspect persistent engineering studies.")
+app.add_typer(study_app, name="study")
+
+
+@study_app.command("create")
+def study_create(ctx: typer.Context, study_id: str, kind: str = "linear_static", name: str | None = None,
+                 expected_revision: int = typer.Option(...), actor: str = "agent"):
+    from .studies import edit_study
+    emit(edit_study(ctx.obj, "create", study_id, expected_revision, actor, name, kind).model_dump(mode="json"))
+
+
+@study_app.command("clone")
+def study_clone(ctx: typer.Context, study_id: str, source: str | None = None, name: str | None = None,
+                expected_revision: int = typer.Option(...), actor: str = "agent"):
+    from .studies import edit_study
+    emit(edit_study(ctx.obj, "clone", study_id, expected_revision, actor, name, source=source).model_dump(mode="json"))
+
+
+@study_app.command("select")
+def study_select(ctx: typer.Context, study_id: str, expected_revision: int = typer.Option(...), actor: str = "agent"):
+    from .studies import edit_study
+    emit(edit_study(ctx.obj, "select", study_id, expected_revision, actor).model_dump(mode="json"))
+
+
+@study_app.command("delete")
+def study_delete(ctx: typer.Context, study_id: str, expected_revision: int = typer.Option(...), actor: str = "agent"):
+    from .studies import edit_study
+    emit(edit_study(ctx.obj, "delete", study_id, expected_revision, actor).model_dump(mode="json"))
+
+
+@study_app.command("compare")
+def study_compare(ctx: typer.Context, study_ids: list[str] = typer.Argument(...)):
+    emit(ctx.obj.compare_studies(study_ids))
+
 
 @engine_app.command("commands")
 def engine_commands(json_output: bool = typer.Option(False, "--json")):
@@ -104,7 +138,7 @@ def engine_stdio():
 @app.command()
 def init(ctx: typer.Context, template: Path | None = None, json_output: bool = typer.Option(False, "--json")):
     if template:
-        if str(template) in ("bracket", "cantilever", "modal", "buckling", "thermal", "thermal-stress"):
+        if str(template) in ("bracket", "cantilever", "modal", "buckling", "thermal", "thermal-stress", "nonlinear", "plastic-unload"):
             template = Path(__file__).resolve().parents[2] / "examples" / f"{template}.json"
         project = Project.model_validate_json(template.read_text())
     else:
@@ -165,14 +199,20 @@ def studies(ctx: typer.Context, json_output: bool = typer.Option(False, "--json"
     """List study capabilities and validate the current study without solving."""
     from .analysis import capabilities, validate_study
     project = ctx.obj.load() if (ctx.obj.root / "o3d.json").exists() else None
-    emit({**capabilities(), "current_study": project.study.model_dump() if project else None,
+    emit({**capabilities(), "current_study": project.study_config().model_dump() if project else None,
+          "active_study_id": project.active_study_id if project else None,
+          "saved_studies": ctx.obj.study_states(project) if project else {},
           "setup_errors": validate_study(project) if project else []})
 
 
 @app.command()
-def simulate(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
+def simulate(ctx: typer.Context, json_output: bool = typer.Option(False, "--json"), study_id: str | None = None):
     from .worker import dispatch
-    result = dispatch("simulate", ctx.obj, ctx.obj.load())
+    project = ctx.obj.load()
+    if study_id is not None:
+        project.study_config(study_id)
+        project.active_study_id = study_id
+    result = dispatch("simulate", ctx.obj, project)
     emit(result)
     if result["state"] != "passed":
         raise typer.Exit(2)

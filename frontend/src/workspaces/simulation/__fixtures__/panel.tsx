@@ -37,6 +37,8 @@ const project = {
     density_g_cm3: 7.8,
   },
   requirements: [],
+  active_study_id: "default",
+  named_studies: {},
   study: {
     schema_version: 1,
     type: "linear_static",
@@ -56,6 +58,10 @@ const project = {
     stress_probe_mm: null,
     probe_point_mm: null,
     assumptions_confirmed: false,
+    large_deformation: true,
+    nonlinear_increments: 10,
+    max_nonlinear_increments: 200,
+    load_path: [],
   },
 } as Project;
 const selection = {
@@ -69,6 +75,7 @@ function Fixture() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(1);
   const state = {
+    studies: {},
     simulation_capabilities: { studies: [], scope: "UI form fixture; numerical execution is separate" },
     project,
     build: null,

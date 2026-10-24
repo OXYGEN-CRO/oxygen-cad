@@ -3,7 +3,9 @@ import type { Project, State, Selection } from "../api";
 export type DomainId = "modeling" | "assemblies" | "drawings" | "manufacturing" | "simulation" | "electronics" | "visualization" | "interop" | "platform";
 export type JsonObject = Record<string, unknown>;
 export interface NativeReply { project: Project; result: unknown; }
+export interface ModelingNavigation { feature?: number | string; tab?: string; version: number; }
 export interface DomainPanelProps {
+  modelingNavigation?: ModelingNavigation;
   project: Project;
   state: State;
   selection: Selection | null;
