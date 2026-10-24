@@ -42,6 +42,23 @@ jobs:
           name: desktop-runtime
           path: desktop-runtime/
           compression-level: 0
+  browser:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-runtime
+          path: desktop-runtime
+      - name: Load the verified runtime
+        run: |
+          gzip -dc desktop-runtime/runtime.tar.gz | docker load
+          docker tag oxygen-cad:desktop-runtime oxygen-cad:latest
+          test "$(docker image inspect oxygen-cad --format '{{.Id}}')" = "$(cat desktop-runtime/image-id.txt)"
       - name: Install browser verification tools
         working-directory: frontend
         run: |
