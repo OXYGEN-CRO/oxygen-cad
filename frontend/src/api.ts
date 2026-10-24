@@ -80,7 +80,9 @@ export type Geometry = {
   references: { id: string; name: string; faces: Face[]; visible: boolean }[];
   dimensions_mm: number[];
   bounds: number[][];
-  volume_mm3: number;
+  volume_mm3: number | null;
+  center_of_mass?: number[] | null;
+  exact_solid_volume_mm3?: number;
   artifacts: Record<string, string>;
 };
 export type Selection = {

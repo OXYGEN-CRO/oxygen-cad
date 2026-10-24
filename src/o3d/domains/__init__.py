@@ -97,7 +97,7 @@ def finalize(store, snapshot, domain, result, actor="agent"):
                                       project=proposal, summary=f"Update {domain} workspace"))
         result["project"] = updated.model_dump(mode="json")
         result["revision"] = updated.revision
-        result["stale"] = False
+        result["stale"] = bool(result.get("stale"))
     else:
-        result["stale"] = digest(store.load().model_dump(mode="json")) != digest(snapshot.model_dump(mode="json"))
+        result["stale"] = bool(result.get("stale")) or digest(store.load().model_dump(mode="json")) != digest(snapshot.model_dump(mode="json"))
     return result

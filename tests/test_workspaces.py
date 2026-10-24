@@ -33,6 +33,8 @@ def test_domain_edit_undo_and_stale_worker_never_overwrites_new_edit(store):
     assert store.load() == changed
     report = finalize(store, snapshot, "drawings", {"artifact": "drawings/old.svg"})
     assert report["stale"] is True and report["source_revision"] == 1
+    reopened = finalize(store, changed, "drawings", {"artifact": "drawings/old.svg", "stale": True, "source_revision": 1})
+    assert reopened["stale"] is True and reopened["source_revision"] == 1
     undone = store.apply(Command(expected_revision=2, actor="human", action="undo"))
     assert undone.revision == 3 and "drawings" not in undone.domains
 
