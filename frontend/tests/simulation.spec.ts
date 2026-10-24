@@ -84,6 +84,13 @@ test("modal setup, actual modes, mode field and restart persistence", async ({
   expect(state.analysis.frequencies_hz[0]).toBeGreaterThan(490);
   expect(state.analysis.frequencies_hz[0]).toBeLessThan(530);
   expect(state.analysis.physical_validation).toBe("not_performed");
+  expect(state.analysis.mode_tracking.passed).toBe(true);
+  expect(state.analysis.mode_tracking.quadrature_sensitivity).toBeLessThan(
+    0.005,
+  );
+  await expect(
+    page.getByLabel("Mode correlation", { exact: true }),
+  ).toContainText("Mode correlation: verified");
   await expect(
     page.getByRole("button", { name: "Run study", exact: true }),
   ).toBeEnabled();

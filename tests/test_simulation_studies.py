@@ -50,6 +50,12 @@ def test_modal_frequency_against_cantilever_theory(store, mesher):
     assert len(field["modes"]) == 2
     assert len(field["modes"][0]["vectors"]) == len(field["nodes"])
     assert "arbitrary" in field["mode_amplitude"]
+    assert result["mode_tracking"]["passed"]
+    assert result["mode_tracking"]["quadrature_sensitivity"] < .005
+    assert len(field["guard_modes"]) == 4
+    for iteration in result["iterations"][1:]:
+        assert iteration["mode_tracking"]["passed"]
+        assert min(g["minimum_squared_cosine"] for g in iteration["mode_tracking"]["groups"]) >= .98
     assert result["input_deck_sha256"]
 
 
@@ -121,6 +127,7 @@ def test_buckling_factor_against_euler_column(store):
     expected=math.pi**2*200000*(10*4**3/12)/(4*80**2)
     assert result["buckling_factors"][0]==pytest.approx(expected,rel=.03)
     assert result["state"]=="passed"
+    assert result["mode_tracking"]["passed"]
 
 
 def test_missing_inputs_unused_physics_and_unsupported_studies_refuse(store):
