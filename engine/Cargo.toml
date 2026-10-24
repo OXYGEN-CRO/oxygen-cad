@@ -7,7 +7,7 @@ license = "MIT"
 publish = false
 
 [dependencies]
-solidcraft-engine = { path = "../third_party/solidcraft/crates/engine" }
+solidcraft-engine = { path = "../third_party/solidcraft/crates/engine", features = ["raytrace-cpu"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [profile.release]

@@ -76,7 +76,7 @@ class NativeSession:
 
 def _resolved(project, value):
     if isinstance(value, str) and value.startswith("$"):
-        return project.resolve(value)
+        return value[1:]
     if isinstance(value, dict):
         return {k: _resolved(project, v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -118,96 +118,126 @@ def compile_native(project: Project, destination: Path):
                 session.execute("sketch.line", {"points": profile.points, "closed": True})
             session.execute("sketch.finish")
 
-        for feature in project.features:
-            if feature.suppressed:
-                continue
-            try:
-                if isinstance(feature, Profile):
-                    profiles[feature.id] = feature
+        if project.native_document is not None:
+            session.execute("oxygen.document.set", {"document": project.native_document,
+                "context": project.domains.get("modeling", {}).get("native_context", {})})
+        else:
+            for name, parameter in project.parameters.items():
+                unit = parameter.unit if parameter.unit in {"mm", "deg"} else ""
+                session.execute("parameters.add", {"name": name, "expression": parameter.value, "unit": unit})
+            for feature in project.features:
+                if feature.suppressed:
                     continue
-                if isinstance(feature, NativeFeature):
-                    session.execute(feature.command, _resolved(project, feature.params))
-                elif isinstance(feature, Extrude):
-                    if feature.profile not in profiles:
-                        raise ValueError("The referenced profile is suppressed or unavailable")
-                    before = measure()
-                    if feature.operation == "cut" and not before["body_count"]:
-                        raise ValueError("The first extrusion must add material")
-                    sketch(profiles[feature.profile], f"{feature.profile}_{feature.id}")
-                    distance = project.resolve(feature.distance)
-                    session.execute("solid.extrude", {"distance": abs(distance), "direction": "negative" if distance < 0 else "positive",
-                        "operation": "cut" if feature.operation == "cut" else "join" if before["body_count"] else "new",
-                        "body_name": "Oxygen part", "name": feature.name or feature.id})
-                    if abs(measure()["total"]["volume_mm3"] - before["total"]["volume_mm3"]) < 1e-8:
-                        raise ValueError("Operation made no measured change to the solid")
-                elif isinstance(feature, Hole):
-                    before = measure()
-                    if before["body_count"] != 1:
-                        raise ValueError("A hole needs one existing solid")
-                    axis = "XYZ".index(feature.axis)
-                    bbox = before["bodies"][0]["bbox"]
-                    normal = [int(i == axis) for i in range(3)]
-                    origin = list(feature.center)
-                    if feature.through:
-                        origin[axis] = bbox["min"][axis] - 1
-                        depth = bbox["max"][axis] - bbox["min"][axis] + 2
-                    else:
-                        normal[axis] = -1 if feature.reverse else 1
-                        depth = project.resolve(feature.depth)
-                    plane = bd.Plane(origin=origin, z_dir=normal)
-                    session.execute("sketch.create", {"name": feature.id, "plane": {
-                        "origin": origin, "x_dir": vector(plane.x_dir), "y_dir": vector(plane.y_dir)}})
-                    other_axes = [i for i in range(3) if i != axis]
-                    for row in range(feature.rows):
-                        for column in range(feature.columns):
-                            point = list(origin)
-                            point[other_axes[0]] += column * feature.spacing[0]
-                            point[other_axes[1]] += row * feature.spacing[1]
-                            delta = bd.Vector(point) - bd.Vector(origin)
-                            center = [delta.dot(plane.x_dir), delta.dot(plane.y_dir)]
-                            session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
-                    session.execute("sketch.finish")
-                    session.execute("solid.extrude", {"distance": depth, "operation": "cut", "name": feature.name or feature.id})
-                    if before["total"]["volume_mm3"] - measure()["total"]["volume_mm3"] < 1e-8:
-                        raise ValueError("Hole pattern did not intersect the solid")
-                elif isinstance(feature, EdgeTreatment):
-                    # Resolve the same public semantic/strict selections used by the review UI,
-                    # against an independent STEP import. The actual operation is performed in Rust.
-                    selection_step = destination / "selection.step"
-                    session.execute("file.export", {"path": str(selection_step)})
-                    selected = select_edges(bd.import_step(selection_step), feature.selection)
-                    if not selected:
-                        raise ValueError("Edge selection is empty")
-                    edges = [vector(e.position_at(0.5)) for e in selected]
-                    session.execute("solid." + feature.type, {"edges": edges,
-                        "radius" if feature.type == "fillet" else "distance": project.resolve(feature.size)})
-            except Exception as error:
-                raise ValueError(f"Feature {feature.id}: {error}") from error
+                try:
+                    if isinstance(feature, Profile):
+                        profiles[feature.id] = feature
+                        continue
+                    if isinstance(feature, NativeFeature):
+                        session.execute(feature.command, _resolved(project, feature.params))
+                    elif isinstance(feature, Extrude):
+                        if feature.profile not in profiles:
+                            raise ValueError("The referenced profile is suppressed or unavailable")
+                        before = measure()
+                        if feature.operation == "cut" and not before["body_count"]:
+                            raise ValueError("The first extrusion must add material")
+                        sketch(profiles[feature.profile], f"{feature.profile}_{feature.id}")
+                        distance = project.resolve(feature.distance)
+                        session.execute("solid.extrude", {"distance": abs(distance), "direction": "negative" if distance < 0 else "positive",
+                            "operation": "cut" if feature.operation == "cut" else "join" if before["body_count"] else "new",
+                            "body_name": "Oxygen part", "name": feature.name or feature.id})
+                        if abs(measure()["total"]["volume_mm3"] - before["total"]["volume_mm3"]) < 1e-8:
+                            raise ValueError("Operation made no measured change to the solid")
+                    elif isinstance(feature, Hole):
+                        before = measure()
+                        if before["body_count"] != 1:
+                            raise ValueError("A hole needs one existing solid")
+                        axis = "XYZ".index(feature.axis)
+                        bbox = before["bodies"][0]["bbox"]
+                        normal = [int(i == axis) for i in range(3)]
+                        origin = list(feature.center)
+                        if feature.through:
+                            origin[axis] = bbox["min"][axis] - 1
+                            depth = bbox["max"][axis] - bbox["min"][axis] + 2
+                        else:
+                            normal[axis] = -1 if feature.reverse else 1
+                            depth = project.resolve(feature.depth)
+                        plane = bd.Plane(origin=origin, z_dir=normal)
+                        session.execute("sketch.create", {"name": feature.id, "plane": {
+                            "origin": origin, "x_dir": vector(plane.x_dir), "y_dir": vector(plane.y_dir)}})
+                        other_axes = [i for i in range(3) if i != axis]
+                        for row in range(feature.rows):
+                            for column in range(feature.columns):
+                                point = list(origin)
+                                point[other_axes[0]] += column * feature.spacing[0]
+                                point[other_axes[1]] += row * feature.spacing[1]
+                                delta = bd.Vector(point) - bd.Vector(origin)
+                                center = [delta.dot(plane.x_dir), delta.dot(plane.y_dir)]
+                                session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
+                        session.execute("sketch.finish")
+                        session.execute("solid.extrude", {"distance": depth, "operation": "cut", "name": feature.name or feature.id})
+                        if before["total"]["volume_mm3"] - measure()["total"]["volume_mm3"] < 1e-8:
+                            raise ValueError("Hole pattern did not intersect the solid")
+                    elif isinstance(feature, EdgeTreatment):
+                        # Resolve the same public semantic/strict selections used by the review UI,
+                        # against an independent STEP import. The actual operation is performed in Rust.
+                        selection_step = destination / "selection.step"
+                        session.execute("file.export", {"path": str(selection_step)})
+                        selected = select_edges(bd.import_step(selection_step), feature.selection)
+                        if not selected:
+                            raise ValueError("Edge selection is empty")
+                        edges = [vector(e.position_at(0.5)) for e in selected]
+                        session.execute("solid." + feature.type, {"edges": edges,
+                            "radius" if feature.type == "fillet" else "distance": project.resolve(feature.size)})
+                except Exception as error:
+                    raise ValueError(f"Feature {feature.id}: {error}") from error
         measured = measure()
-        if measured["body_count"] != 1 or measured["total"]["volume_mm3"] <= 0:
-            raise ValueError("The project must produce exactly one connected, positive-volume solid")
-        body = measured["bodies"][0]["name"]
-        if any(project.placement.rotation):
+        canonical = session.execute("oxygen.document.get")
+        scene = session.execute("oxygen.scene")
+        bodies = [b["name"] for b in scene["bodies"]]
+        body = bodies[0] if len(bodies) == 1 else None
+        if bodies and any(project.placement.rotation):
             quaternion = bd.Location((0, 0, 0), project.placement.rotation).wrapped.Transformation().GetRotation()
             direction = gp_Vec()
             angle = quaternion.GetVectorAndAngle(direction)[0]
             if abs(angle) > 1e-12:
-                session.execute("solid.move", {"bodies": [body], "axis": [direction.X(), direction.Y(), direction.Z()], "angle": math.degrees(angle)})
-        if any(project.placement.translation):
-            session.execute("solid.move", {"bodies": [body], "translate": project.placement.translation})
-        if project.material is not None:
+                session.execute("solid.move", {"bodies": bodies, "axis": [direction.X(), direction.Y(), direction.Z()], "angle": math.degrees(angle)})
+        if bodies and any(project.placement.translation):
+            session.execute("solid.move", {"bodies": bodies, "translate": project.placement.translation})
+        if project.material is not None and bodies:
             session.execute("material.create", {"name": "Oxygen project material", "density_g_cm3": project.material.density_g_cm3})
-            session.execute("material.assign", {"bodies": [body], "material": "Oxygen project material"})
+            session.execute("material.assign", {"bodies": bodies, "material": "Oxygen project material"})
         measured = measure()
+        scene = session.execute("oxygen.scene")
         recipe = {"commands": [c for c in session.commands if not c["command"].startswith(("oxygen.", "inspect.", "file."))]}
-        session.execute("file.export", {"path": str(destination / "part.step")})
+        brep_bodies = [b for b in scene["bodies"] if b["geometry_kind"] != "mesh"]
+        if brep_bodies:
+            session.execute("file.export", {"path": str(destination / "part.step"), "bodies": [b["name"] for b in brep_bodies]})
         session.execute("file.save_as", {"path": str(destination / "part.solidcraft")})
         (destination / "engine-script.json").write_text(json.dumps(recipe, indent=2) + "\n")
         (destination / "engine-measures.json").write_text(json.dumps(measured, indent=2) + "\n")
-    shape = bd.import_step(destination / "part.step")
-    if not shape.is_valid or len(shape.solids()) != 1 or shape.volume <= 0:
-        raise ValueError("Independent OCCT validation rejected the Rust engine STEP export")
-    disagreement = abs(shape.volume - measured["total"]["volume_mm3"]) / shape.volume
-    if disagreement > 1e-3:
-        raise ValueError(f"Independent OCCT volume disagrees with Rust measurements ({disagreement:.3%})")
-    return shape, metadata | {"independent_volume_relative_error": disagreement}
+        (destination / "native-scene.json").write_text(json.dumps(scene, indent=2) + "\n")
+        independent = []
+        shapes = []
+        for index, body in enumerate(brep_bodies):
+            path = destination / f"body-{index}.step"
+            session.execute("file.export", {"path": str(path), "bodies": [body["name"]]})
+            shape = bd.import_step(path)
+            if not shape.is_valid or not shape.faces():
+                raise ValueError(f"Independent OCCT validation rejected body {body['name']}")
+            expected = next((b for b in measured["bodies"] if b["name"] == body["name"]), {})
+            volume_error = None
+            if body["geometry_kind"] == "solid":
+                if not shape.solids() or shape.volume <= 0 or body["validity"]:
+                    raise ValueError(f"Body {body['name']} is not a valid positive-volume solid: {body['validity']}")
+                volume_error = abs(shape.volume - expected["volume_mm3"]) / shape.volume
+                if volume_error > 1e-3:
+                    raise ValueError(f"Independent OCCT volume disagrees for {body['name']} ({volume_error:.3%})")
+            elif shape.area <= 0:
+                raise ValueError(f"Surface {body['name']} has no independently measured area")
+            independent.append({"id": body["id"], "name": body["name"], "geometry_kind": body["geometry_kind"],
+                "volume_relative_error": volume_error, "area_mm2": shape.area, "step": path.name})
+            shapes.append(shape)
+    shape = bd.Compound(children=shapes) if len(shapes) > 1 else shapes[0] if shapes else None
+    errors = [v["volume_relative_error"] for v in independent if v["volume_relative_error"] is not None]
+    return shape, metadata | {"independent_volume_relative_error": max(errors, default=0),
+        "independent_bodies": independent, "canonical": canonical, "scene": scene}

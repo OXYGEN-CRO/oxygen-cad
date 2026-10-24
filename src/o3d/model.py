@@ -162,6 +162,10 @@ class Project(Model):
     units: Literal["mm"] = "mm"
     parameters: dict[Identifier, Parameter] = Field(default_factory=dict)
     features: list[Feature] = Field(default_factory=list, max_length=200)
+    # The actual upstream versioned document becomes canonical after migration.
+    # Legacy v1 projects still load with their feature list until their first native edit.
+    native_document: dict | None = None
+    domains: dict[str, dict] = Field(default_factory=dict)
     references: list[ReferenceAsset] = Field(default_factory=list, max_length=30)
     placement: Placement = Field(default_factory=Placement)
     material: Material | None = None
@@ -170,6 +174,15 @@ class Project(Model):
 
     @model_validator(mode="after")
     def validate_graph(self):
+        if self.native_document is not None:
+            if self.geometry_engine != "solidcraft":
+                raise ValueError("Native documents require the SolidCraft geometry engine")
+            if not isinstance(self.native_document.get("format"), str):
+                raise ValueError("Native documents must retain their upstream format version")
+            if not isinstance(self.native_document.get("features"), list) or not isinstance(self.native_document.get("params"), list):
+                raise ValueError("Expected an upstream native document with features and params")
+            if len(json.dumps(self.native_document, allow_nan=False).encode()) > 15 * 1024 * 1024:
+                raise ValueError("Native document exceeds 15 MiB")
         ids = [f.id for f in self.features]
         if len(ids) != len(set(ids)):
             raise ValueError("Feature IDs must be unique")
@@ -227,7 +240,7 @@ class Command(Model):
 
 class Job(Model):
     id: str
-    kind: Literal["build", "check", "simulate", "render", "export"]
+    kind: Literal["build", "check", "simulate", "render", "export", "domain"]
     revision: int
     state: Literal["queued", "running", "succeeded", "failed", "cancelled"] = "queued"
     created_at: str
@@ -242,7 +255,9 @@ def digest(value) -> str:
 
 
 def geometry_key(project: Project) -> str:
-    return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-v1-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features],
+    return digest({"engine": project.geometry_engine, "toolchain": "oxygen-native-document-v2-0520910bfd4f" if project.geometry_engine == "solidcraft" else "build123d-0.13.0-v1", "features": [f.model_dump() for f in project.features] if project.native_document is None else None,
+                   "native_document": project.native_document,
+                   "native_context": project.domains.get("modeling", {}).get("native_context") if project.native_document else None,
                    "parameters": {k: v.value for k, v in project.parameters.items()},
                    "native_material": {"name": project.material.name, "density_g_cm3": project.material.density_g_cm3} if project.geometry_engine == "solidcraft" and project.material else None,
                    "references": [r.model_dump(exclude={"visible"}) for r in project.references],

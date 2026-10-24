@@ -184,12 +184,27 @@ def build(store: Store, project: Project):
         shape, engine = compile_native(project, destination.resolve())
     else:
         shape, engine = compile_occt_shape(project), {"engine": "occt"}
-    if not bd.export_brep(shape, destination / "part.brep"):
-        raise ValueError("BREP export failed")
-    if project.geometry_engine == "occt":
-        bd.export_step(shape, destination / "part.step")
-    bd.export_stl(shape, destination / "part.stl", tolerance=0.05, angular_tolerance=0.1)
-    faces = face_metadata(shape)
+    scene = engine.pop("scene", None)
+    engine.pop("canonical", None)
+    artifacts = {}
+    if shape is not None:
+        if not bd.export_brep(shape, destination / "part.brep"):
+            raise ValueError("BREP export failed")
+        if project.geometry_engine == "occt":
+            bd.export_step(shape, destination / "part.step")
+        bd.export_stl(shape, destination / "part.stl", tolerance=0.05, angular_tolerance=0.1)
+        artifacts.update({name: f"builds/{key}/part.{extension}" for name, extension in (("step", "step"), ("stl", "stl"), ("brep", "brep"))})
+    faces = face_metadata(shape) if shape is not None else []
+    if scene:
+        # Preserve body-specific identities/topology alongside legacy aggregate viewport data.
+        for body, independent in zip([b for b in scene["bodies"] if b["geometry_kind"] != "mesh"], engine["independent_bodies"]):
+            body_shape = bd.import_step(destination / independent["step"])
+            body["faces"] = face_metadata(body_shape)
+            for face in body["faces"]:
+                face["body_id"] = body["id"]
+            body["artifacts"] = {"step": f"builds/{key}/{independent['step']}"}
+        write_json(destination / "scene.json", scene)
+        artifacts["scene"] = f"builds/{key}/scene.json"
     references = []
     for ref in project.references:
         other = load_reference(store, ref)
@@ -197,13 +212,24 @@ def build(store: Store, project: Project):
         for index, face in enumerate(ref_faces):
             face["id"] = f"asset:{ref.sha256}:{index}"
         references.append({"id": ref.id, "name": ref.name, "faces": ref_faces, "visible": ref.visible})
-    bbox = shape.bounding_box()
-    result = {"key": key, "revision": project.revision, "engine": engine, "volume_mm3": shape.volume,
-              "dimensions_mm": vector(bbox.size), "bounds": [vector(bbox.min), vector(bbox.max)],
-              "center_of_mass": vector(shape.center(bd.CenterOf.MASS)),
-              "faces": faces, "references": references,
-              "edges": [{"id": f"edge:{signature(e)}", "center": vector(e.center()), "length_mm": e.length} for e in shape.edges()],
-              "artifacts": {name: f"builds/{key}/part.{extension}" for name, extension in (("step", "step"), ("stl", "stl"), ("brep", "brep"))}}
+    if shape is not None:
+        bbox = shape.bounding_box()
+        bounds = [vector(bbox.min), vector(bbox.max)]
+        dimensions = vector(bbox.size)
+        volume = sum(s.volume for s in shape.solids())
+        center = vector(shape.center(bd.CenterOf.MASS)) if volume > 0 else vector(shape.center())
+    elif scene and scene["bodies"]:
+        low = [min(b["bbox"]["min"][i] for b in scene["bodies"]) for i in range(3)]
+        high = [max(b["bbox"]["max"][i] for b in scene["bodies"]) for i in range(3)]
+        bounds, dimensions, volume = [low, high], [high[i]-low[i] for i in range(3)], None
+        center = [(low[i]+high[i])/2 for i in range(3)]
+    else:
+        bounds, dimensions, volume, center = [[0,0,0],[0,0,0]], [0,0,0], 0, [0,0,0]
+    result = {"key": key, "revision": project.revision, "engine": engine, "volume_mm3": volume,
+              "dimensions_mm": dimensions, "bounds": bounds, "center_of_mass": center,
+              "faces": faces, "references": references, "scene": scene,
+              "edges": [{"id": f"edge:{signature(e)}", "center": vector(e.center()), "length_mm": e.length} for e in shape.edges()] if shape is not None else [],
+              "artifacts": artifacts}
     if project.geometry_engine == "solidcraft":
         result["artifacts"].update({"native_design": f"builds/{key}/part.solidcraft", "engine_script": f"builds/{key}/engine-script.json"})
     write_json(destination / "build.json", result)
@@ -216,8 +242,12 @@ def check(store: Store, project: Project):
     path = store.cache / "builds" / key
     if not (path / "build.json").exists():
         build(store, project)
+    if not (path / "part.brep").exists():
+        raise ValueError("Engineering checks require B-rep geometry; mesh-only and sketch-only documents are not solids")
     shape = bd.import_brep(path / "part.brep")
-    findings = [Finding(code="valid_solid", severity="info", message="One valid connected solid", value=shape.volume)]
+    if not shape.solids() or shape.volume <= 0:
+        raise ValueError("Solid engineering checks require positive-volume solid bodies; use surface diagnostics for open surfaces")
+    findings = [Finding(code="valid_solid", severity="info", message=f"{len(shape.solids())} valid solid bodies", value=shape.volume)]
     import trimesh
     mesh = trimesh.load(path / "part.stl", force="mesh")
     if not mesh.is_watertight or not mesh.is_winding_consistent:

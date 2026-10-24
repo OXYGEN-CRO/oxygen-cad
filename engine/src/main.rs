@@ -24,6 +24,69 @@ fn dispatch(session: &mut Session, request: &Value) -> Result<Value, String> {
         *session = Session::default();
         return Ok(json!({"reset":true}));
     }
+    // The host persists the upstream versioned document, not a second feature language.
+    // Document::from_json applies upstream migrations and rejects future formats.
+    if command == "oxygen.document.set" {
+        let params = request.get("params").ok_or("Missing params")?;
+        let document = params.get("document").ok_or("Missing document")?;
+        let document = solidcraft_engine::doc::Document::from_json(&document.to_string())
+            .map_err(|e| e.to_string())?;
+        let mut restored = Session::new(document);
+        if let Some(context) = params.get("context") {
+            restored.active_sketch = context.get("active_sketch").and_then(Value::as_u64);
+            restored.active_component = context.get("active_component").and_then(Value::as_u64).unwrap_or(0);
+            restored.active_occurrence_path = serde_json::from_value(context.get("active_occurrence_path").cloned().unwrap_or(Value::Null)).map_err(|e| e.to_string())?;
+            restored.selection = serde_json::from_value(context.get("selection").cloned().unwrap_or(json!([]))).map_err(|e| e.to_string())?;
+            restored.pending_moves = serde_json::from_value(context.get("pending_moves").cloned().unwrap_or(json!({}))).map_err(|e| e.to_string())?;
+            if restored.active_sketch.is_some_and(|id| restored.doc.feature(id).is_none()) {
+                return Err("Active sketch does not exist in the native document".into());
+            }
+        }
+        *session = restored;
+        return Ok(json!({"format": session.doc.format}));
+    }
+    if command == "oxygen.document.get" {
+        let document = serde_json::to_value(session.design().as_ref()).map_err(|e| e.to_string())?;
+        return Ok(json!({"document":document,"context":{
+            "active_sketch":session.active_sketch,"active_component":session.active_component,
+            "active_occurrence_path":session.active_occurrence_path,"selection":session.selection,
+            "pending_moves":session.pending_moves,
+        }}));
+    }
+    if command == "oxygen.scene" {
+        let include_mesh = request.get("params").and_then(|p| p.get("mesh")).and_then(Value::as_bool).unwrap_or(true);
+        let world = session.world_state();
+        let bodies: Vec<Value> = world.bodies.iter().map(|b| {
+            let validity = b.body.validity();
+            let kind = if b.body.is_mesh() { "mesh" }
+                else if validity.iter().any(|e| e.contains("not closed")) { "surface" } else { "solid" };
+            let bounds = b.outline_bounds();
+            let mut value = json!({
+                "id":format!("body:{}:{}:{}",b.component,b.feature,b.name),
+                "name":b.name,"definition_name":b.definition_name(),"feature":b.feature,"component":b.component,
+                "geometry_kind":kind,"visible":session.body_visible(&b.name),"validity":validity,
+                "transform":b.source_transform,"bbox":{"min":bounds.min,"max":bounds.max},
+                "face_count":b.body.face_count(),"edge_count":b.body.edge_count(),
+            });
+            if include_mesh {
+                value["mesh"] = serde_json::to_value(b.mesh().as_ref()).unwrap_or(Value::Null);
+            }
+            value
+        }).collect();
+        return Ok(json!({"schema_version":1,"bodies":bodies}));
+    }
+    // Upstream break_link detaches stored sketch geometry. Materialize the current
+    // evaluated projection first, so a parameter edit cannot detach an older silhouette.
+    // This is a host adapter correction; the pinned dependency remains unchanged.
+    if command == "sketch.break_link" {
+        if let Some(id) = session.active_sketch {
+            let state = session.model.state();
+            if let Some(evaluated) = state.sketch(id) {
+                let sketch = evaluated.sketch.clone();
+                *session.doc_mut().sketch_mut(id).map_err(|e| e.to_string())? = sketch;
+            }
+        }
+    }
     let errors = |session: &Session| -> Vec<String> {
         session
             .model
