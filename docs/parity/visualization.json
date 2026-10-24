@@ -1,0 +1,23 @@
+{
+  "domain": "visualization",
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "implementation": ["src/o3d/domains/visualization.py", "src/o3d/domains/visualization_render.py", "frontend/src/workspaces/visualization/Panel.tsx", "frontend/src/workspaces/visualization/scene.ts", "frontend/src/Viewport.tsx"],
+  "executed": [
+    {"command": "PYTHONPATH=$PWD/src O3D_ENGINE_BINARY=<baseline native release> .venv/bin/python -m pytest -q tests/test_visualization.py", "result": "5 passed", "evidence": "Native geometry compilation; decoded PNG pixels; section silhouette; appearance changes; perspective; point/spot cutoff; presentation displacement; project/material/study identity; texture hash and orientation; GIF duration/frame count; PNG sequence; cancellation"},
+    {"command": "cd frontend && npm run build", "result": "passed", "evidence": "TypeScript and Vite production build; existing large-chunk warning"},
+    {"command": "cd frontend && O3D_TEST_PORT=8961 PYTHONPATH=<worktree>/src O3D_ENGINE_BINARY=<baseline native release> npx playwright test tests/visualization.spec.ts", "result": "1 passed", "evidence": "Disposable real project; native geometry; WebGL readPixels checks for material, perspective, clipping, exploded pose, hiding, wireframe and orbit; camera capture; project unchanged; no browser errors"}
+  ],
+  "rows": [
+    {"id": "R01", "status": "partial", "implemented": "Orbit/pan/zoom, fit, standard views, orthographic/perspective, shaded/edges/wireframe, saved scene camera, canonical multi-body mesh preview and per-face picking", "remaining": ["1,000 native-occurrence latency/memory benchmark", "Full hidden-edge style inventory"]},
+    {"id": "R02", "status": "partial", "implemented": "Persistent exact body/face hide/isolate, show all, named arbitrary section planes, non-destructive clipping", "remaining": ["Nested-parent visibility propagation", "Solid section caps", "Exact cap measurement"]},
+    {"id": "R03", "status": "partial", "implemented": "Independent scoped face/body/default visual appearances, metallic/roughness/opacity controls; physical materials and study key preserved", "remaining": ["Definition-to-occurrence inheritance editor", "Native per-face optical lowering"]},
+    {"id": "R04", "status": "partial", "implemented": "Bounded project-owned hash-verified images, planar/cylindrical texture/decal mapping, mm scale/origin/rotation/opacity/repeat, viewport preview and CPU raster export", "remaining": ["Tangent-face chain authoring", "Cylindrical seam clipping", "Second-machine packaging acceptance"]},
+    {"id": "R05", "status": "partial", "implemented": "Named reusable scenes with camera target/yaw/pitch/roll/distance/projection/FOV, exposure, background and explicit output dimensions", "remaining": ["Depth of field and focus distance", "Integrated Store save/undo/reopen acceptance after shell integration"]},
+    {"id": "R06", "status": "partial", "implemented": "Saved directional/point/spot lights, relative intensity, positional reference distance/falloff, spot cone, environment light rotation and ambient/background", "remaining": ["HDR asset lighting", "Ground/shadow/reflection scene authoring", "Photometric IES lights and calibrated physical units"]},
+    {"id": "R07", "status": "partial", "implemented": "Measured CPU raster z-buffer with perspective-correct interpolation, direct diffuse/specular lighting, explicit algorithm/limits; conditional strict native CPU-raytrace job path", "remaining": ["Native CPU-raytrace acceptance against enabled core binary", "Progressive samples and visible progress", "Glass/metal/reflection/shadow image references", "Photorealistic parity is not claimed"]},
+    {"id": "R08", "status": "partial", "implemented": "Snapshot revision/document/scene digests, retained gallery with stale labels, cancellation hooks, bounded PNG output including straight alpha and downloadable results", "remaining": ["Shell-integrated asynchronous cancel/retry acceptance", "Mid-job model-change acceptance", "No cloud service offered"]},
+    {"id": "R09", "status": "partial", "implemented": "Multiple saved storyboards, timed absolute camera/body translation/hide-show/callout keyframes, scrub/play/edit/remove/capture; endpoint-inclusive exports preserve engineering pose", "remaining": ["Rotation tracks", "Timeline drag reordering", "Nested occurrence action editor"]},
+    {"id": "R10", "status": "partial", "implemented": "Decoded ten-frame GIF publication, PNG sequence ZIP with timing, first/last frames and source provenance; conditional real ffmpeg MP4 path", "remaining": ["MP4 codec acceptance requires installed ffmpeg", "Ten-second assembly fixture acceptance", "No hosted sharing or permissions service offered"]}
+  ]
+}

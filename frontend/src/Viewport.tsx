@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
@@ -8,6 +8,15 @@ import {
   type Project,
   type Face,
 } from "./api";
+import {
+  cameraEvent,
+  nativeFaces,
+  previewEvent,
+  type Asset,
+  type NativeScene,
+  type Scene,
+  type CameraState,
+} from "./workspaces/visualization/scene";
 
 type Props = {
   theme: "dark" | "light";
@@ -23,6 +32,7 @@ type Props = {
   measure: number[][];
   showStudy: boolean;
   isolate: boolean;
+  nativeScene?: NativeScene | null;
 };
 
 function readPalette() {
@@ -40,6 +50,12 @@ function readPalette() {
 }
 
 export function Viewport(props: Props) {
+  const [visualization, setVisualization] = useState<{
+    scene: Scene;
+    geometry: NativeScene | null;
+    assets: Record<string, Asset>;
+    callout?: string;
+  } | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
   latest.current = props;
@@ -54,13 +70,17 @@ export function Viewport(props: Props) {
     renderer.localClippingEnabled = true;
     renderer.setClearColor(palette.background);
     element.appendChild(renderer.domElement);
-    const camera = new THREE.OrthographicCamera(-70, 70, 55, -55, 0.1, 10000);
+    let camera: THREE.OrthographicCamera | THREE.PerspectiveCamera =
+      new THREE.OrthographicCamera(-70, 70, 55, -55, 0.1, 10000);
     camera.up.set(0, 0, 1);
     camera.position.set(120, -150, 110);
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls<
+      THREE.OrthographicCamera | THREE.PerspectiveCamera
+    >(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
-    scene.add(new THREE.HemisphereLight(0xf2f2f2, 0x242424, 2.1));
+    const hemisphere = new THREE.HemisphereLight(0xf2f2f2, 0x242424, 2.1);
+    scene.add(hemisphere);
     const light = new THREE.DirectionalLight(0xffffff, 2.6);
     light.position.set(60, -80, 160);
     scene.add(light);
@@ -92,14 +112,16 @@ export function Viewport(props: Props) {
         h = element.clientHeight;
       renderer.setSize(w, h);
       const aspect = w / Math.max(h, 1);
-      const previousAspect = camera.right / camera.top;
-      const size =
-        (camera.top * Math.min(previousAspect, 1)) /
-        Math.max(Math.min(aspect, 1), 0.01);
-      camera.top = size;
-      camera.bottom = -size;
-      camera.left = -size * aspect;
-      camera.right = size * aspect;
+      if (camera instanceof THREE.OrthographicCamera) {
+        const previousAspect = camera.right / camera.top;
+        const size =
+          (camera.top * Math.min(previousAspect, 1)) /
+          Math.max(Math.min(aspect, 1), 0.01);
+        camera.top = size;
+        camera.bottom = -size;
+        camera.left = -size * aspect;
+        camera.right = size * aspect;
+      } else camera.aspect = aspect;
       camera.updateProjectionMatrix();
       // Resizing clears the drawing buffer; paint the model before the next frame.
       renderer.render(scene, camera);
@@ -124,7 +146,7 @@ export function Viewport(props: Props) {
       );
       const hit = ray
         .intersectObjects(model.children, true)
-        .find((h) => h.object.userData.face);
+        .find((h) => h.object.visible && h.object.userData.face);
       if (hit) {
         const info = hit.object.userData;
         latest.current.onSelect({
@@ -155,11 +177,116 @@ export function Viewport(props: Props) {
       grid,
       axes,
       palette,
+      hemisphere,
+      defaultLights: [light, rim],
+      visualLights: [] as THREE.Light[],
+      setCamera: (snapshot: CameraState) => {
+        const aspect = element.clientWidth / Math.max(element.clientHeight, 1);
+        const next = snapshot.fov
+          ? new THREE.PerspectiveCamera(
+              (snapshot.fov * 180) / Math.PI,
+              aspect,
+              0.001,
+              1e9,
+            )
+          : new THREE.OrthographicCamera(
+              -snapshot.distance * 0.4 * aspect,
+              snapshot.distance * 0.4 * aspect,
+              snapshot.distance * 0.4,
+              -snapshot.distance * 0.4,
+              0.001,
+              1e9,
+            );
+        const back = new THREE.Vector3(
+          -Math.sin(snapshot.yaw) * Math.cos(snapshot.pitch),
+          -Math.cos(snapshot.yaw) * Math.cos(snapshot.pitch),
+          Math.sin(snapshot.pitch),
+        );
+        const right = new THREE.Vector3(
+          Math.cos(snapshot.yaw),
+          -Math.sin(snapshot.yaw),
+          0,
+        );
+        const up = back.clone().cross(right);
+        next.up.copy(
+          up
+            .multiplyScalar(Math.cos(snapshot.roll))
+            .addScaledVector(right, -Math.sin(snapshot.roll)),
+        );
+        next.position
+          .fromArray(snapshot.target)
+          .addScaledVector(back, snapshot.distance);
+        controls.target.fromArray(snapshot.target);
+        next.lookAt(controls.target);
+        camera = next;
+        controls.object = next;
+        controls.update();
+        runtime.current.camera = next;
+      },
       framed: false,
     };
+    const receive = (event: Event) =>
+      setVisualization((event as CustomEvent).detail);
+    const capture = () => {
+      const delta = camera.position.clone().sub(controls.target);
+      const distance = delta.length();
+      const yaw = Math.atan2(-delta.x, -delta.y);
+      const pitch = Math.asin(
+        Math.max(-1, Math.min(1, delta.z / Math.max(distance, 1e-9))),
+      );
+      const idealRight = new THREE.Vector3(Math.cos(yaw), -Math.sin(yaw), 0);
+      const idealUp = delta.clone().normalize().cross(idealRight);
+      const actualUp = new THREE.Vector3(0, 1, 0).applyQuaternion(
+        camera.quaternion,
+      );
+      const snapshot = {
+        target: controls.target.toArray(),
+        yaw,
+        pitch,
+        roll: Math.atan2(-actualUp.dot(idealRight), actualUp.dot(idealUp)),
+        distance:
+          camera instanceof THREE.OrthographicCamera
+            ? camera.top / (0.4 * camera.zoom)
+            : distance,
+        fov:
+          camera instanceof THREE.PerspectiveCamera
+            ? (camera.fov * Math.PI) / 180
+            : 0,
+      };
+      window.dispatchEvent(new CustomEvent(cameraEvent, { detail: snapshot }));
+    };
+    const fitVisible = () => {
+      const bounds = new THREE.Box3();
+      model.children
+        .filter((o) => o.visible)
+        .forEach((o) => bounds.expandByObject(o));
+      if (bounds.isEmpty()) return;
+      const center = bounds.getCenter(new THREE.Vector3());
+      const diameter = bounds.getSize(new THREE.Vector3()).length();
+      const delta = camera.position.clone().sub(controls.target).normalize();
+      controls.target.copy(center);
+      camera.position.copy(center).addScaledVector(delta, diameter * 2);
+      if (camera instanceof THREE.OrthographicCamera) {
+        const aspect = element.clientWidth / Math.max(element.clientHeight, 1);
+        camera.top = (diameter * 0.65) / Math.min(aspect, 1);
+        camera.bottom = -camera.top;
+        camera.left = -camera.top * aspect;
+        camera.right = camera.top * aspect;
+        camera.zoom = 1;
+      }
+      camera.updateProjectionMatrix();
+      controls.update();
+      capture();
+    };
+    window.addEventListener(previewEvent, receive);
+    window.addEventListener("o3d:visualization-capture", capture);
+    window.addEventListener("o3d:visualization-fit", fitVisible);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      window.removeEventListener(previewEvent, receive);
+      window.removeEventListener("o3d:visualization-capture", capture);
+      window.removeEventListener("o3d:visualization-fit", fitVisible);
       controls.dispose();
       model.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
@@ -209,7 +336,36 @@ export function Viewport(props: Props) {
       }
     });
     r.model.clear();
-    const geometry = props.geometry;
+    const nativeBodies =
+      props.field === "solid"
+        ? (
+            visualization?.geometry ??
+            props.nativeScene ??
+            (
+              props.geometry as
+                (Geometry & { native_scene?: NativeScene }) | null
+            )?.native_scene
+          )?.bodies
+        : undefined;
+    const nativePoints =
+      nativeBodies?.flatMap(
+        (b) =>
+          b.mesh?.positions ?? b.mesh?.faces?.flatMap((f) => f.vertices) ?? [],
+      ) ?? [];
+    const geometry = nativePoints.length
+      ? {
+          bounds: [0, 1].map((side) =>
+            [0, 1, 2].map((axis) =>
+              nativePoints.reduce(
+                (v, p) => (side ? Math.max(v, p[axis]) : Math.min(v, p[axis])),
+                side ? -Infinity : Infinity,
+              ),
+            ),
+          ),
+          faces: props.geometry?.faces ?? [],
+          references: props.geometry?.references ?? [],
+        }
+      : props.geometry;
     if (!geometry) return;
     const min = new THREE.Vector3(
       ...(geometry.bounds[0] as [number, number, number]),
@@ -238,7 +394,29 @@ export function Viewport(props: Props) {
     const clip = props.section
       ? [new THREE.Plane(new THREE.Vector3(-1, 0, 0), center.x)]
       : [];
-    function addFace(face: Face, reference?: string) {
+    if (visualization)
+      for (const plane of visualization.scene.sections)
+        if (plane.enabled)
+          clip.push(
+            new THREE.Plane(
+              new THREE.Vector3(...(plane.normal as [number, number, number]))
+                .normalize()
+                .negate(),
+              plane.offset_mm,
+            ),
+          );
+    function addFace(face: Face, reference?: string, bodyId?: string) {
+      const visual = visualization?.scene;
+      const target = bodyId ?? reference ?? "part";
+      if (
+        visual &&
+        (visual.hidden.includes(target) ||
+          visual.hidden.includes(face.id) ||
+          (visual.isolated.length &&
+            !visual.isolated.includes(target) &&
+            !visual.isolated.includes(face.id)))
+      )
+        return;
       const vertices = face.vertices.flat();
       const bg = new THREE.BufferGeometry();
       bg.setAttribute(
@@ -248,22 +426,89 @@ export function Viewport(props: Props) {
       bg.setIndex(face.triangles.flat());
       bg.computeVertexNormals();
       const selected = props.selected?.id === face.id;
+      const look =
+        visual?.appearances[face.id] ??
+        visual?.appearances[target] ??
+        (!reference ? visual?.appearances["*"] : undefined);
+      let texture: THREE.Texture | null = null;
+      if (look?.texture) {
+        const mapping = look.texture;
+        const uv = face.vertices.flatMap((p) => {
+          const point = p.map((v, i) => v - mapping.origin[i]);
+          let u: number, v: number;
+          if (mapping.projection === "cylindrical_z") {
+            u =
+              ((Math.atan2(point[1], point[0]) + mapping.rotation) /
+                (2 * Math.PI) +
+                0.5) %
+              1;
+            v = point[2] / mapping.size_mm[1] + 0.5;
+          } else {
+            const axes = { xy: [0, 1], yz: [1, 2], zx: [2, 0] }[
+              mapping.projection
+            ];
+            const a = point[axes[0]],
+              b = point[axes[1]];
+            u =
+              (a * Math.cos(mapping.rotation) +
+                b * Math.sin(mapping.rotation)) /
+                mapping.size_mm[0] +
+              0.5;
+            v =
+              (-a * Math.sin(mapping.rotation) +
+                b * Math.cos(mapping.rotation)) /
+                mapping.size_mm[1] +
+              0.5;
+          }
+          return [u, v];
+        });
+        bg.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+        texture = new THREE.TextureLoader().load(
+          artifact(`visualization-assets/${mapping.asset}.png`),
+        );
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.wrapS = texture.wrapT = mapping.repeat
+          ? THREE.RepeatWrapping
+          : THREE.ClampToEdgeWrapping;
+      }
       const material = new THREE.MeshStandardMaterial({
         color: selected
           ? r.palette.selection
           : reference
             ? r.palette.reference
-            : r.palette.part,
-        metalness: reference ? 0.05 : 0.35,
-        roughness: 0.4,
-        transparent: !!reference,
-        opacity: reference ? 0.3 : 1,
+            : (look?.color ?? r.palette.part),
+        metalness: look?.metallic ?? (reference ? 0.05 : 0.35),
+        roughness: look?.roughness ?? 0.4,
+        transparent: !!reference || (look?.opacity ?? 1) < 1 || !!texture,
+        opacity: look?.opacity ?? (reference ? 0.3 : 1),
+        map: texture,
+        wireframe: visual?.style === "wireframe",
         side: THREE.DoubleSide,
         clippingPlanes: clip,
         depthWrite: !reference,
       });
+      if (look?.texture) {
+        const mapping = look.texture;
+        material.onBeforeCompile = (shader) => {
+          shader.uniforms.decalOpacity = { value: mapping.opacity };
+          shader.fragmentShader =
+            "uniform float decalOpacity;\n" +
+            shader.fragmentShader.replace(
+              "#include <map_fragment>",
+              `#ifdef USE_MAP
+            vec4 decalColor=texture2D(map,vMapUv);
+            float decalMask=${mapping.repeat ? "1.0" : "step(0.0,vMapUv.x)*step(vMapUv.x,1.0)*step(0.0,vMapUv.y)*step(vMapUv.y,1.0)"};
+            diffuseColor.rgb=mix(diffuseColor.rgb,decalColor.rgb,decalColor.a*decalOpacity*decalMask);
+            #endif`,
+            );
+        };
+        material.customProgramCacheKey = () =>
+          `decal-${mapping.repeat}-${mapping.opacity}`;
+      }
       const mesh = new THREE.Mesh(bg, material);
-      mesh.userData = { face, reference };
+      mesh.userData = { face, reference, bodyId: target };
+      if (visual?.transforms[target])
+        mesh.position.fromArray(visual.transforms[target]);
       r.model.add(mesh);
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(bg, 25),
@@ -278,6 +523,9 @@ export function Viewport(props: Props) {
           clippingPlanes: clip,
         }),
       );
+      edges.visible = !visual || visual.style === "shaded_edges";
+      if (visual?.transforms[target])
+        edges.position.fromArray(visual.transforms[target]);
       r.model.add(edges);
     }
     geometry.references
@@ -289,7 +537,16 @@ export function Viewport(props: Props) {
       )
       .forEach((ref) => ref.faces.forEach((face) => addFace(face, ref.id)));
     const beforeNative = new Set(r.model.children);
-    geometry.faces.forEach((face) => addFace(face));
+    if (nativeBodies)
+      nativeBodies
+        .filter((b) => b.visible !== false)
+        .forEach((body) =>
+          nativeFaces(body).forEach((face) =>
+            addFace(face, undefined, body.id),
+          ),
+        );
+    else geometry.faces.forEach((face) => addFace(face));
+    host.current!.dataset.visualBodies = String(nativeBodies?.length ?? 1);
     const nativeObjects = r.model.children.filter(
       (object: THREE.Object3D) => !beforeNative.has(object),
     );
@@ -432,7 +689,74 @@ export function Viewport(props: Props) {
     props.project.study,
     props.showStudy,
     props.isolate,
+    visualization,
+    props.nativeScene,
   ]);
+  useEffect(() => {
+    const r = runtime.current;
+    if (!r) return;
+    r.visualLights.forEach((light: THREE.Light) => r.scene.remove(light));
+    r.visualLights = [];
+    if (visualization) {
+      const visual = visualization.scene;
+      r.scene.background = new THREE.Color(visual.background);
+      r.defaultLights.forEach((light: THREE.Light) => (light.visible = false));
+      r.hemisphere.intensity = visual.ambient * 2;
+      r.grid.visible = false;
+      r.axes.visible = false;
+      r.renderer.toneMappingExposure = 2 ** visual.exposure_ev;
+      for (const source of visual.lights) {
+        let light: THREE.DirectionalLight | THREE.PointLight | THREE.SpotLight;
+        if (source.kind === "directional")
+          light = new THREE.DirectionalLight(
+            source.color,
+            source.intensity * 2,
+          );
+        else if (source.kind === "spot")
+          light = new THREE.SpotLight(
+            source.color,
+            source.intensity * source.reference_distance_mm ** 2,
+            0,
+            (source.cone_degrees * Math.PI) / 360,
+            0,
+            2,
+          );
+        else
+          light = new THREE.PointLight(
+            source.color,
+            source.intensity * source.reference_distance_mm ** 2,
+            0,
+            2,
+          );
+        light.position.fromArray(source.vector);
+        if (source.kind === "directional")
+          light.position.applyAxisAngle(
+            new THREE.Vector3(0, 0, 1),
+            visual.environment_rotation,
+          );
+        if (light instanceof THREE.SpotLight) {
+          light.target.position.fromArray(source.target);
+          r.scene.add(light.target);
+          r.visualLights.push(light.target);
+        }
+        r.scene.add(light);
+        r.visualLights.push(light);
+      }
+      r.setCamera(visual.camera);
+      host.current!.dataset.projection = visual.camera.fov
+        ? "perspective"
+        : "orthographic";
+      host.current!.dataset.visualStyle = visual.style;
+    } else {
+      r.scene.background = new THREE.Color(r.palette.background);
+      r.defaultLights.forEach((light: THREE.Light) => (light.visible = true));
+      r.hemisphere.intensity = 2.1;
+      r.grid.visible = true;
+      r.axes.visible = true;
+      r.renderer.toneMappingExposure = 1;
+    }
+    r.renderer.render(r.scene, r.camera);
+  }, [visualization]);
   useEffect(() => {
     const r = runtime.current;
     if (!r || !props.geometry) return;
@@ -448,13 +772,36 @@ export function Viewport(props: Props) {
       center.clone().add(new THREE.Vector3(1, -1.5, 1).multiplyScalar(d * 1.8)),
     );
     const aspect = host.current!.clientWidth / host.current!.clientHeight;
-    r.camera.top = (d * 0.7) / Math.min(aspect, 1);
-    r.camera.bottom = -r.camera.top;
-    r.camera.left = -r.camera.top * aspect;
-    r.camera.right = r.camera.top * aspect;
+    if (r.camera instanceof THREE.OrthographicCamera) {
+      r.camera.top = (d * 0.7) / Math.min(aspect, 1);
+      r.camera.bottom = -r.camera.top;
+      r.camera.left = -r.camera.top * aspect;
+      r.camera.right = r.camera.top * aspect;
+    }
     r.camera.updateProjectionMatrix();
   }, [props.fit]);
   return (
-    <div className="webgl" ref={host} aria-label="Interactive CAD viewport" />
+    <>
+      <div className="webgl" ref={host} aria-label="Interactive CAD viewport" />
+      {visualization?.callout && (
+        <div
+          className="visualization-callout"
+          style={{
+            position: "absolute",
+            bottom: 24,
+            left: "25%",
+            right: "25%",
+            textAlign: "center",
+            padding: 12,
+            background: "var(--surface-glass)",
+            color: "var(--text)",
+            borderRadius: "var(--radius-card)",
+            pointerEvents: "none",
+          }}
+        >
+          {visualization.callout}
+        </div>
+      )}
+    </>
   );
 }

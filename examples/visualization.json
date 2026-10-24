@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "active_scene": "Product",
+  "scenes": [
+    {
+      "name": "Product",
+      "camera": {
+        "target": [
+          0.0,
+          0.0,
+          6.0
+        ],
+        "yaw": -0.7853981633974483,
+        "pitch": 0.61548,
+        "roll": 0.0,
+        "distance": 70.0,
+        "fov": 0.0
+      },
+      "width": 640,
+      "height": 480,
+      "background": "#eef1f4",
+      "transparent": false,
+      "exposure_ev": 0.0,
+      "ambient": 0.25,
+      "environment_rotation": 0.0,
+      "lights": [
+        {
+          "name": "Key",
+          "kind": "directional",
+          "vector": [
+            0.3,
+            -0.4,
+            0.85
+          ],
+          "color": "#ffffff",
+          "intensity": 0.85,
+          "target": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "cone_degrees": 40.0,
+          "reference_distance_mm": 100.0
+        }
+      ],
+      "style": "shaded_edges",
+      "appearances": {},
+      "hidden": [],
+      "isolated": [],
+      "sections": [],
+      "transforms": {},
+      "renderer": "cpu-raster"
+    }
+  ],
+  "storyboards": [
+    {
+      "name": "Turntable",
+      "scene": "Product",
+      "duration": 3.0,
+      "fps": 10,
+      "keyframes": [
+        {
+          "time": 0.0,
+          "camera": {
+            "target": [
+              0.0,
+              0.0,
+              6.0
+            ],
+            "yaw": -0.7853981633974483,
+            "pitch": 0.61548,
+            "roll": 0.0,
+            "distance": 70.0,
+            "fov": 0.0
+          },
+          "transforms": {},
+          "hidden": null,
+          "callout": ""
+        },
+        {
+          "time": 3.0,
+          "camera": {
+            "target": [
+              0.0,
+              0.0,
+              6.0
+            ],
+            "yaw": 1.5707963267948966,
+            "pitch": 0.61548,
+            "roll": 0.0,
+            "distance": 70.0,
+            "fov": 0.0
+          },
+          "transforms": {},
+          "hidden": null,
+          "callout": "Product overview"
+        }
+      ]
+    }
+  ],
+  "assets": {}
+}

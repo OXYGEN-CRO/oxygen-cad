@@ -1,0 +1,98 @@
+.visualization-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  color: var(--text);
+  min-width: 0;
+}
+.visualization-panel p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.visualization-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 12px;
+  min-width: 0;
+}
+.visualization-panel details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.visualization-panel details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.visualization-panel summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: var(--space-2);
+}
+.visualization-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.visualization-row > * {
+  flex: 1;
+  width: 0;
+}
+.visualization-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+.visualization-panel fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.visualization-panel fieldset.visualization-vector {
+  flex-direction: row;
+}
+.visualization-vector input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+}
+.visualization-panel legend {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.visualization-panel textarea {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  background: var(--surface-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font: 11px var(--font-mono);
+}
+.visualization-panel a {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.visualization-result {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 11px;
+}
+.visualization-result img {
+  display: block;
+  width: 100%;
+}
