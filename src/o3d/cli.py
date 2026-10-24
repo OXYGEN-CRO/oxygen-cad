@@ -70,7 +70,7 @@ def workspace_run(ctx: typer.Context, domain: str, operation: str, input: Path |
     project = ctx.obj.load()
     if project.revision != expected_revision:
         raise Conflict("Project changed; inspect before running an operation")
-    result = execute(ctx.obj, project, domain, operation, json.loads(input.read_text()) if input else {})
+    result = execute(ctx.obj, project, domain, operation, json.loads(input.read_text()) if input else {}, actor=actor)
     emit(finalize(ctx.obj, project, domain, result, actor))
 
 

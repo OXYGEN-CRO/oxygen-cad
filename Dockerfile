@@ -14,7 +14,7 @@ RUN cargo build --release --locked --manifest-path engine/Cargo.toml --jobs 2
 
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 ngspice kicad fonts-freefont-ttf cura-engine \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 ngspice kicad fonts-freefont-ttf cura-engine python3-opencamlib \
  && cd /tmp && apt-get download cura \
  && dpkg-deb -x cura_*.deb /tmp/cura-profile \
  && mkdir -p /usr/share/cura/resources/definitions /usr/share/doc/oxygen-cura-profile \

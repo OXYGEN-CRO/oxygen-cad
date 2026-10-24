@@ -50,6 +50,7 @@ import {
 import { Viewport } from "./Viewport";
 import { isWorkspace, WorkspacePanel, workspaceNames } from "./workspaces/WorkspacePanel";
 import type { DomainId, JsonObject, NativeReply } from "./workspaces/contracts";
+import type { NativeScene } from "./workspaces/visualization/scene";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import {
   Button,
@@ -176,6 +177,7 @@ export default function App() {
     [showBottom, setShowBottom] = useState(false),
     [leftOpen, setLeftOpen] = useState(true),
     [rightOpen, setRightOpen] = useState(false);
+  const [nativeScene, setNativeScene] = useState<NativeScene | null>(null);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const projectRef = useRef<Project | null>(null);
@@ -283,6 +285,26 @@ export default function App() {
   useEffect(() => {
     if (state) setChecks(state.checks);
   }, [state]);
+  useEffect(() => {
+    let disposed = false;
+    if (!state?.project.native_document) {
+      setNativeScene(null);
+      return;
+    }
+    const revision = state.project.revision;
+    api("native/scene").then((reply) => {
+      if (!disposed && reply.revision === revision) setNativeScene(reply.scene);
+    }).catch((error) => { if (!disposed) setError(String(error)); });
+    return () => { disposed = true; };
+  }, [state?.project.revision, Boolean(state?.project.native_document)]);
+  useEffect(() => {
+    if (!state?.project.native_document || state.geometry_state === "current" || !nativeScene?.bodies.length) return;
+    if (state.jobs.some((job) => job.kind === "build" && ["queued", "running"].includes(job.state))) return;
+    const timer = setTimeout(() => {
+      post("jobs/build", {}).then(refresh).catch((error) => setError(String(error)));
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [state?.project.revision, state?.geometry_state, state?.jobs, nativeScene, refresh]);
   function edit(fn: (p: Project) => void) {
     dirtyRef.current = true;
     setDraft((p) => {
@@ -456,6 +478,8 @@ export default function App() {
   const geometry = state?.build ?? state?.last_build;
   const feature = current?.features.find((f) => f.id === active);
   const reference = current?.references.find((r) => r.id === active);
+  const canonical = Boolean(current?.native_document);
+  const treeFeatures = canonical ? (current?.native_document?.features as any[] ?? []) : (current?.features ?? []);
   const pending = state?.jobs.some((j) =>
     ["queued", "running"].includes(j.state),
   );
@@ -739,7 +763,12 @@ export default function App() {
           <div className="panel-heading">
             <span>Features</span>
             <Button
-              onClick={() => setAddOpen(!addOpen)}
+              onClick={() => {
+                if (canonical) {
+                  openPanel("modeling");
+                  setTimeout(() => window.dispatchEvent(new CustomEvent("o3d:modeling", { detail: { tab: "solid" } })), 100);
+                } else setAddOpen(!addOpen);
+              }}
               aria-label="Add feature"
               aria-expanded={addOpen}
             >
@@ -747,14 +776,19 @@ export default function App() {
             </Button>
           </div>
           <div className="feature-list">
-            {current.features.map((f) => (
+            {treeFeatures.map((f) => (
               <Button
                 key={f.id}
                 className={`tree-item ${active === f.id ? "selected" : ""} ${f.suppressed ? "suppressed" : ""}`}
                 onClick={() => {
-                  setActive(f.id);
-                  setTab("design");
-                  setRightOpen(true);
+                  if (canonical) {
+                    openPanel("modeling");
+                    setTimeout(() => window.dispatchEvent(new CustomEvent("o3d:modeling", { detail: { feature: f.id, tab: "history" } })), 100);
+                  } else {
+                    setActive(f.id);
+                    setTab("design");
+                    setRightOpen(true);
+                  }
                 }}
               >
                 <span className="tree-indent" />
@@ -769,7 +803,7 @@ export default function App() {
               </Button>
             ))}
           </div>
-          {addOpen && (
+          {addOpen && !canonical && (
             <div className="add-menu">
               {["profile", "extrude", "hole", "fillet", "chamfer"].map(
                 (type) => (
@@ -894,11 +928,12 @@ export default function App() {
             measure={measure}
             showStudy={tab === "verify"}
             isolate={isolate}
+            nativeScene={nativeScene}
           />
           {state.geometry_state === "stale" && (
             <div className="stale-label">
               <AlertTriangle size={14} />
-              Showing previous geometry · rebuild required
+              {nativeScene ? "Updating measurements…" : "Showing previous geometry · rebuild required"}
             </div>
           )}
           <div className="model-card">
@@ -1011,7 +1046,7 @@ export default function App() {
                 saveDomain={saveDomain} runDomain={runDomain}
                 refresh={async () => { await refresh(); }} setError={setError}
               />}
-              {tab === "design" && (
+              {tab === "design" && !canonical && (
                 <>
                   {feature ? (
                     <>

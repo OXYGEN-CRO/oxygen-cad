@@ -60,11 +60,13 @@ def save_domain(store, domain, data, expected_revision, actor="agent"):
                                project=updated, summary=f"Edit {domain} workspace"))
 
 
-def execute(store, project, domain, operation, payload, cancel=None):
+def execute(store, project, domain, operation, payload, cancel=None, actor="agent"):
     if not isinstance(operation, str) or not operation or len(operation) > 100:
         raise ValueError("A workspace operation is required")
     if not isinstance(payload, dict) or len(json.dumps(payload, allow_nan=False).encode()) > 10 * 1024 * 1024:
         raise ValueError("Workspace input must be an object of at most 10 MiB")
+    # Actor is supplied by the authenticated host command, never nested user data.
+    payload = deepcopy(payload) | {"actor": actor}
     result = module_for(domain).execute(store, project, operation, payload, cancel=cancel)
     if not isinstance(result, dict):
         raise ValueError("Workspace operation must return an object")

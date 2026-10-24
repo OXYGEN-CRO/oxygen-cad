@@ -17,7 +17,7 @@ def dispatch(kind, store, project, cancel=None, workspace=None):
             raise ValueError("Workspace operation input is required")
         with job_identity(store, workspace.get("principal")):
             return execute(store, project, workspace["domain"], workspace["operation"],
-                           workspace.get("input", {}), cancel)
+                           workspace.get("input", {}), cancel, actor=workspace.get("actor", "agent"))
     if kind == "build":
         from .geometry import build
         return build(store, project)
