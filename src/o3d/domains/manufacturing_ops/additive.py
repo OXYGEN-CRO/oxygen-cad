@@ -20,6 +20,14 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def runtime_identity():
+    executable = os.environ.get("O3D_CURA_ENGINE") or shutil.which("CuraEngine")
+    definitions = Path(os.environ.get("O3D_CURA_DEFINITIONS", "/usr/share/cura/resources/definitions"))
+    return {"engine_sha256":digest(executable) if executable and Path(executable).is_file() else None,
+            "definitions":{name:digest(definitions/name) if (definitions/name).is_file() else None
+                           for name in ("fdmprinter.def.json","fdmextruder.def.json")}}
+
+
 def _run(argv, cwd, cancel=None, timeout=180):
     """No shell, bounded log/file output, real cancellation and nonzero-exit failures."""
     log = cwd / "slicer.log"

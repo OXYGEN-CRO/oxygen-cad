@@ -89,6 +89,14 @@ def test_reach_fixtures_machine_limits_and_staleness(store, process_project, dat
         changed = copy.deepcopy(data)
         mutate(changed)
         assert m.input_key(process_project, changed) != key, name
+    report=m.execute(store,process_project,"post",{"setup_id":"top"})
+    relative=report["artifacts"]["program.ngc"]
+    m.validate_artifact(store,relative,process_project)
+    changed=copy.deepcopy(data)
+    changed["setups"][0].update(wcs_origin=[1,0,0])
+    stale=process_project.model_copy(update={"domains":{"manufacturing":m.validate(changed)}})
+    with pytest.raises(ValueError,match="stale"):
+        m.validate_artifact(store,relative,stale)
 
 
 def test_turning_radius_mode_post_and_reference_profile(store, process_project):
@@ -113,6 +121,28 @@ def test_golden_linuxcnc_drill_program(data):
     assert verify_post(code, [path], setup, machine)["matches_generated_path"]
     with pytest.raises(ValueError, match="Unsupported NC G-code"):
         backplot(code.replace("G21", "G20"))
+
+
+def test_facing_stock_floor_and_contour_tabs_are_measured(data):
+    from o3d.domains.manufacturing_ops.cam import generate
+    from o3d.domains.manufacturing_ops.schema import Operation
+    from o3d.domains.manufacturing_ops.verification import verify_path
+    domain=Manufacturing.model_validate(data)
+    setup,tool,machine=domain.setups[0],domain.tools[0],domain.machines[0]
+    op=Operation(id="face",name="Stock facing",setup_id=setup.id,tool_id=tool.id,strategy="face",boundary=[(0,0),(80,0),(80,60),(0,60)],top_z=0,bottom_z=-1)
+    path=generate(op,setup,tool,machine)
+    report=verify_path(path,op,setup,tool,machine)
+    assert report["violation_count"]==0
+    assert report["removed_floor_area_mm2"]==pytest.approx(4800,abs=0.01)
+    assert report["floor_coverage_complete"]
+    contour=Operation(id="contour",name="Tabs",setup_id=setup.id,tool_id=tool.id,strategy="contour",boundary=[(10,10),(30,10),(30,30),(10,30)],top_z=0,bottom_z=-8,stepdown=8,tab_centers=[0.25,0.75],tab_height_mm=2,tab_width_mm=4)
+    path=generate(contour,setup,tool,machine)
+    report=verify_path(path,contour,setup,tool,machine)
+    assert report["violation_count"]==0 and report["tabs_retained"]
+    assert {m["z"] for m in path.moves if m["motion"]=="feed"}=={-8,-6}
+    transitions=[(a,b) for a,b in zip(path.moves,path.moves[1:]) if a["motion"]==b["motion"]=="feed" and a["z"]!=b["z"]]
+    assert len(transitions)==4
+    assert all(a["x"]==b["x"] and a["y"]==b["y"] for a,b in transitions)
 
 
 def test_nest_multisheet_kerf_dxf_and_cutting(store, process_project, data):
@@ -250,6 +280,84 @@ def test_sheet_perforation_release_blocked(tmp_path):
             release_session(session, tmp_path/"perforated")
 
 
+def test_multiflanged_tray_with_round_cutout_and_fold_refold(tmp_path):
+    from o3d.native import NativeSession
+    from o3d.domains.manufacturing_ops.sheet import release_session
+    with NativeSession() as session:
+        for command,params in [
+            ("sheet.manage_rules",{"name":"Tray","thickness":2,"bend_radius":1,"k_factor":0.5,"active":True}),
+            ("sketch.create",{"name":"Tray base","plane":"XY"}),
+            ("sketch.rectangle.two_point",{"p0":[0,0],"p1":[100,60]}),
+            ("sketch.finish",{}),("sheet.flange",{"sketch":"Tray base"}),
+            ("sheet.flange",{"edges":[[50,0,2],[100,30,2],[50,60,2],[0,30,2]],"height":15,"angle":90}),
+            ("sketch.create",{"name":"Round cutout","plane":"XY"}),
+            ("sketch.circle.center",{"center":[50,30],"radius":5}),
+            ("sketch.finish",{}),("solid.extrude",{"sketch":"Round cutout","through_all":True,"direction":"symmetric","operation":"cut"}),
+        ]:
+            session.execute(command,params)
+        first=release_session(session,tmp_path/"tray")
+        assert len(first["flat_pattern"]["bends"])==4
+        assert len(first["flat_pattern"]["cutouts"])==1
+        assert first["flat_pattern"]["cutout_shapes"][0]["circle"]["radius"]==5
+        assert first["dxf_audit"]["bend_lines"]==4
+        session.execute("sheet.unfold",{})
+        session.execute("sheet.refold",{})
+        second=release_session(session,tmp_path/"refolded")
+        assert second["dxf_audit"]["area_mm2"]==pytest.approx(first["dxf_audit"]["area_mm2"],abs=0.01)
+        assert second["folded_step_volume_mm3"]==pytest.approx(first["folded_step_volume_mm3"],rel=0.002)
+
+
+def test_native_plastic_rules_boss_and_snap_fit_measured_cold_reopen(tmp_path):
+    from o3d.model import Project
+    from o3d.store import Store
+    from o3d.native_document import execute_native,query_native
+    store=Store(tmp_path/"plastics")
+    store.init(Project())
+    for command,params in [
+        ("solid.box",{"length":64,"width":64,"height":3,"corner":[0,0,0]}),
+        ("plastic.manage_rules",{"name":"Fixture ABS","thickness":3,"draft":0,"active":True}),
+        ("plastic.boss",{"position":[20,20,3],"diameter":8,"height":10,"hole_diameter":3,"draft":0}),
+        ("plastic.snap_fit",{"position":[40,20,3],"hook":[1,0,0],"length":15,"thickness":1.5,"width":6,"catch_depth":1,"catch_length":3}),
+    ]:
+        execute_native(store,store.load().revision,"human",command,params)
+    expected=64*64*3+math.pi*(4**2-1.5**2)*10+1.5*15*6+0.5*1*3*6
+    measured=query_native(Store(store.root).load(),"inspect.measure")["total"]["volume_mm3"]
+    assert measured==pytest.approx(expected,rel=1e-5)
+    assert query_native(store.load(),"plastic.rules")["active"]=="Fixture ABS"
+
+
+def test_release_coupon_cad_geometry_nc_setup_and_hash_manifest(tmp_path,data):
+    import hashlib,zipfile
+    import build123d as bd
+    from o3d.model import Project
+    from o3d.store import Store
+    project=Project.model_validate({"geometry_engine":"occt","domains":{"manufacturing":m.validate(data)},"features":[
+        {"id":"stock_profile","type":"profile","width":80,"height":60,"origin":[40,30,-10]},
+        {"id":"stock","type":"extrude","profile":"stock_profile","distance":10},
+        {"id":"pocket_profile","type":"profile","width":45,"height":35,"origin":[32.5,27.5,0]},
+        {"id":"cavity","type":"extrude","profile":"pocket_profile","distance":-3,"operation":"cut"},
+        {"id":"island_profile","type":"profile","width":9,"height":9,"origin":[32.5,26.5,-3]},
+        {"id":"island","type":"extrude","profile":"island_profile","distance":3},
+        {"id":"hole1","type":"hole","center":[65,15,0],"diameter":4,"through":False,"depth":8},
+        {"id":"hole2","type":"hole","center":[65,40,0],"diameter":4,"through":False,"depth":8}
+    ]})
+    store=Store(tmp_path/"coupon");store.init(project)
+    out=m.execute(store,project,"release",{"setup_id":"top"})
+    with zipfile.ZipFile(store.artifact(out["artifacts"]["manufacturing-release.zip"])) as archive:
+        manifest=json.loads(archive.read("handoff-manifest.json"))
+        assert manifest["input_key"]==out["input_key"]
+        assert manifest["cad_sha256"]==hashlib.sha256(archive.read("source/part.step")).hexdigest()
+        for name,sha in manifest["files"].items():
+            assert hashlib.sha256(archive.read(name)).hexdigest()==sha
+        assert "G43 H1" in archive.read("program.ngc").decode()
+        assert "G43 H2" in archive.read("program.ngc").decode()
+        step=tmp_path/"released.step";step.write_bytes(archive.read("source/part.step"))
+    shape=bd.import_step(step)
+    expected=80*60*10-(45*35-9*9)*3-2*math.pi*2**2*8
+    assert shape.volume==pytest.approx(expected,rel=1e-6)
+    assert shape.is_valid
+
+
 @pytest.mark.skipif(not os.environ.get("O3D_CAM_PYTHON"), reason="real OpenCAMLib worker requires explicit host tool")
 def test_opencamlib_ball_finishing_independent_sloped_plane_contact(tmp_path,data):
     import numpy as np
@@ -276,6 +384,34 @@ def test_opencamlib_ball_finishing_independent_sloped_plane_contact(tmp_path,dat
     assert report["flat_reference_scallop_bound_mm"] <= setup.tolerance_mm
     assert report["independent_sphere_samples"] > 100
     assert len(report["binding_sha256"]) == 64
+
+
+def test_actual_mesh_layer_roughing_and_smaller_tool_rest_stock(tmp_path,data):
+    import build123d as bd
+    from o3d.domains.manufacturing_ops.schema import Operation
+    from o3d.domains.manufacturing_ops.roughing import rough,swept_floor
+    domain = Manufacturing.model_validate(data)
+    part = bd.Box(40,40,10).moved(bd.Location((20,20,-5)))-bd.Box(20,20,6).moved(bd.Location((20,20,-3)))
+    source = tmp_path/"square-cavity.stl"
+    bd.export_stl(part,source)
+    setup = domain.setups[0].model_copy(update={"stock":domain.setups[0].stock.model_copy(update={"maximum":(40,40,0)})})
+    large = domain.tools[0].model_copy(update={"diameter":8})
+    small = large.model_copy(update={"id":"small","diameter":3})
+    op = Operation(id="rough",name="Large rough",setup_id=setup.id,tool_id=large.id,strategy="rough_3d",top_z=0,bottom_z=-4,stepdown=2)
+    path,report = rough(source,op,setup,large,domain.machines[0],[],{large.id:large})
+    before = swept_floor([path],{large.id:large},-4)
+    assert before.area == pytest.approx(400-4**2*(4-math.pi),abs=0.05)
+    assert report["gouge_area_mm2"] < 1e-8
+    rest_op = op.model_copy(update={"id":"rest","tool_id":small.id,"strategy":"rest_3d","depends_on":["rough"]})
+    rest,remaining = rough(source,rest_op,setup,small,domain.machines[0],[path],{large.id:large,small.id:small})
+    after = before.union(swept_floor([rest],{small.id:small},-4))
+    assert after.area > before.area+10
+    assert after.area == pytest.approx(400-1.5**2*(4-math.pi),abs=0.1)
+    assert remaining["predecessor_operation_ids"] == ["rough"]
+    assert all(layer["predecessor_removed_area_mm2"] > 380 for layer in remaining["layers"])
+    assert remaining["removed_volume_layer_estimate_mm3"] > 40
+    with pytest.raises(ValueError,match="predecessor"):
+        rough(source,rest_op,setup,small,domain.machines[0],[],{small.id:small})
 
 
 @pytest.mark.skipif(not os.environ.get("O3D_CURA_ENGINE"), reason="real CuraEngine integration requires explicit host tool")

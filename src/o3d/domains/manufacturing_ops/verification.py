@@ -110,7 +110,7 @@ def post(paths, setup, tools, machine):
     for path in paths:
         tool = tools[path.tool_id]
         if tool.id != current_tool:
-            lines += ["M5", f"T{tool.number} M6", f"S{tool.spindle_rpm:.3f} M3"]
+            lines += ["M5", f"T{tool.number} M6", f"G43 H{tool.number}", f"S{tool.spindle_rpm:.3f} M3"]
             current_tool = tool.id
         lines.append(f"(operation {path.operation_id}: {path.strategy})")
         if not turning:
@@ -136,7 +136,7 @@ def backplot(code):
     position = {"X": 0.0, "Y": 0.0, "Z": 0.0}
     records = []
     feed = None
-    valid_g = {0, 1, 8, 17, 18, 21, 40, 49, 54, 55, 56, 57, 58, 59, 80, 90, 94}
+    valid_g = {0, 1, 8, 17, 18, 21, 40, 43, 49, 54, 55, 56, 57, 58, 59, 80, 90, 94}
     for number, raw in enumerate(code.splitlines(), 1):
         line = re.sub(r"\([^)]*\)", "", raw).strip()
         if not line or line == "%":
@@ -147,7 +147,7 @@ def backplot(code):
         g_codes = [int(float(v)) for k, v in words if k == "G"]
         if any(float(v) != int(float(v)) or int(float(v)) not in valid_g for k, v in words if k == "G"):
             raise ValueError(f"Unsupported NC G-code on line {number}")
-        if any(k not in "GMSTFXYZ" for k, _ in words):
+        if any(k not in "GMSTFHXYZ" for k, _ in words):
             raise ValueError("Unsupported NC address")
         if any(k == "M" and int(float(v)) not in {3, 5, 6, 30} for k, v in words):
             raise ValueError("Unsupported M-code")

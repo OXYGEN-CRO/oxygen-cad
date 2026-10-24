@@ -10,7 +10,7 @@
   ],
   "evidence": {
     "command": "PYTHONPATH=src O3D_CURA_ENGINE=<CuraEngine> O3D_CURA_DEFINITIONS=<definitions> python -m pytest -q tests/test_manufacturing.py",
-    "executed": "15 passed in 2.63s; frontend npm run build passed",
+    "executed": "20 passed in 4.72s with real CuraEngine and OpenCAMLib; frontend npm run build passed",
     "external_engines": [
       {
         "name": "GEOS via Shapely",
@@ -78,7 +78,8 @@
       "status": "partial_tested",
       "implemented": "Planar face, pocket with islands, external contour with retained tabs, stepdown/stepover/allowance; explicit axial plunge entry",
       "tests": [
-        "test_pocket_island_drilling_and_independent_nc_backplot"
+        "test_pocket_island_drilling_and_independent_nc_backplot",
+        "test_facing_stock_floor_and_contour_tabs_are_measured"
       ],
       "remaining": "Adaptive engagement, ramp/helix/lead-in options, automatic model boundary recognition; axial entries require programmer-selected center-cutting tools"
     },
@@ -95,8 +96,12 @@
     {
       "id": "MFG-05",
       "capability": "3-axis roughing",
-      "status": "not_implemented",
-      "remaining": "Model/stock adaptive roughing, engagement control, actual predecessor-stock rest planning. Planar pocket offsets do not establish this family"
+      "status": "partial_tested",
+      "remaining": "Cavity analytic corner-area fixture only; adaptive engagement/load control, advanced 3D roughing strategies and continuous volumetric stock verification remain",
+      "implemented": "Actual CAD-mesh constant-Z layer roughing protects projected model; GEOS planar clearing, stock gouge checks, smaller-tool rest from true predecessor cutter sweeps",
+      "tests": [
+        "test_actual_mesh_layer_roughing_and_smaller_tool_rest_stock"
+      ]
     },
     {
       "id": "MFG-06",
@@ -156,7 +161,7 @@
       "id": "MFG-13",
       "capability": "Machine/post definitions and NC output",
       "status": "partial_tested",
-      "implemented": "Versioned restricted LinuxCNC mill/lathe and GRBL laser output, machine/process mismatch refusal, independent LinuxCNC backplot and golden drilling NC",
+      "implemented": "Versioned restricted LinuxCNC mill/lathe and GRBL laser output, machine/process mismatch refusal, independent LinuxCNC backplot and golden drilling NC; G43 Hn tool offsets explicitly enabled and documented against controller tooltable",
       "tests": [
         "test_golden_linuxcnc_drill_program",
         "test_turning_radius_mode_post_and_reference_profile",
@@ -230,10 +235,11 @@
       "capability": "Sheet-metal rules and features",
       "status": "partial_tested",
       "implemented": "Uses canonical upstream sheet rules/features through shared native bridge; domain does not duplicate CAD",
-      "remaining": "Bent base/flange and K-factor edits tested through canonical transactions/cold reopen; multi-flange tray/cutout/hem/rip/fold feature matrix remains. Dedicated base and edge-flange UI available",
+      "remaining": "Base/flanges, K-factor edits and four-flange tray with round cutout/unfold/refold tested; hem/rip/lofted flange feature matrix and physical bend calibration remain",
       "tests": [
         "test_canonical_bent_sheet_dxf_bend_allowance_cold_reopen_and_rules",
-        "test_sheet_perforation_release_blocked"
+        "test_sheet_perforation_release_blocked",
+        "test_multiflanged_tray_with_round_cutout_and_fold_refold"
       ]
     },
     {
@@ -241,9 +247,10 @@
       "capability": "Flat pattern, bend data and DXF",
       "status": "partial_tested",
       "implemented": "Native flat/DXF/bend artifacts with independent ezdxf closure/units/contour/layer checks, bend allowance equation, independent folded STEP volume",
-      "remaining": "Bent-sheet closed contour, units/layers, allowance, rule-change invalidation and folded STEP volume tested; multi-flange/cutout/hem/arc/spline release matrix and material bend calibration remain",
+      "remaining": "Bent base and four-flange/circle-cutout tray reload, neutral-axis allowance, rule-change invalidation and folded STEP volume tested; hem/ellipse/spline/text options and material bend calibration remain",
       "tests": [
-        "test_canonical_bent_sheet_dxf_bend_allowance_cold_reopen_and_rules"
+        "test_canonical_bent_sheet_dxf_bend_allowance_cold_reopen_and_rules",
+        "test_multiflanged_tray_with_round_cutout_and_fold_refold"
       ]
     },
     {
@@ -259,9 +266,12 @@
     {
       "id": "MFG-24",
       "capability": "Plastic feature design",
-      "status": "partial_integration",
-      "implemented": "Native plastic boss position/diameter/hole/height/draft editor uses shared canonical native transaction",
-      "remaining": "Native boss browser and dimensional fixture; snap-fit/lip/rest/rib/web manual editors and plastic rule assignment matrix"
+      "status": "partial_tested",
+      "implemented": "Canonical native plastic rule/boss/snap-fit editing and exact measured combined geometry survive cold reopen; dedicated boss/snap-fit manual controls",
+      "remaining": "Lip/rest/rib/web editors and detailed plastic feature/rule options matrix",
+      "tests": [
+        "test_native_plastic_rules_boss_and_snap_fit_measured_cold_reopen"
+      ]
     },
     {
       "id": "MFG-25",
@@ -279,9 +289,10 @@
       "status": "partial_tested",
       "implemented": "Revision/input-bound NC, setup sheet, tool list, verification and CAD STEP/project ZIP release artifacts with hashes",
       "tests": [
-        "test_pocket_island_drilling_and_independent_nc_backplot"
+        "test_release_coupon_cad_geometry_nc_setup_and_hash_manifest"
       ],
-      "remaining": "Release-ZIP acceptance fixture, drawings/PMI/tolerances/finishes integration and supervised manufactured/measured part"
+      "remaining": "Matching cavity/island/drilled coupon release validates CAD STEP volume, NC, H-offsets, setup, tool list and artifact hashes; drawings/PMI/finishes integration and supervised physical manufactured/measured part remain"
     }
-  ]
+  ],
+  "artifact_policy": "Host artifact route must call validate_artifact(store,relative,project) to reject obsolete manufacturing input keys after design/process changes."
 }

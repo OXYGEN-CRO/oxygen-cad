@@ -106,7 +106,7 @@ class Setup(Model):
         return self
 
 
-STRATEGIES = Literal["face", "pocket", "contour", "drill", "turn_face", "turn_profile", "turn_groove", "part_off", "laser_profile", "parallel_finish"]
+STRATEGIES = Literal["face", "pocket", "contour", "drill", "turn_face", "turn_profile", "turn_groove", "part_off", "laser_profile", "parallel_finish", "rough_3d", "rest_3d"]
 
 
 class Operation(Model):
@@ -234,6 +234,8 @@ class Manufacturing(Model):
             items = getattr(self, name)
             if len({x.id for x in items}) != len(items):
                 raise ValueError(f"Duplicate {name} IDs")
+        if len({tool.number for tool in self.tools}) != len(self.tools):
+            raise ValueError("Tool numbers must be unique in the saved process library")
         machines, tools, setups = ({x.id for x in getattr(self, n)} for n in ["machines", "tools", "setups"])
         for setup in self.setups:
             if setup.machine_id not in machines:

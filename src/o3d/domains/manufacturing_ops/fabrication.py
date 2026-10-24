@@ -131,6 +131,11 @@ def cut_nc(result, sheet_index, setup, tool, machine, power_s):
         raise ValueError("Laser feed exceeds machine limit")
     if setup.wcs_rotation_z_deg:
         raise ValueError("Nested laser release currently requires zero WCS rotation")
+    if result["sheet_width_mm"] > setup.stock.maximum[0]-setup.stock.minimum[0] or result["sheet_height_mm"] > setup.stock.maximum[1]-setup.stock.minimum[1]:
+        raise ValueError("Nested sheet exceeds cutting setup stock dimensions")
+    if any(abs(v) > 1e-8 for v in setup.stock.minimum[:2]):
+        raise ValueError("Nested cutting requires sheet stock XY minimum at zero")
+    _,_,LineString,_,box,_ = geos()
     lines = ["(Oxygen GRBL laser v1 / requires $32=1 and $30=1000)", "G21 G90 G17 G94", f"G{setup.work_offset}", "M5"]
     contours = []
     for placement in result["placements"]:
@@ -151,6 +156,9 @@ def cut_nc(result, sheet_index, setup, tool, machine, power_s):
             point = (cx+setup.wcs_origin[0], cy+setup.wcs_origin[1], setup.stock.maximum[2]+setup.wcs_origin[2])
             if any(v < lo or v > hi for v, lo, hi in zip(point, machine.travel_min, machine.travel_max)):
                 raise ValueError("Nested laser path exceeds machine travel")
+        for fixture in setup.fixtures:
+            if LineString(coords).buffer(result["kerf_mm"]/2).intersects(box(*fixture.minimum[:2],*fixture.maximum[:2])):
+                raise ValueError("Nested cutting path intersects a fixture envelope")
         lines += [f"({kind} contour)", "M5", f"G0 X{x:.5f} Y{y:.5f}", f"M4 S{power_s:.3f}"]
         for (ax, ay), (x, y) in zip(coords, coords[1:]):
             distance += math.dist((ax, ay), (x, y))
@@ -160,4 +168,4 @@ def cut_nc(result, sheet_index, setup, tool, machine, power_s):
     return "\n".join(lines)+"\n", {"cut_contours": len(contours), "cut_length_mm": distance,
                                       "kerf_compensation_mm": result["kerf_mm"]/2,
                                       "cut_order": "holes before perimeter", "tabs": False,
-                                      "controller_qualified": False, "fixture_collision_checked": False}
+                                      "controller_qualified": False, "fixture_collision_checked": True}

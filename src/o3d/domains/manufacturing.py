@@ -15,7 +15,7 @@ import zipfile
 from .manufacturing_ops.schema import Manufacturing
 from .manufacturing_ops.util import cancelled
 
-VERSION = "oxygen-manufacturing-v1.0"
+VERSION = "oxygen-manufacturing-v1.1"
 
 
 def validate(data) -> dict:
@@ -27,6 +27,17 @@ def input_key(project, data=None):
     value = {"geometry": geometry_key(project), "native_document": getattr(project, "native_document", None),
              "domain": data if data is not None else getattr(project, "domains", {}).get("manufacturing", {}), "toolchain": VERSION}
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
+def validate_artifact(store, relative, project=None):
+    """Artifact-route hook: refuse obsolete NC/build reports after relevant edits."""
+    segments = Path(relative).parts
+    if not segments or segments[0] != "manufacturing":
+        return
+    project = project or store.load()
+    current = input_key(project, validate(getattr(project, "domains", {}).get("manufacturing", {})))
+    if len(segments) != 4 or segments[1] != current:
+        raise ValueError("Manufacturing artifact is stale; regenerate it for the current design, machine, tool and setup")
 
 
 def _json(path, value):
@@ -59,6 +70,7 @@ def _setup_sheet(project, setup, machine, tools, paths, verification):
 <p><strong>Review required. This software does not establish machine/controller, workholding, physical cut or operator qualification.</strong></p>
 <p>Work offset G{setup.work_offset}; recorded origin {setup.wcs_origin} mm; XY rotation {setup.wcs_rotation_z_deg}°. Set the controller work offset to the recorded origin before use.</p>
 <p>Stock {html.escape(setup.stock.material)}: {setup.stock.minimum} to {setup.stock.maximum} mm. Clearance Z {setup.clearance_z} mm.</p>
+<p>Before running, establish a clear start position and verify controller tool table H numbers against the recorded measured tool lengths. The post enables G43 Hn for each tool; this software does not set the machine tool table.</p>
 <table><tr><th>Operation</th><th>Strategy</th><th>Tool</th><th>Moves</th></tr>{rows}</table>
 <h2>Declared checks and limits</h2><pre>{html.escape(json.dumps(verification, indent=2))}</pre><p>{html.escape(setup.notes)}</p></html>'''
 
@@ -67,11 +79,17 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
     payload = payload or {}
     if not isinstance(payload, dict):
         raise ValueError("Manufacturing input must be an object")
+    if len(json.dumps(payload,allow_nan=False).encode()) > 2*1024*1024:
+        raise ValueError("Manufacturing input exceeds 2 MiB")
     data = validate(getattr(project, "domains", {}).get("manufacturing", {}))
     domain = Manufacturing.model_validate(data)
     key = input_key(project, data)
     # Payload belongs to the derived run key too: different imported measurements never overwrite each other.
-    run_key = hashlib.sha256(json.dumps({"input": key, "operation": operation, "payload": payload}, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    runtime = {}
+    if operation == "slice":
+        from .manufacturing_ops.additive import runtime_identity
+        runtime = runtime_identity()
+    run_key = hashlib.sha256(json.dumps({"input": key, "operation": operation, "payload": payload, "external_runtime":runtime}, sort_keys=True, allow_nan=False).encode()).hexdigest()
     destination = store.cache/"manufacturing"/key/run_key
     destination.mkdir(parents=True, exist_ok=True)
     if cancelled(cancel):
@@ -98,15 +116,23 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
         paths, reports = [], []
         for op in ops:
             surface = None
+            roughing = None
             if op.strategy == "parallel_finish":
                 from .manufacturing_ops.surface_cam import finish
                 path, surface = finish(_current_mesh(store, project), destination, op, setup, tools[op.tool_id], machine, cancel)
+            elif op.strategy in {"rough_3d", "rest_3d"}:
+                from .manufacturing_ops.roughing import rough
+                predecessors = [p for p in paths if p.operation_id in op.depends_on]
+                path, roughing = rough(_current_mesh(store, project), op, setup, tools[op.tool_id], machine, predecessors, tools, cancel)
             else:
                 path = generate(op, setup, tools[op.tool_id], machine, cancel)
             report = verify_path(path, op, setup, tools[op.tool_id], machine)
             if surface is not None:
                 report.update(surface_finishing=surface, stock_removal_verified=False,
                               model="OpenCAMLib ball drop cutter; independent sampled sphere/triangle check + machine/fixture envelopes")
+            if roughing is not None:
+                report.update(layer_roughing=roughing, stock_removal_verified=False,
+                              model="Conservative model projection + predecessor cylinder sweeps at discrete Z layers")
             reports.append({"operation_id": op.id, **report})
             paths.append(path)
         _json(destination/"toolpaths.json", [p.wire() for p in paths])
@@ -131,10 +157,16 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
                     build(store, project)
                 if not source.is_file():
                     raise ValueError("A current CAD STEP is required for the manufacturing handoff")
+                release_files=["program.ngc", "inputs.json", "verification.json", "toolpaths.json", "setup-sheet.html", "tool-list.json"]
+                _json(destination/"handoff-manifest.json", {"schema_version":1,"source_revision":project.revision,
+                    "input_key":key,"manufacturing_toolchain":VERSION,"machine":machine.model_dump(mode="json"),
+                    "cad_sha256":hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "files":{name:hashlib.sha256((destination/name).read_bytes()).hexdigest() for name in release_files},
+                    "physical_process_qualified":False,"posted_motion_check":backplot})
                 with zipfile.ZipFile(destination/"manufacturing-release.zip", "w", zipfile.ZIP_DEFLATED) as archive:
                     archive.write(source, "source/part.step")
                     archive.writestr("source/project.json", project.model_dump_json(indent=2))
-                    for name in ["program.ngc", "inputs.json", "verification.json", "toolpaths.json", "setup-sheet.html", "tool-list.json"]:
+                    for name in [*release_files,"handoff-manifest.json"]:
                         archive.write(destination/name, name)
     elif operation in {"nest", "cut"}:
         from .manufacturing_ops.fabrication import nest, dxf, cut_nc

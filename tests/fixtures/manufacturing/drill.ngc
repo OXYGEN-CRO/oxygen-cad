@@ -5,6 +5,7 @@ G17
 G54
 M5
 T2 M6
+G43 H2
 S5000.000 M3
 (operation holes: drill)
 G0 Z5.00000

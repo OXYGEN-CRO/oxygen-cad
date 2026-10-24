@@ -143,10 +143,10 @@ function Preview({ result }: { result: Item }) {
   if (!all.length) return null;
   const xs = all.map((p) => p[0]),
     ys = all.map((p) => p[1]);
-  const x = Math.min(...xs),
-    y = Math.min(...ys),
-    width = Math.max(...xs) - x || 1,
-    height = Math.max(...ys) - y || 1;
+  const x = xs.reduce((a, b) => Math.min(a, b), Infinity),
+    y = ys.reduce((a, b) => Math.min(a, b), Infinity),
+    width = xs.reduce((a, b) => Math.max(a, b), -Infinity) - x || 1,
+    height = ys.reduce((a, b) => Math.max(a, b), -Infinity) - y || 1;
   const pad = Math.max(width, height) * 0.05;
   return (
     <svg
@@ -172,7 +172,7 @@ function Preview({ result }: { result: Item }) {
             ))
         : paths.map((path, i) => (
             <g key={i}>
-              {path.moves.slice(1).map((m: Item, j: number) => {
+              {path.moves.slice(1, 20001).map((m: Item, j: number) => {
                 const a = path.moves[j];
                 return (
                   <line
@@ -207,6 +207,21 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
     "id,nominal,measured,lower_tolerance,upper_tolerance,unit\n",
   );
   const [power, setPower] = useState(200);
+  const [probe, setProbe] = useState({
+    points: [[20, 20]],
+    start: 2,
+    seek: -2,
+    feed: 50,
+  });
+  const [snap, setSnap] = useState({
+    position: [40, 20, 3],
+    hook: [1, 0, 0],
+    length: 15,
+    thickness: 1.5,
+    width: 6,
+    catch_depth: 1,
+    catch_length: 3,
+  });
   const [sheet, setSheet] = useState({
     width: 100,
     height: 60,
@@ -640,7 +655,15 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
                 >
                   {(machine?.process === "turning"
                     ? ["turn_profile", "turn_face", "turn_groove"]
-                    : ["face", "pocket", "contour", "drill", "parallel_finish"]
+                    : [
+                        "face",
+                        "pocket",
+                        "contour",
+                        "drill",
+                        "rough_3d",
+                        "rest_3d",
+                        "parallel_finish",
+                      ]
                   ).map((s) => (
                     <option key={s} value={s}>
                       {s.replaceAll("_", " ")}
@@ -708,6 +731,33 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
                   />
                 </Field>
               )}
+              <fieldset className="manufacturing-dependencies">
+                <legend>Predecessor operations / rest stock</legend>
+                {ops
+                  .filter(
+                    (candidate) =>
+                      data.operations.indexOf(candidate) <
+                      data.operations.indexOf(op),
+                  )
+                  .map((candidate) => (
+                    <label className="manufacturing-check" key={candidate.id}>
+                      <input
+                        type="checkbox"
+                        checked={(op.depends_on || []).includes(candidate.id)}
+                        onChange={(e) =>
+                          edit("operations", op.id, {
+                            depends_on: e.target.checked
+                              ? [...(op.depends_on || []), candidate.id]
+                              : (op.depends_on || []).filter(
+                                  (value: string) => value !== candidate.id,
+                                ),
+                          })
+                        }
+                      />
+                      {candidate.name}
+                    </label>
+                  ))}
+              </fieldset>
             </details>
           )}
           {setup && (
@@ -1000,6 +1050,41 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
                     />
                   ))}
                 </div>
+                <Field label="Sheet material">
+                  <Input
+                    value={data.nesting.material}
+                    onChange={(e) =>
+                      update({
+                        ...data,
+                        nesting: {
+                          ...data.nesting,
+                          material: e.target.value,
+                          parts: data.nesting!.parts.map((p: Item) => ({
+                            ...p,
+                            material: e.target.value,
+                          })),
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <NumberField
+                  label="Sheet thickness (mm)"
+                  value={data.nesting.thickness_mm}
+                  onChange={(thickness_mm) =>
+                    update({
+                      ...data,
+                      nesting: {
+                        ...data.nesting,
+                        thickness_mm,
+                        parts: data.nesting!.parts.map((p: Item) => ({
+                          ...p,
+                          thickness_mm,
+                        })),
+                      },
+                    })
+                  }
+                />
                 {data.nesting.parts.map((p: Item, i: number) => (
                   <details key={p.id}>
                     <summary>
@@ -1021,6 +1106,31 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
                         })
                       }
                     />
+                    <Field label="Allowed rotations (degrees)">
+                      <Input
+                        value={p.rotations_deg.join(",")}
+                        onChange={(e) =>
+                          update({
+                            ...data,
+                            nesting: {
+                              ...data.nesting,
+                              parts: data.nesting!.parts.map(
+                                (v: Item, j: number) =>
+                                  i === j
+                                    ? {
+                                        ...v,
+                                        rotations_deg: e.target.value
+                                          .split(",")
+                                          .filter(Boolean)
+                                          .map(Number),
+                                      }
+                                    : v,
+                              ),
+                            },
+                          })
+                        }
+                      />
+                    </Field>
                     <OutlineField
                       label="Part boundary (X, Y mm)"
                       value={p.boundary}
@@ -1040,6 +1150,28 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
                     />
                   </details>
                 ))}
+                <Button
+                  onClick={() =>
+                    update({
+                      ...data,
+                      nesting: {
+                        ...data.nesting,
+                        parts: [
+                          ...data.nesting!.parts,
+                          {
+                            ...clone(reference.nesting.parts[0]),
+                            id: id("part"),
+                            quantity: 1,
+                            material: data.nesting!.material,
+                            thickness_mm: data.nesting!.thickness_mm,
+                          },
+                        ],
+                      },
+                    })
+                  }
+                >
+                  Add nesting part
+                </Button>
                 <Field label="Cutting setup">
                   <SelectControl
                     value={setup?.id || ""}
@@ -1095,9 +1227,25 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
         <>
           {!data.printer ? (
             <Button
-              onClick={() =>
-                update({ ...data, printer: clone(reference.printer) })
-              }
+              onClick={() => {
+                const existing = data.machines.find((m) => m.process === "fff");
+                const machine = existing || {
+                  ...clone(reference.machines[3]),
+                  id: id("printer"),
+                };
+                update({
+                  ...data,
+                  machines: existing
+                    ? data.machines
+                    : [...data.machines, machine],
+                  printer: {
+                    ...clone(reference.printer),
+                    machine_id: machine.id,
+                    print_speed_mm_s: 40,
+                    wall_count: 2,
+                  },
+                });
+              }}
             >
               Configure FFF process
             </Button>
@@ -1311,6 +1459,45 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
               Create boss
             </Button>
           </details>
+          <details>
+            <summary>Native snap-fit</summary>
+            <VectorField
+              label="Snap-fit face position (mm)"
+              value={snap.position}
+              onChange={(position) => setSnap({ ...snap, position })}
+            />
+            <VectorField
+              label="Catch direction"
+              value={snap.hook}
+              onChange={(hook) => setSnap({ ...snap, hook })}
+            />
+            <div className="manufacturing-grid">
+              {[
+                ["length", "Beam length (mm)"],
+                ["thickness", "Beam thickness (mm)"],
+                ["width", "Beam width (mm)"],
+                ["catch_depth", "Catch depth (mm)"],
+                ["catch_length", "Catch length (mm)"],
+              ].map(([key, label]) => (
+                <NumberField
+                  key={key}
+                  label={label}
+                  value={(snap as Item)[key]}
+                  onChange={(value) => setSnap({ ...snap, [key]: value })}
+                />
+              ))}
+            </div>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                action(async () => {
+                  await native("plastic.snap_fit", snap);
+                })
+              }
+            >
+              Create snap-fit
+            </Button>
+          </details>
         </>
       )}
       {tab === "Inspection" && (
@@ -1333,6 +1520,64 @@ export default function ManufacturingPanel(props: DomainPanelProps) {
           >
             Evaluate inspection
           </Button>
+          <details>
+            <summary>Offline Z probing plan</summary>
+            <Field label="Probe tool">
+              <SelectControl
+                value={tool?.id || ""}
+                onChange={(e) => setToolId(e.target.value)}
+              >
+                {data.tools
+                  .filter((t) => t.kind === "probe")
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+              </SelectControl>
+            </Field>
+            <OutlineField
+              label="Probe centers: X, Y (mm)"
+              value={probe.points}
+              setError={setError}
+              onChange={(points) => setProbe({ ...probe, points })}
+            />
+            <div className="manufacturing-grid">
+              <NumberField
+                label="Probe start Z (mm)"
+                value={probe.start}
+                onChange={(start) => setProbe({ ...probe, start })}
+              />
+              <NumberField
+                label="Probe seek Z (mm)"
+                value={probe.seek}
+                onChange={(seek) => setProbe({ ...probe, seek })}
+              />
+              <NumberField
+                label="Probe feed (mm/min)"
+                value={probe.feed}
+                onChange={(feed) => setProbe({ ...probe, feed })}
+              />
+            </div>
+            <Button
+              disabled={busy || !setup || !tool}
+              onClick={() =>
+                run("probe_plan", {
+                  setup_id: setup?.id,
+                  tool_id: tool?.id,
+                  points: probe.points.map((p) => ({
+                    x: p[0],
+                    y: p[1],
+                    start_z: probe.start,
+                    seek_z: probe.seek,
+                    feed_mm_min: probe.feed,
+                  })),
+                })
+              }
+            >
+              Generate probe cycles
+            </Button>
+          </details>
           <p>
             For alignment, use CSV columns id, nominal_x, nominal_y, nominal_z,
             measured_x, measured_y, measured_z.

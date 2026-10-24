@@ -98,7 +98,7 @@ def probe_program(payload, setup, tool, machine):
     points = payload.get("points", [])
     if not isinstance(points, list) or not 1 <= len(points) <= 100:
         raise ValueError("Provide 1..100 probe points {x,y,start_z,seek_z,feed_mm_min}")
-    lines = ["(Oxygen offline LinuxCNC Z probe plan / no live machine connection)", "G21 G90 G94 G40 G49 G80", f"G{setup.work_offset}", f"T{tool.number} M6", "M5", f"G0 Z{setup.clearance_z:.5f}"]
+    lines = ["(Oxygen offline LinuxCNC Z probe plan / no live machine connection)", "G21 G90 G94 G40 G49 G80", f"G{setup.work_offset}", f"T{tool.number} M6", f"G43 H{tool.number}", "M5", f"G0 Z{setup.clearance_z:.5f}"]
     for point in points:
         if set(point) != {"x", "y", "start_z", "seek_z", "feed_mm_min"}:
             raise ValueError("Probe point fields are x,y,start_z,seek_z,feed_mm_min")
