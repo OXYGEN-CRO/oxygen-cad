@@ -10,7 +10,7 @@
   ],
   "evidence": {
     "command": "PYTHONPATH=src O3D_CURA_ENGINE=<CuraEngine> O3D_CURA_DEFINITIONS=<definitions> python -m pytest -q tests/test_manufacturing.py",
-    "executed": "21 passed in5.83s with real CuraEngine/OpenCAMLib; frontend build passed; disposable integrated Playwright flow passed (save/reload, posted NC, inspection, nesting DXF, actual FFF, stale-artifact409), zero page errors and no horizontal overflow at390px",
+    "executed": "21 passed in5.83s with real CuraEngine/OpenCAMLib; frontend build passed; disposable integrated Playwright flow passed (save/reload, posted NC, inspection, nesting DXF, actual FFF, stale-artifact409, canonical native base/flange and flat DXF), zero page errors and no horizontal overflow at390px",
     "external_engines": [
       {
         "name": "GEOS via Shapely",
