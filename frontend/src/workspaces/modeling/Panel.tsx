@@ -50,25 +50,33 @@ export default function ModelingPanel(props: DomainPanelProps) {
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const pending = useRef(0);
   const inspectGeneration = useRef(0);
+  function applyNavigation(detail: {
+    feature?: number | string;
+    tab?: string;
+  }) {
+    const nextTab = (
+      {
+        sketch: "Sketch",
+        solid: "Solid",
+        history: "History",
+        parameters: "Parameters",
+      } as Record<string, Tab>
+    )[detail?.tab?.toLowerCase() ?? ""];
+    if (nextTab) setTab(nextTab);
+    if (detail?.feature !== undefined) {
+      setFocusedFeature(Number(detail.feature));
+      if (!nextTab) setTab("History");
+    }
+  }
   useEffect(() => {
-    const navigate = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ feature?: number | string; tab?: string }>
-      ).detail;
-      const nextTab = (
-        {
-          sketch: "Sketch",
-          solid: "Solid",
-          history: "History",
-          parameters: "Parameters",
-        } as Record<string, Tab>
-      )[detail?.tab?.toLowerCase() ?? ""];
-      if (nextTab) setTab(nextTab);
-      if (detail?.feature !== undefined) {
-        setFocusedFeature(Number(detail.feature));
-        if (!nextTab) setTab("History");
-      }
-    };
+    if (props.modelingNavigation) applyNavigation(props.modelingNavigation);
+  }, [props.modelingNavigation]);
+  useEffect(() => {
+    const navigate = (event: Event) =>
+      applyNavigation(
+        (event as CustomEvent<{ feature?: number | string; tab?: string }>)
+          .detail,
+      );
     window.addEventListener("o3d:modeling", navigate);
     return () => window.removeEventListener("o3d:modeling", navigate);
   }, []);

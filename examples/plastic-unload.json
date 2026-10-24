@@ -1,0 +1,78 @@
+{
+  "name": "Synthetic plastic load-unload reference",
+  "features": [
+    {
+      "id": "beam_profile",
+      "type": "profile",
+      "plane": "YZ",
+      "width": 10,
+      "height": 4
+    },
+    {
+      "id": "beam",
+      "type": "extrude",
+      "profile": "beam_profile",
+      "distance": 80
+    }
+  ],
+  "material": {
+    "name": "Numerical benchmark material",
+    "youngs_modulus_mpa": 200000,
+    "poisson_ratio": 0,
+    "density_g_cm3": 7.85,
+    "source": "Analytical verification fixture; these values are test inputs, not a production material certificate",
+    "plastic_curve": [
+      {
+        "stress_mpa": 250,
+        "plastic_strain": 0
+      },
+      {
+        "stress_mpa": 350,
+        "plastic_strain": 0.01
+      }
+    ],
+    "plastic_curve_source": "Synthetic analytical fixture: true von Mises stress versus equivalent plastic strain; not production data"
+  },
+  "study": {
+    "fixed_faces": [
+      "part:xmin"
+    ],
+    "forces": [
+      {
+        "face": "part:xmax",
+        "vector_n": [
+          10800,
+          0,
+          0
+        ]
+      }
+    ],
+    "mesh_size_mm": 4,
+    "refinement_steps": 3,
+    "assumptions_confirmed": true,
+    "stress_probe_mm": null,
+    "type": "nonlinear_static",
+    "large_deformation": false,
+    "nonlinear_increments": 8,
+    "probe_point_mm": [
+      80,
+      0,
+      0
+    ],
+    "load_path": [
+      {
+        "time": 0,
+        "factor": 0
+      },
+      {
+        "time": 0.5,
+        "factor": 1
+      },
+      {
+        "time": 1,
+        "factor": 0
+      }
+    ]
+  },
+  "requirements": []
+}

@@ -173,12 +173,12 @@ def export_bundle(store, project):
     from .projects import portable_archive
     from .recovery import sync_directory
     build_path = store.cache / "builds" / geometry_key(project) / "build.json"
-    analysis_path = store.cache / "studies" / study_key(project) / "result.json"
     if not build_path.exists():
         raise ValueError("Current geometry has not built successfully; export cannot use an older revision")
     geometry = json.loads(build_path.read_text())
-    analysis = json.loads(analysis_path.read_text()) if analysis_path.exists() else None
-    analysis_state = analysis["state"] if analysis else "stale" if (store.cache / "last-study.json").exists() else "not_run"
+    studies = store.study_states(project)
+    active_study = studies[project.active_study_id]
+    analysis_state = active_study["state"]
     summary = _summary(geometry)
     checks = _checks(store, project, geometry, summary)
     folder = store.cache / "exports" / str(project.revision)
@@ -189,13 +189,35 @@ def export_bundle(store, project):
         artifacts, engine = _geometry_exports(store, geometry, summary, staged, names)
         write_json(staged / "o3d.json", project.model_dump(mode="json"))
         analysis_artifacts = {}
-        if analysis:
-            write_json(staged / "analysis/result.json", analysis)
-            names.add("analysis/result.json")
-            analysis_artifacts["field"] = _copy_artifact(store, analysis["field_artifact"], staged, "analysis/field.json", names)
+        study_packages, portable_studies = {}, {}
+        for study_id, record in studies.items():
+            analysis = record["result"]
+            if analysis is None:
+                continue
+            package = "analysis" if study_id == project.active_study_id else f"analyses/{study_id}"
+            study_packages[study_id] = package
+            local_names = {relative: {"study_package": "study-package.json", "region_map": "region-map.json"}.get(name, name)
+                           for name, relative in analysis.get("artifacts", {}).items()}
+            local_names[analysis["field_artifact"]] = "field.json"
+
+            def portable_result(value, prefix=""):
+                if isinstance(value, dict):
+                    return {k: portable_result(v, prefix) for k, v in value.items()}
+                if isinstance(value, list):
+                    return [portable_result(v, prefix) for v in value]
+                if isinstance(value, str) and value in local_names:
+                    return prefix + local_names[value]
+                return value
+
+            write_json(staged / package / "result.json", portable_result(analysis))
+            names.add(f"{package}/result.json")
+            portable_studies[study_id] = portable_result(analysis, package + "/")
+            package_artifacts = {"field": _copy_artifact(store, analysis["field_artifact"], staged, f"{package}/field.json", names)}
             for name, relative in analysis.get("artifacts", {}).items():
                 target_name = {"study_package": "study-package.json", "region_map": "region-map.json"}.get(name, name)
-                analysis_artifacts[name] = _copy_artifact(store, relative, staged, f"analysis/{target_name}", names)
+                package_artifacts[name] = _copy_artifact(store, relative, staged, f"{package}/{target_name}", names)
+            if study_id == project.active_study_id:
+                analysis_artifacts = package_artifacts
         portable = portable_archive(store, staged / "project.oxygen.zip", expected_project=project)
         # Extract immutable source assets from the guarded snapshot, not changing live files.
         source_assets = []
@@ -218,7 +240,9 @@ def export_bundle(store, project):
                  "solid_engineering_checks": "performed" if summary["all_solid"] else "not_applicable_to_complete_scene",
                  "source_assets": source_assets}
         report = {"project": project.name, "revision": project.revision, "geometry_key": geometry_key(project), "study_key": study_key(project),
-                  "geometry_engine": engine, "geometry_checks": checks, "analysis_state": analysis_state, "analysis": analysis,
+                  "geometry_engine": engine, "geometry_checks": checks, "analysis_state": analysis_state, "analysis": portable_studies.get(project.active_study_id),
+                  "active_study_id": project.active_study_id, "study_packages": study_packages,
+                  "studies": {study_id: record | {"result": portable_studies.get(study_id)} for study_id, record in studies.items()},
                   "dimensions_mm": summary["dimensions_mm"], "volume_mm3": summary["volume_mm3"],
                   "mass_g": checks.get("mass_g"), "geometry": summary, "geometry_artifacts": artifacts,
                   "analysis_artifacts": analysis_artifacts, "scope": scope}

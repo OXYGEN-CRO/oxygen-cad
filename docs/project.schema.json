@@ -289,6 +289,27 @@
       "title": "Hole",
       "type": "object"
     },
+    "LoadPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Time",
+          "type": "number"
+        },
+        "factor": {
+          "title": "Factor",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time",
+        "factor"
+      ],
+      "title": "LoadPoint",
+      "type": "object"
+    },
     "Material": {
       "additionalProperties": false,
       "properties": {
@@ -416,6 +437,28 @@
           },
           "title": "Property Sources",
           "type": "object"
+        },
+        "plastic_curve": {
+          "items": {
+            "$ref": "#/$defs/PlasticPoint"
+          },
+          "maxItems": 100,
+          "title": "Plastic Curve",
+          "type": "array"
+        },
+        "plastic_curve_source": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plastic Curve Source"
         }
       },
       "required": [
@@ -549,6 +592,27 @@
         }
       },
       "title": "Placement",
+      "type": "object"
+    },
+    "PlasticPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "stress_mpa": {
+          "exclusiveMinimum": 0,
+          "title": "Stress Mpa",
+          "type": "number"
+        },
+        "plastic_strain": {
+          "minimum": 0,
+          "title": "Plastic Strain",
+          "type": "number"
+        }
+      },
+      "required": [
+        "stress_mpa",
+        "plastic_strain"
+      ],
+      "title": "PlasticPoint",
       "type": "object"
     },
     "Profile": {
@@ -796,6 +860,19 @@
           "default": true,
           "title": "Enabled",
           "type": "boolean"
+        },
+        "study_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study Id"
         }
       },
       "required": [
@@ -835,6 +912,9 @@
         },
         "name": {
           "default": "Engineering study",
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -983,6 +1063,33 @@
           "default": false,
           "title": "Assumptions Confirmed",
           "type": "boolean"
+        },
+        "large_deformation": {
+          "default": true,
+          "title": "Large Deformation",
+          "type": "boolean"
+        },
+        "nonlinear_increments": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 2,
+          "title": "Nonlinear Increments",
+          "type": "integer"
+        },
+        "max_nonlinear_increments": {
+          "default": 200,
+          "maximum": 1000,
+          "minimum": 2,
+          "title": "Max Nonlinear Increments",
+          "type": "integer"
+        },
+        "load_path": {
+          "items": {
+            "$ref": "#/$defs/LoadPoint"
+          },
+          "maxItems": 50,
+          "title": "Load Path",
+          "type": "array"
         }
       },
       "title": "Study",
@@ -1139,6 +1246,22 @@
     },
     "study": {
       "$ref": "#/$defs/Study"
+    },
+    "named_studies": {
+      "maxProperties": 30,
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_-]{0,63}$": {
+          "$ref": "#/$defs/Study"
+        }
+      },
+      "title": "Named Studies",
+      "type": "object"
+    },
+    "active_study_id": {
+      "default": "default",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+      "title": "Active Study Id",
+      "type": "string"
     }
   },
   "title": "Project",
