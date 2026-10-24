@@ -1,0 +1,25 @@
+.assembly-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; color: var(--text); font-size: 12px; }
+.assembly-panel h2 { font-size: 14px; margin: 0 0 4px; font-weight: 550; }
+.assembly-heading, .assembly-actions, .assembly-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.assembly-heading { justify-content: space-between; }
+.assembly-tabs { border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.assembly-tabs [aria-pressed="true"] { background: var(--accent-wash); border-color: var(--border-bright); }
+.assembly-panel fieldset { display: flex; flex-direction: column; gap: 10px; padding: 0; margin: 0; border: 0; min-width: 0; }
+.assembly-panel label { display: flex; flex-direction: column; gap: 5px; color: var(--text-secondary); }
+.assembly-panel label.assembly-inline { flex-direction: row; align-items: center; }
+.assembly-panel input[type="checkbox"] { accent-color: var(--accent); }
+.assembly-panel .ui-input, .assembly-panel .ui-select { width: 100%; min-width: 0; box-sizing: border-box; }
+.assembly-panel textarea { resize: vertical; width: 100%; box-sizing: border-box; color: var(--text); background: var(--surface-inset); border: 1px solid var(--control-border); border-radius: var(--radius-sm); padding: 8px; font: 11px/1.5 var(--font-mono); }
+.assembly-subtle, .assembly-panel small { color: var(--text-muted); font-size: 11px; line-height: 1.55; }
+.assembly-panel p { margin: 0; line-height: 1.55; }
+.assembly-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.assembly-tree { border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 250px; overflow: auto; padding: 8px; }
+.assembly-definition + .assembly-definition { margin-top: 8px; }
+.assembly-panel .assembly-occurrence { display: flex; flex-direction: row; align-items: center; padding: 5px 3px; gap: 8px; color: var(--text); }
+.assembly-occurrence span { display: flex; flex-direction: column; }
+.assembly-panel pre { overflow: auto; max-height: 330px; white-space: pre-wrap; word-break: break-word; font: 10px/1.6 var(--font-mono); background: var(--surface-inset); padding: 8px; border-radius: var(--radius-sm); }
+.assembly-panel summary { cursor: pointer; color: var(--text-secondary); }
+.assembly-report { border-top: 1px solid var(--border-bright); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.assembly-report a { color: var(--accent-text); }
+.assembly-report table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; }
+.assembly-report td, .assembly-report th { border-bottom: 1px solid var(--border); padding: 6px 3px; }
