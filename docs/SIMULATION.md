@@ -83,7 +83,7 @@ These source claims are retained, not authenticated or converted to a certificat
   node to the subsequent mechanical solve.
 - Nonlinear static: `large_deformation` selects geometric nonlinearity;
   `nonlinear_increments` bounds the maximum normalized load increment and defines
-  observation times. `max_nonlinear_increments` bounds adaptive attempts. An empty
+  observation times. `max_nonlinear_increments` bounds accepted solver increments; solver cutback limits apply separately. An empty
   `load_path` means `(time,factor)=(0,0)..(1,1)`; otherwise supply strictly increasing
   normalized times starting at zero load and ending at time one. Every force is
   multiplied by the same piecewise-linear amplitude; forces retain world-frame
@@ -98,7 +98,7 @@ These source claims are retained, not authenticated or converted to a certificat
   engineering stress/total strain is guessed. This is isotropic hardening, with no
   kinematic hardening, cyclic calibration, damage, fracture, hyperelasticity or
   rate/temperature dependence. Small-deformation nonlinear studies require a plastic
-  curve. Other adapters reject plastic curves rather than silently ignoring them.
+  curve. Other adapters reject plastic curves rather than silently ignoring them. Response beyond the supplied curve strain range is inconclusive; the nodal screening fields do not establish integration-point material validity.
 - Decks consistently use mm, N, s, MPa, tonne and °C: density converts by `1e-9`,
   heat power by `1000`, and conductivity retains the numerical W/(m K) value.
   No conductivity, expansion, load or reference temperature is inferred.
@@ -109,6 +109,8 @@ These source claims are retained, not authenticated or converted to a certificat
 The UI keeps missing new material/temperature/power inputs blank. An empty field
 does not become a guessed production property. Forces added from a face start at
 zero and must be specified before a mechanical solve can run.
+
+The deck conventions follow the [CalculiX 2.23 manual](https://www.dhondt.de/ccx_2.23.htm.tar.bz2), including `*PLASTIC`, `*AMPLITUDE`, `*STATIC` and `*TIME POINTS`. Large deformation alone does not establish that a material model is valid at arbitrary large strain.
 
 ## CAD → analysis and meshing
 

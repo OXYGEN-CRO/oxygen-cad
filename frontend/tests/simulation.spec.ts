@@ -298,6 +298,10 @@ test("plastic nonlinear setup, load/unload history and increment fields", async 
     .click();
   await page.getByLabel("Load increment", { exact: true }).selectOption("1");
   await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-artifact",
+    state.analysis.increments[1].field_artifact,
+  );
+  await expect(page.locator(".webgl")).toHaveAttribute(
     "data-field-ready",
     "true",
   );
@@ -310,11 +314,19 @@ test("plastic nonlinear setup, load/unload history and increment fields", async 
     .getByLabel("Deformation scale", { exact: true })
     .press("ArrowRight");
   await page.getByRole("button", { name: "Fit model", exact: true }).click();
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-ready",
+    "true",
+  );
   await page.screenshot({
     path: "test-results/study-nonlinear.png",
     fullPage: true,
   });
   await page.getByLabel("Load increment", { exact: true }).selectOption("3");
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-artifact",
+    state.analysis.increments[3].field_artifact,
+  );
   await expect(page.locator(".webgl")).toHaveAttribute(
     "data-field-ready",
     "true",

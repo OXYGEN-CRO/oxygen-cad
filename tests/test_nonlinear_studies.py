@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 from scipy.integrate import simpson, solve_bvp
 
-from o3d.analysis import nonlinear_output_times, nonlinear_result, validate_study
+from o3d.analysis import nonlinear_output_times, nonlinear_result, parse_frd, validate_study
 from o3d.model import LoadPoint, Material, PlasticPoint, Project, Requirement, Study
 from o3d.solver import simulate
 
@@ -50,6 +50,17 @@ def test_plastic_load_unload_peak_residual_step_sensitivity_and_exports(store):
         field=json.loads(store.artifact(increment["field_artifact"]).read_text())
         assert len(field["equivalent_plastic_strain"])==len(field["nodes"])
         assert field["time"]==increment["time"]
+    # Fault-inject one missing value into an actual solved frame. Complete
+    # displacement/stress output must not conceal a partial plastic-strain field.
+    from o3d.solver import load_boundary
+    run=store.artifact(result["artifacts"]["mesh_2/analysis.dat"]).parent
+    mesh=json.loads((run/"mesh.json").read_text())
+    frames=parse_frd(run/"analysis.frd")
+    next(f for f in frames if f["name"] in ("PE","PEEQ"))["values"].popitem()
+    transfer=json.loads(store.artifact(result["artifacts"]["region_map"]).read_text())
+    mesh["surfaces"].update({alias:mesh["surfaces"][name] for alias,name in transfer["aliases"].items()})
+    with pytest.raises(RuntimeError,match="Incomplete equivalent plastic strain"):
+        nonlinear_result(run,mesh,p,frames,load_boundary(mesh,p.study),transfer,store)
     p.study.nonlinear_increments=8
     refined=simulate(store,p)
     assert refined["max_displacement_mm"]==pytest.approx(result["max_displacement_mm"],rel=.01)

@@ -205,6 +205,7 @@ export function Viewport(props: Props) {
     if (!r) return;
     let disposed = false;
     host.current!.dataset.fieldReady = "false";
+    delete host.current!.dataset.fieldArtifact;
     r.model.traverse((o: THREE.Object3D) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
         o.geometry.dispose();
@@ -389,6 +390,7 @@ export function Viewport(props: Props) {
           );
           r.renderer.render(r.scene, r.camera);
           host.current!.dataset.fieldReady = "true";
+          host.current!.dataset.fieldArtifact = props.analysis.field_artifact;
         })
         .catch(() => {
           if (!disposed) host.current!.dataset.fieldReady = "error";

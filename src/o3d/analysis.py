@@ -388,6 +388,8 @@ def nonlinear_result(run, mesh, project, frames, boundary, transfer, store):
         if project.material.plastic_curve and plastic is None:
             raise RuntimeError("Plastic analysis is missing equivalent plastic strain output")
         if plastic:
+            if set(plastic)!=set(map(int,mesh["nodes"])) or any(len(v)!=1 for v in plastic.values()):
+                raise RuntimeError("Incomplete equivalent plastic strain field")
             field["equivalent_plastic_strain"]={n:v[0] for n,v in plastic.items()}
             metrics["max_equivalent_plastic_strain"]=max(v[0] for v in plastic.values())
         field.update({"nodes":mesh["nodes"],"boundary_triangles":exterior_triangles(mesh["elements"]),
