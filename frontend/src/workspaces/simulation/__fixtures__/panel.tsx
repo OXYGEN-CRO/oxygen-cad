@@ -20,6 +20,8 @@ const face = {
 const project = {
   schema_version: 1,
   geometry_engine: "occt",
+  native_document: null,
+  domains: {},
   revision: 1,
   name: "Form reference",
   units: "mm",
@@ -57,6 +59,7 @@ function Fixture() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(1);
   const state = {
+    simulation_capabilities: { studies: [], scope: "UI form fixture; numerical execution is separate" },
     project,
     build: null,
     last_build: null,

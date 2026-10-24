@@ -95,7 +95,7 @@ def _mesh(store,project,domain,study,model,payload,cancel):
     from ..solver import run_process,mesher_python
     gkey=geometry_key(project)
     built=build(store,project)
-    scene=built.get("scene",{})
+    scene=built.get("scene") or {}
     bodies=scene.get("bodies",[])
     if bodies:
         selected=[b for b in bodies if b["id"] in model.body_ids]
