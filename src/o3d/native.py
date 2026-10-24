@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -74,14 +75,34 @@ class NativeSession:
         self.log.close()
 
 
-def _resolved(project, value):
+def _resolved(project, value, bindings=None):
     if isinstance(value, str) and value.startswith("$"):
-        return value[1:]
+        return (bindings or {}).get(value[1:], value[1:])
     if isinstance(value, dict):
-        return {k: _resolved(project, v) for k, v in value.items()}
+        return {k: _resolved(project, v, bindings) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_resolved(project, v) for v in value]
+        return [_resolved(project, v, bindings) for v in value]
     return value
+
+
+def add_legacy_parameters(session, project):
+    """Preserve v1 names which upstream's expression grammar cannot represent."""
+    bindings = {}
+    for name, parameter in project.parameters.items():
+        params = {"name": name, "expression": parameter.value,
+            "unit": parameter.unit if parameter.unit in {"mm", "deg"} else ""}
+        native_name = name
+        try:
+            session.execute("parameters.add", params)
+        except ValueError as error:
+            if not any(term in str(error) for term in ("valid parameter name", "reserved", "cannot be a parameter name")):
+                raise
+            native_name = "legacy_" + hashlib.sha256(name.encode()).hexdigest()[:20]
+            while native_name in project.parameters or native_name in bindings.values():
+                native_name += "x"
+            session.execute("parameters.add", params | {"name": native_name})
+        bindings[name] = native_name
+    return bindings
 
 
 def compile_native(project: Project, destination: Path):
@@ -94,6 +115,7 @@ def compile_native(project: Project, destination: Path):
         return [v.X, v.Y, v.Z]
 
     profiles = {}
+    parameter_bindings = {}
     with NativeSession() as session:
         metadata = session.execute("oxygen.version")
         if metadata.get("upstream_commit") != UPSTREAM_COMMIT or metadata.get("protocol") != 1:
@@ -113,10 +135,10 @@ def compile_native(project: Project, destination: Path):
                 w, h = project.resolve(profile.width), project.resolve(profile.height)
                 rectangle = session.execute("sketch.rectangle.center", {"center": [0, 0], "corner": [w/2, h/2]})
                 for side, dimension in (("bottom", profile.width), ("right", profile.height)):
-                    session.execute("sketch.dimension", {"entities": [rectangle["sides"][side]], "value": _resolved(project, dimension)})
+                    session.execute("sketch.dimension", {"entities": [rectangle["sides"][side]], "value": _resolved(project, dimension, parameter_bindings)})
             elif profile.shape == "circle":
                 circle = session.execute("sketch.circle.center", {"center": [0, 0], "radius": project.resolve(profile.radius)})
-                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "radius", "value": _resolved(project, profile.radius)})
+                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "radius", "value": _resolved(project, profile.radius, parameter_bindings)})
             else:
                 session.execute("sketch.line", {"points": profile.points, "closed": True})
             session.execute("sketch.finish")
@@ -125,9 +147,7 @@ def compile_native(project: Project, destination: Path):
             session.execute("oxygen.document.set", {"document": project.native_document,
                 "context": project.domains.get("modeling", {}).get("native_context", {})})
         else:
-            for name, parameter in project.parameters.items():
-                unit = parameter.unit if parameter.unit in {"mm", "deg"} else ""
-                session.execute("parameters.add", {"name": name, "expression": parameter.value, "unit": unit})
+            parameter_bindings = add_legacy_parameters(session, project)
             for feature in project.features:
                 if feature.suppressed:
                     continue
@@ -136,7 +156,7 @@ def compile_native(project: Project, destination: Path):
                         profiles[feature.id] = feature
                         continue
                     if isinstance(feature, NativeFeature):
-                        session.execute(feature.command, _resolved(project, feature.params))
+                        session.execute(feature.command, _resolved(project, feature.params, parameter_bindings))
                     elif isinstance(feature, Extrude):
                         if feature.profile not in profiles:
                             raise ValueError("The referenced profile is suppressed or unavailable")
@@ -145,7 +165,7 @@ def compile_native(project: Project, destination: Path):
                             raise ValueError("The first extrusion must add material")
                         sketch(profiles[feature.profile], f"{feature.profile}_{feature.id}")
                         distance = project.resolve(feature.distance)
-                        session.execute("solid.extrude", {"distance": _resolved(project, feature.distance), "direction": "positive",
+                        session.execute("solid.extrude", {"distance": _resolved(project, feature.distance, parameter_bindings), "direction": "positive",
                             "operation": "cut" if feature.operation == "cut" else "join" if before["body_count"] else "new",
                             "body_name": "Oxygen part", "name": feature.name or feature.id})
                         if abs(measure()["total"]["volume_mm3"] - before["total"]["volume_mm3"]) < 1e-8:
@@ -176,9 +196,9 @@ def compile_native(project: Project, destination: Path):
                                 delta = bd.Vector(point) - bd.Vector(origin)
                                 center = [delta.dot(plane.x_dir), delta.dot(plane.y_dir)]
                                 circle = session.execute("sketch.circle.center", {"center": center, "diameter": project.resolve(feature.diameter)})
-                                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "diameter", "value": _resolved(project, feature.diameter)})
+                                session.execute("sketch.dimension", {"entities": [circle["curves"][0]], "type": "diameter", "value": _resolved(project, feature.diameter, parameter_bindings)})
                         session.execute("sketch.finish")
-                        session.execute("solid.extrude", {"distance": depth if feature.through else _resolved(project, feature.depth), "operation": "cut", "name": feature.name or feature.id})
+                        session.execute("solid.extrude", {"distance": depth if feature.through else _resolved(project, feature.depth, parameter_bindings), "operation": "cut", "name": feature.name or feature.id})
                         if before["total"]["volume_mm3"] - measure()["total"]["volume_mm3"] < 1e-8:
                             raise ValueError("Hole pattern did not intersect the solid")
                     elif isinstance(feature, EdgeTreatment):
@@ -191,7 +211,7 @@ def compile_native(project: Project, destination: Path):
                             raise ValueError("Edge selection is empty")
                         edges = [vector(e.position_at(0.5)) for e in selected]
                         session.execute("solid." + feature.type, {"edges": edges,
-                            "radius" if feature.type == "fillet" else "distance": _resolved(project, feature.size)})
+                            "radius" if feature.type == "fillet" else "distance": _resolved(project, feature.size, parameter_bindings)})
                 except Exception as error:
                     raise ValueError(f"Feature {feature.id}: {error}") from error
         measured = measure()
@@ -274,4 +294,4 @@ def compile_native(project: Project, destination: Path):
     errors = [v["volume_relative_error"] for v in independent if v["volume_relative_error"] is not None]
     return shape, metadata | {"independent_volume_relative_error": max(errors, default=0),
         "independent_bodies": independent, "independent_meshes": mesh_audits, "canonical": canonical,
-        "placed_canonical":placed_canonical,"scene": scene}
+        "placed_canonical":placed_canonical,"parameter_bindings":parameter_bindings,"scene": scene}

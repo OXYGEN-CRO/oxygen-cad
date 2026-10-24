@@ -14,7 +14,7 @@ import tempfile
 import zipfile
 
 from .model import Command, Placement, Project
-from .native import NativeSession, UPSTREAM_COMMIT, compile_native
+from .native import NativeSession, UPSTREAM_COMMIT, add_legacy_parameters, compile_native
 from .store import Conflict
 
 # Command registration/enablement remains upstream-owned. These groups are host-exposed;
@@ -41,6 +41,10 @@ def _safe_params(value, *, key="", curve_paths=False):
         if key == "path" and isinstance(value, list) and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in value):
             return
         if key == "path" and curve_paths:
+            if isinstance(value, dict):
+                for nested_key, nested_value in value.items():
+                    _safe_params(nested_value, key=nested_key, curve_paths=curve_paths)
+                return
             refs = value if isinstance(value, list) else [value]
             if refs and all(isinstance(v, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,127}", v) for v in refs):
                 return
@@ -106,6 +110,39 @@ def _portable_links(snapshot, store):
     return snapshot
 
 
+def _guard_identity(rows, value, label, *, root=False):
+    if root and value in (0, "0", "root"):
+        return
+    if isinstance(value, int) or isinstance(value, str) and value.isdecimal():
+        matches = [r for r in rows if str(r.get("id")) == str(value)]
+    elif isinstance(value, str):
+        matches = [r for r in rows if r.get("name") == value]
+    else:
+        return  # Structured native references are validated by the owning command.
+    if len(matches) != 1:
+        raise ValueError(f"Missing or ambiguous {label} reference {value!r}; select an explicit stable ID")
+
+
+def _guard_references(document, command, params):
+    """Do not let an upstream first-name match choose an ambiguous design object."""
+    for singular, plural, rows, root in (
+        ("component", "components", document.get("components", []), True),
+        ("occurrence", "occurrences", document.get("occurrences", []), False),
+    ):
+        if singular in params:
+            _guard_identity(rows, params[singular], singular, root=root)
+        if isinstance(params.get(plural), list):
+            for value in params[plural]:
+                _guard_identity(rows, value, singular, root=root)
+    if command.startswith("timeline.") or command.startswith("solid.pattern"):
+        for value in ([params["feature"]] if "feature" in params else params.get("features", [])):
+            _guard_identity(document.get("features", []), value, "feature")
+    if command in {"joint.as_built", "joint.create"}:
+        for key in ("a", "b"):
+            if key in params:
+                _guard_identity(document.get("occurrences", []), params[key], "occurrence")
+
+
 @contextmanager
 def opened_native(project: Project, store=None):
     """Yield a source-built native session on an immutable project snapshot."""
@@ -116,6 +153,7 @@ def opened_native(project: Project, store=None):
         if version.get("upstream_commit") != UPSTREAM_COMMIT or version.get("protocol") != 1:
             raise RuntimeError("Native engine does not match the pinned document toolchain")
         if project.native_document is not None:
+            session.legacy_parameter_map = project.domains.get("modeling", {}).get("legacy_parameter_map", {})
             document = json.loads(json.dumps(project.native_document))
             for link in document.get("links", {}).values():
                 path = Path(link["path"])
@@ -132,10 +170,9 @@ def opened_native(project: Project, store=None):
             with tempfile.TemporaryDirectory(prefix="oxygen-migrate-") as folder:
                 _, metadata = compile_native(project, Path(folder))
                 session.execute("oxygen.document.set", metadata["placed_canonical"])
+                session.legacy_parameter_map = metadata["parameter_bindings"]
         else:
-            for name, parameter in project.parameters.items():
-                session.execute("parameters.add", {"name": name, "expression": parameter.value,
-                    "unit": parameter.unit if parameter.unit in {"mm", "deg"} else ""})
+            session.legacy_parameter_map = add_legacy_parameters(session, project)
         yield session
 
 
@@ -162,7 +199,7 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     if not host_allowed(command):
         raise ValueError("Native command is unavailable through the project transaction interface")
     params = dict(params or {})
-    _safe_params(params, curve_paths=command in {"solid.sweep", "solid.pattern.path", "surface.sweep", "sketch.text", "sketch.edit_text"})
+    _safe_params(params, curve_paths=command in {"solid.sweep", "solid.pattern.path", "surface.sweep", "sketch.text", "sketch.edit_text", "construct.plane.along_path", "construct.point.along_path"})
     if len(json.dumps(params, allow_nan=False).encode()) > 1024 * 1024:
         raise ValueError("Native command parameters exceed 1 MiB")
     if command in ASSET_COMMANDS:
@@ -180,6 +217,10 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
         params["path"] = str(path)
     with opened_native(project, store) as session:
         before = session.execute("oxygen.document.get")
+        parameter_map = session.legacy_parameter_map
+        if command.startswith("parameters.") and params.get("name") in parameter_map:
+            params["name"] = parameter_map[params["name"]]
+        _guard_references(before["document"], command, params)
         if command == "sketch.cancel":
             entry = project.domains.get("modeling", {}).get("sketch_entry")
             if not entry:
@@ -199,16 +240,21 @@ def prepare_native_command(project: Project, command: str, params=None, store=No
     if project.native_document is None:
         updated.placement = Placement()
     for parameter in values:
-        if parameter["name"] in updated.parameters and parameter.get("value") is not None:
-            updated.parameters[parameter["name"]].value = parameter["value"]
+        host_name = next((name for name, native_name in parameter_map.items() if native_name == parameter["name"]), parameter["name"])
+        if host_name in updated.parameters and parameter.get("value") is not None:
+            updated.parameters[host_name].value = parameter["value"]
     modeling = updated.domains.setdefault("modeling", {"schema_version": 1})
     modeling["native_context"] = after["context"]
+    if parameter_map:
+        modeling["legacy_parameter_map"] = parameter_map
     if not before["context"].get("active_sketch") and after["context"].get("active_sketch"):
         modeling["sketch_entry"] = before
     elif not after["context"].get("active_sketch"):
         modeling.pop("sketch_entry", None)
     locks = modeling.setdefault("parameter_locks", {})
-    locks.update({name: True for name, parameter in project.parameters.items() if parameter.locked})
+    for name, parameter in project.parameters.items():
+        if parameter.locked:
+            locks.setdefault(parameter_map.get(name, name), True)
     # Validate B-rep solids and open surfaces independently before acknowledging an edit.
     # A sketch-only document is valid and intentionally has no exportable body yet.
     if before["document"] != after["document"]:

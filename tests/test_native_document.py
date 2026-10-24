@@ -210,3 +210,111 @@ def test_selection_context_preserves_geometry_cache_and_forbids_file_exports(tmp
     with pytest.raises(ValueError, match='Filesystem'):
         execute_native(store, 2, 'human', 'sheet.export_dxf', {'path': 'escape.dxf'})
     assert store.load().revision == 2
+
+
+def test_migration_absorbs_legacy_placement_and_preserves_native_body_materials(tmp_path):
+    from o3d.model import Material
+    project = Project(parameters={'length': Parameter(value=20)}, placement={'translation': [12, 3, -2], 'rotation': [0, 0, 90]},
+        features=[NativeFeature(id='base', command='solid.box', params={'length': '$length', 'width': 10, 'height': 5})],
+        material=Material(youngs_modulus_mpa=2000, poisson_ratio=0.3, density_g_cm3=1.2, source='test material input'))
+    store = Store(tmp_path); store.init(project)
+    original = build(store, project)
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'length', 'expression': '20 mm'})
+    migrated = store.load()
+    assert not any(migrated.placement.translation) and not any(migrated.placement.rotation)
+    measured = query_native(migrated, 'inspect.measure')
+    assert measured['bodies'][0]['bbox']['min'] == pytest.approx(original['bounds'][0])
+    assert measured['bodies'][0]['bbox']['max'] == pytest.approx(original['bounds'][1])
+    body = measured['bodies'][0]['name']
+    execute_native(store, migrated.revision, 'human', 'material.assign', {'bodies': [body], 'material': 'Aluminum'})
+    result = build(store, store.load())
+    native = json.loads(store.artifact(f"builds/{result['key']}/engine-measures.json").read_text())
+    assert native['bodies'][0]['material'] == 'Aluminum'
+
+
+def test_native_scene_route_is_revision_associated(tmp_path):
+    store = Store(tmp_path); store.init(native_project([('solid.box', {'length': 2, 'width': 3, 'height': 4})]))
+    app = FastAPI(); mount_native_routes(app, store, None)
+    response = TestClient(app).get('/api/native/scene')
+    assert response.status_code == 200
+    assert response.json()['revision'] == 1
+    assert response.json()['scene']['bodies'][0]['mesh']['triangles']
+
+
+def test_reused_nested_profiles_and_keep_tools_preserve_body_identity(tmp_path):
+    import math
+    with NativeSession() as session:
+        session.execute('parameters.add', {'name': 'hole_radius', 'expression': '5 mm'})
+        sketch = session.execute('sketch.create', {'plane': 'XY', 'name': 'Nested'})['sketch']
+        session.execute('sketch.rectangle.two_point', {'p0': [-20, -15], 'p1': [20, 15]})
+        circle = session.execute('sketch.circle.center', {'center': [0, 0], 'radius': 5})['curves'][0]
+        session.execute('sketch.dimension', {'entities': [circle], 'type': 'radius', 'value': 'hole_radius'})
+        session.execute('sketch.finish')
+        session.execute('solid.extrude', {'sketch': sketch, 'profiles': [0], 'distance': 4, 'operation': 'new', 'body_name': 'Plate'})
+        session.execute('solid.extrude', {'sketch': sketch, 'profiles': [1], 'distance': 2, 'operation': 'new', 'body_name': 'Plug'})
+        snapshot = session.execute('oxygen.document.get')
+    project = Project(native_document=snapshot['document'], domains={'modeling': {'schema_version': 1, 'native_context': snapshot['context']}})
+    store = Store(tmp_path); store.init(project)
+    body_ids = {b['name']: b['id'] for b in inspect_native(project)['scene']['bodies']}
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'hole_radius', 'expression': '6 mm'})
+    result = build(store, Store(tmp_path).load())
+    assert result['volume_mm3'] == pytest.approx(4800 - 72 * math.pi, rel=1e-6)
+    assert {b['name']: b['id'] for b in result['scene']['bodies']} == body_ids
+    assert len(bd.import_step(store.artifact(result['artifacts']['step'])).solids()) == 2
+
+
+def test_boolean_cut_keep_tools_replays_without_fusing_bodies(tmp_path):
+    project = native_project([
+        ('parameters.add', {'name': 'tool_x', 'expression': '10 mm'}),
+        ('solid.box', {'length': 20, 'width': 10, 'height': 5, 'body_name': 'Target'}),
+        ('solid.box', {'length': 20, 'width': 10, 'height': 5, 'corner': ['tool_x', 0, 0], 'body_name': 'Tool'}),
+        ('solid.combine', {'target': 'Target', 'tools': ['Tool'], 'operation': 'cut', 'keep_tools': True}),
+    ])
+    store = Store(tmp_path); store.init(project)
+    assert query_native(project, 'inspect.measure')['total']['volume_mm3'] == pytest.approx(1500)
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'tool_x', 'expression': '12 mm'})
+    result = build(store, Store(tmp_path).load())
+    assert result['volume_mm3'] == pytest.approx(1600)
+    assert {b['name'] for b in result['scene']['bodies']} == {'Target', 'Tool'}
+    assert all(b['geometry_kind'] == 'solid' for b in result['scene']['bodies'])
+
+
+def test_v1_parameter_names_outside_native_grammar_migrate_with_explicit_aliases(tmp_path):
+    project = Project(parameters={'hole-size': Parameter(value=4), 'pi': Parameter(value=10)},
+        features=[NativeFeature(id='base', command='solid.box', params={'length': '$pi', 'width': '$hole-size', 'height': 2})])
+    store = Store(tmp_path); store.init(project)
+    assert build(store, project)['volume_mm3'] == pytest.approx(80)
+    execute_native(store, 1, 'human', 'parameters.change', {'name': 'hole-size', 'expression': '6 mm'})
+    mapping = store.load().domains['modeling']['legacy_parameter_map']
+    assert mapping['hole-size'] != 'hole-size' and mapping['pi'] != 'pi'
+    assert store.load().parameters['hole-size'].value == 6
+    assert query_native(Store(tmp_path).load(), 'inspect.measure')['total']['volume_mm3'] == pytest.approx(120)
+
+
+def test_failed_projection_break_restores_raw_document_and_render_host_survives_reopen():
+    with NativeSession() as session:
+        session.execute('parameters.add', {'name': 'width', 'expression': '40 mm'})
+        session.execute('solid.box', {'length': 'width', 'width': 30, 'height': 5, 'body_name': 'Plate'})
+        session.execute('sketch.create', {'plane': 'XY'})
+        session.execute('sketch.project', {'refs': [{'body': 'Plate'}]})
+        session.execute('parameters.change', {'name': 'width', 'expression': '50 mm'})
+        before = session.execute('oxygen.document.get')
+        with pytest.raises(ValueError):
+            session.execute('sketch.break_link', {'link': 'no_such_link'})
+        assert session.execute('oxygen.document.get') == before
+        session.execute('oxygen.document.set', before)
+        executors = [executor['id'] for backend in session.execute('render.backends')['backends'] for executor in backend['executors']]
+        assert 'cpu-raytrace' in executors
+
+
+def test_geometric_path_references_are_distinct_from_filesystem_paths(tmp_path):
+    store = Store(tmp_path); store.init(native_project([
+        ('sketch.create', {'plane': 'XY', 'name': 'Path'}),
+        ('sketch.line', {'points': [[0, 0], [20, 0]], 'ids': ['path_line']}),
+        ('sketch.finish', {}),
+    ]))
+    execute_native(store, 1, 'human', 'construct.plane.along_path', {'path': {'sketch': 'Path', 'curve': 'path_line'}, 't': 0.5})
+    execute_native(store, 2, 'human', 'construct.point.along_path', {'path': {'sketch': 'Path', 'curve': 'path_line'}, 't': 0.25})
+    assert len(inspect_native(Store(tmp_path).load())['inspection']['timeline']) == 3
+    with pytest.raises(ValueError, match='Filesystem'):
+        execute_native(store, 3, 'human', 'construct.point.along_path', {'path': {'file': '/etc/passwd'}})
