@@ -1,0 +1,312 @@
+.modeling-panel {
+  color: var(--text);
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 4px;
+  font-size: 12px;
+}
+.modeling-panel label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.modeling-panel label small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.modeling-panel :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.modeling-panel textarea {
+  border: 1px solid var(--border-bright);
+  color: var(--text);
+  background: var(--surface-inset);
+  border-radius: var(--radius-control);
+  padding: 8px;
+  font: 11px var(--font-mono);
+  min-height: 80px;
+  resize: vertical;
+}
+.modeling-panel pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+}
+.modeling-panel code {
+  overflow-wrap: anywhere;
+  font: 10px var(--font-mono);
+}
+.modeling-panel h4 {
+  margin: 3px 0;
+  font-size: 13px;
+}
+.modeling-panel p {
+  margin: 5px 0;
+  line-height: 1.5;
+}
+.modeling-panel details {
+  margin: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  min-width: 0;
+}
+.modeling-panel details > :not(summary) {
+  margin-top: 8px;
+}
+.modeling-panel summary {
+  padding: 4px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.modeling-row {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.modeling-row > strong {
+  margin-right: auto;
+}
+.modeling-row > label {
+  flex: 1 1 100px;
+}
+.modeling-tabs {
+  display: flex;
+  gap: 3px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  flex-wrap: wrap;
+}
+.modeling-panel button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  border-color: var(--border-bright);
+  color: var(--text);
+}
+.modeling-form,
+.modeling-sketch,
+.modeling-parameters,
+.modeling-history {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.modeling-inline-form {
+  display: flex;
+  align-items: end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.modeling-inline-form label {
+  flex: 1 1 70px;
+}
+.modeling-panel .modeling-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+}
+.modeling-check input {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.modeling-muted {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.modeling-success {
+  color: var(--success);
+}
+.modeling-warning {
+  color: var(--warning);
+}
+.modeling-danger {
+  color: var(--danger);
+}
+.modeling-error {
+  border: 1px solid var(--danger);
+  background: var(--danger-wash);
+  padding: 10px;
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+.modeling-sketch-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 420px;
+  min-height: 200px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-control);
+  background: var(--surface-inset);
+  touch-action: none;
+}
+.modeling-tool-select {
+  cursor: default;
+}
+.modeling-sketch-canvas:not(.modeling-tool-select) {
+  cursor: crosshair;
+}
+.modeling-axis {
+  stroke: var(--text-muted);
+  opacity: 0.45;
+}
+.modeling-curve {
+  stroke: var(--text-secondary);
+  pointer-events: stroke;
+  stroke-linecap: round;
+}
+.modeling-curve:hover,
+.modeling-point:hover {
+  stroke: var(--text);
+}
+.modeling-curve.is-construction,
+.modeling-curve.is-control-polygon {
+  stroke-dasharray: 2 1;
+}
+.modeling-curve.is-constrained {
+  stroke: var(--success);
+}
+.modeling-curve.is-linked {
+  stroke: var(--warning);
+}
+.modeling-curve.is-selected {
+  stroke: var(--text);
+  filter: drop-shadow(0 0 1px var(--accent));
+}
+.modeling-point {
+  fill: var(--text-muted);
+  stroke: var(--surface-inset);
+  stroke-width: 0.3;
+  cursor: grab;
+}
+.modeling-point.is-constrained {
+  fill: var(--success);
+}
+.modeling-point.is-selected {
+  fill: var(--text);
+}
+.modeling-placement {
+  fill: none;
+  stroke: var(--warning);
+  stroke-dasharray: 2 1;
+  pointer-events: none;
+}
+.modeling-trim-preview {
+  fill: none;
+  stroke: var(--danger);
+  pointer-events: none;
+}
+.modeling-glyph {
+  fill: var(--text-secondary);
+  pointer-events: none;
+}
+.modeling-glyph.is-failing {
+  fill: var(--danger);
+}
+.modeling-profile {
+  cursor: pointer;
+}
+.modeling-profile circle {
+  fill: var(--surface-raised);
+  stroke: var(--text-muted);
+  stroke-width: 0.2;
+}
+.modeling-profile circle.is-selected {
+  fill: var(--success-wash);
+  stroke: var(--success);
+}
+.modeling-profile text {
+  fill: var(--text);
+  pointer-events: none;
+}
+.modeling-entity-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 170px;
+  overflow: auto;
+}
+.modeling-profile-list,
+.modeling-constraints {
+  display: grid;
+  gap: 6px;
+}
+.modeling-reference,
+.modeling-parameter {
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.modeling-reference code {
+  display: block;
+  margin-top: 6px;
+}
+.modeling-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+.modeling-timeline li {
+  border-left: 2px solid var(--border-bright);
+  padding-left: 7px;
+}
+.modeling-timeline li.has-error {
+  border-color: var(--danger);
+}
+.modeling-timeline li.is-inactive .modeling-feature {
+  opacity: 0.55;
+}
+.modeling-panel .modeling-feature {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: start;
+  gap: 3px;
+  height: auto;
+  padding-block: 7px;
+  text-align: left;
+}
+.modeling-feature small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.modeling-marker {
+  color: var(--warning);
+  border-top: 2px solid var(--warning);
+  display: block;
+  padding-top: 4px;
+  font-size: 10px;
+}
+.modeling-topology-list {
+  display: grid;
+  gap: 5px;
+  max-height: 220px;
+  overflow: auto;
+}
+.modeling-topology-list small {
+  display: block;
+  overflow-wrap: anywhere;
+  max-width: 290px;
+}
+@media (max-width: 460px) {
+  .modeling-panel {
+    font-size: 11px;
+  }
+  .modeling-panel .ui-button {
+    white-space: normal;
+  }
+}
