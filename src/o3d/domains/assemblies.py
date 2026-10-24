@@ -123,6 +123,12 @@ def _guard_refs(project, command, params):
     """Occurrence IDs and paths distinguish shared placements; never pick the first duplicate name."""
     doc = project.native_document or {}
     occurrences = doc.get("occurrences", [])
+    def entity(value, records, label, root=False):
+        if root and (value == 0 or value == "root"):
+            return
+        found = [record for record in records if str(record.get("id")) == str(value) or record.get("name") == value]
+        if len(found) != 1:
+            raise ValueError(f"{'Ambiguous' if found else 'Stale'} {label} reference {value!r}; select an exact current ID")
     def check(value):
         if value == 0 or value == "root":
             return
@@ -149,6 +155,23 @@ def _guard_refs(project, command, params):
     walk(params)
     if command == "joint.as_built":
         check(params.get("a")); check(params.get("b"))
+    assembly = doc.get("assembly", {})
+    for key in ("component", "parent"):
+        if key in params:
+            entity(params[key], doc.get("components", []), "component", root=True)
+    for key in ("joint", "study"):
+        if key in params:
+            entity(params[key], assembly.get("joints" if key == "joint" else "studies", []), key)
+    for value in params.get("joints", []):
+        entity(value, assembly.get("joints", []), "joint")
+    if command in {"joint.motion_link", "joint.gear", "joint.rack_pinion", "joint.screw", "joint.cam"}:
+        for key in ("a", "b"):
+            if key in params:
+                entity(params[key], assembly.get("joints", []), "joint")
+    if command == "contact.edit":
+        entity(params.get("set"), assembly.get("contact_sets", []), "contact set")
+    if command in {"explode.show", "explode.delete"} and params.get("view") not in {None, "none"}:
+        entity(params["view"], assembly.get("exploded", []), "exploded view")
 
 
 def _transaction(store, project, commands, actor="human", data=None):
@@ -174,6 +197,9 @@ def _quality(command, result):
         return "interference"
     if result.get("near"):
         return "below_clearance"
+    samples = result.get("samples", [])
+    if result.get("stopped_by_contact") or result.get("stopped_by_loop") or result.get("stopped_at") is not None or (isinstance(samples, list) and any(s.get("stopped_by_contact") or s.get("stopped_by_loop") for s in samples if isinstance(s, dict))):
+        return "stopped"
     if command == "motion.interference":
         return "sampled_clear"
     return "complete"
@@ -230,6 +256,10 @@ def execute(store, project, operation, payload, cancel=None) -> dict:
             for name, command in {"components": "component.list", "joints": "joint.list", "origins": "joint.inspect", "contact": "contact.list", "motion": "motion.list", "explode": "explode.list", "config": "config.table"}.items():
                 _cancel(cancel)
                 result[name] = session.execute(command)
+        explicit = [o["id"] for o in (project.native_document or {}).get("occurrences", []) if o.get("grounded")]
+        implicit = [oid for oid in result["joints"].get("fixed", []) if oid != 0 and oid not in explicit]
+        result["anchors"] = {"explicit": explicit, "implicit": implicit,
+                             "warning": "The native solver uses the first joint's A side as a temporary anchor when no explicit anchor participates; ground the intended occurrence to record engineering intent." if implicit else None}
         return {"revision": project.revision, "native_key": native_key(project), **result}
     if operation in {"query", "report", "export_bom", "export_motion"}:
         command = {"export_bom": "assembly.bom", "export_motion": "motion.export"}.get(operation, payload.get("command"))

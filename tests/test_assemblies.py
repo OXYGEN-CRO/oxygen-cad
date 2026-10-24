@@ -135,7 +135,7 @@ def test_shared_nested_independent_copies_ground_pending_undo_and_bom(assembly_s
     row = next(r for r in snapshot["rows"] if child["component"] in r["components"])
     assert row["count"] == 2
     assert sorted(row["occurrence_paths"]) == sorted([[kit["occurrence"], child["occurrence"]], [copy["occurrence"], child["occurrence"]]])
-    assert snapshot["total_occurrences"] == 6
+    assert snapshot["total_occurrences"] == 3  # flat lists leaf parts; top lists three gearbox placements
     assert assemblies.bom_snapshot(store, store.load(), {"levels": "top"})["total_occurrences"] == 3
     row_key = row["key"]
     edit(store, "component.metadata.set", component=child["component"], part_number="S-10", revision="B")
@@ -181,12 +181,16 @@ def test_floating_chains_and_conflicting_anchor_report_diagnostics(assembly_stor
     store = assembly_store
     a, b, made = pair(store)
     edit(store, "occurrence.ground", occurrence=a["occurrence"], grounded=False)
-    assert query(store, "joint.list")["floating"]
-    before = matrix(store, b["occurrence"])
-    unable = edit(store, "joint.drive", joint=made["joint"], value=8)
-    assert unable.get("reason")
-    assert matrix(store, b["occurrence"]) == before
+    assert run(store, "inspect")["anchors"]["implicit"] == [a["occurrence"]]
     edit(store, "occurrence.ground", occurrence=a["occurrence"], grounded=True)
+    pedestal = part(store, "Loose pedestal", (50, 0, 0))
+    turret = part(store, "Loose turret", (70, 0, 0))
+    floating = edit(store, "joint.as_built", name="Floating", type="revolute", a=pedestal["occurrence"], b=turret["occurrence"])
+    assert query(store, "joint.list")["floating"]
+    before = matrix(store, turret["occurrence"])
+    unable = edit(store, "joint.drive", joint=floating["joint"], value=8)
+    assert unable.get("reason")
+    assert matrix(store, turret["occurrence"]) == before
     edit(store, "joint.create", type="rigid", name="Conflicting fixed anchor", flip=True,
          a={"occurrence": 0, "point": [0, 0, 0]}, b={"occurrence": b["occurrence"], "point": [20, 0, 0]})
     listed = query(store, "joint.list")

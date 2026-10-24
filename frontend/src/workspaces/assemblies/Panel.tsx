@@ -50,6 +50,7 @@ type Summary = {
   motion?: { studies?: { id: number; name: string; steps: number }[] };
   explode?: { views?: { id: number; name: string }[] };
   config?: { rows?: { name: string }[]; active?: string };
+  anchors?: { explicit: number[]; implicit: number[]; warning?: string };
 };
 type Report = JsonObject & {
   result?: JsonObject;
@@ -196,9 +197,13 @@ export default function AssembliesPanel(props: DomainPanelProps) {
     }
   }
   async function native(command: string, params: JsonObject = {}) {
-    const reply = await props.native(command, params);
-    if (reply.result && typeof reply.result === "object")
-      setReport({ result: reply.result as JsonObject });
+    const reply = await props.runDomain("assemblies", "native", {
+      command,
+      params,
+    });
+    const result = (reply.results as unknown[] | undefined)?.[0];
+    if (result && typeof result === "object")
+      setReport({ result: result as JsonObject });
     return reply;
   }
   async function domain(operation: string, input: JsonObject = {}) {
@@ -537,6 +542,11 @@ export default function AssembliesPanel(props: DomainPanelProps) {
               mechanism. Persistent face/circle/edge origins are available in
               Advanced.
             </p>
+            {summary.anchors?.warning && (
+              <p className="assembly-anchor-warning" role="status">
+                {summary.anchors.warning}
+              </p>
+            )}
             {jointControl()}
             {joint && (
               <>

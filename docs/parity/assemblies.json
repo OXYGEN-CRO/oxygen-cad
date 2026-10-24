@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "domain": "assemblies",
+  "captured": "2026-10-24",
+  "implementation": [
+    "src/o3d/domains/assemblies.py",
+    "src/o3d/domains/assembly_models.py",
+    "frontend/src/workspaces/assemblies/Panel.tsx",
+    "frontend/src/workspaces/assemblies/operations.ts",
+    "examples/assemblies/slider.json"
+  ],
+  "architecture": "SolidCraft native_document is canonical for definitions, geometry, occurrences, origins, joints, links, contact, study keys and configuration tables. Host domain data contains review settings, named coordinate poses, constraint-set membership, lock restoration, procurement exclusions, tolerance inputs and report provenance. Domain workers return complete proposals for the Jobs owner to apply once through Store.",
+  "evidence": {
+    "backend": {
+      "command": "PYTHONPATH=src O3D_ENGINE_BINARY=<source-built oxygen bridge> .venv/bin/python -m pytest -q tests/test_assemblies.py",
+      "passed": 21,
+      "file": "tests/test_assemblies.py",
+      "engine_sha256": "26dd81814b16cc6ff49f97533cc9068a5789255bb7283013ca8a76825136abc8"
+    },
+    "frontend_build": {
+      "command": "cd frontend && npm run build",
+      "result": "passed; existing bundle size advisory"
+    },
+    "browser": {
+      "command": "O3D_BROWSER_URL=http://127.0.0.1:5191 npx playwright test tests/assemblies.spec.ts --reporter=line",
+      "passed": 1,
+      "result": "Real integrated shell, disposable native slider project. Swept stop between clear endpoints, named home persistence after browser reload, native metadata edit, BOM reconciliation and CSV download, light/dark themes, no page errors.",
+      "scope": "Desktop Chromium on Linux; no cross-platform or physical-fit inference.",
+      "screenshots": [
+        "frontend/test-results/assemblies-light.png",
+        "frontend/test-results/assemblies-dark.png"
+      ],
+      "screenshots_committed": false
+    }
+  },
+  "rows": [
+    {
+      "id": "A01",
+      "status": "implemented",
+      "workflow": "Nested definition tree with stable occurrence paths; native component creation/activation and authored geometry; shared-instance dimension propagation and independent copied definition graph.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_shared_nested_independent_copies_ground_pending_undo_and_bom"
+      },
+      "remaining": []
+    },
+    {
+      "id": "A02",
+      "status": "implemented",
+      "workflow": "Instance versus independent copy, parent/world rigid placements, pending capture/revert and Store undo/redo.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_shared_nested_independent_copies_ground_pending_undo_and_bom"
+      },
+      "remaining": []
+    },
+    {
+      "id": "A03",
+      "status": "partial",
+      "workflow": "Content-addressed .solidcraft source insertion and controlled source revision through relink preserve occurrences and transforms; embedded exact bodies reopen without reading source geometry.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_raw_design_import_integrated_edit_and_linked_source_revision"
+      },
+      "remaining": [
+        "Native designs with unresolved external link dependencies are rejected; automatic project-closure packaging remains interop work.",
+        "Linked interfaces that disappear are surfaced by native joint diagnostics, but a source-update interface-loss fixture is pending."
+      ]
+    },
+    {
+      "id": "A04",
+      "status": "partial",
+      "workflow": "Persisted parent-relative grounding, captured/pending position transactions, explicit anchor diagnostics and a warning for native implicit-anchor fallback.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_floating_chains_and_conflicting_anchor_report_diagnostics"
+      },
+      "remaining": [
+        "Separate world-pin authoring shortcut is not present; a joint against root provides a world reference.",
+        "The native solver retains its first-joint-A fallback when no explicit anchor participates; the UI discloses this rather than claiming an explicit engineering anchor."
+      ]
+    },
+    {
+      "id": "A05",
+      "status": "partial",
+      "workflow": "Native persistent face/circle/edge/point origins and attachment inspection with feature provenance; explicit stale/ambiguous occurrence guard.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_persistent_face_origins_follow_parameter_edits_and_report_lost_interface"
+      },
+      "remaining": [
+        "Executed acceptance covers planar-face parameter changes and suppressed/lost faces; hole-circle/edge, reordered topology and all ambiguous topology cases still require fixtures."
+      ]
+    },
+    {
+      "id": "A06",
+      "status": "implemented",
+      "workflow": "Seven native joint families with independently checked DOFs and permitted rigid transforms after persisted drive and reopen.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_seven_families_actual_dofs_transforms_and_reopen"
+      },
+      "remaining": []
+    },
+    {
+      "id": "A07",
+      "status": "partial",
+      "workflow": "Native parallel/perpendicular/angle/point-plane/point-line/line-plane relations and atomically created, suppressible host constraint sets.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_atomic_relation_sets_and_configuration_specific_procurement"
+      },
+      "remaining": [
+        "Fusion Center and all-faces Tangent constraints have no established native equivalent; no substitute geometry is inferred.",
+        "Offset-limit/rest behavior for every geometric relation is not established by this fixture."
+      ]
+    },
+    {
+      "id": "A08",
+      "status": "partial",
+      "workflow": "Persisted drive, multi-coordinate limits, suppression, lock/unlock with original-limit restoration, named home/rest poses, floating/conflict/reference diagnostics and revision rejection.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_limits_lock_saved_home_suppress_and_conflicts"
+      },
+      "remaining": [
+        "Rest poses are stored kinematic coordinates, not a spring/force model.",
+        "Every closed-loop lock/home combination and inconsistent transmission cycle still needs acceptance."
+      ]
+    },
+    {
+      "id": "A09",
+      "status": "implemented",
+      "workflow": "Native as-built joints and rigid groups preserve nonidentity placements; hinge drive retains group relative geometry; suppression releases intended DOFs.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_nonidentity_rigid_group_and_as_built_hinge_keep_relative_placements"
+      },
+      "remaining": []
+    },
+    {
+      "id": "A10",
+      "status": "partial",
+      "workflow": "Motion-link, gear, rack-pinion, screw and cam command editors use native coupled mechanisms. Gear/rack/screw numerical ratios are independently checked.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_gears_rack_and_screw_match_analytic_transmission_ratios"
+      },
+      "remaining": [
+        "Cam profile variants, parameter-driven recoupling and inconsistent cycles are exposed native workflows with independent acceptance still pending."
+      ]
+    },
+    {
+      "id": "A11",
+      "status": "partial",
+      "workflow": "Persisted selected/all contact sets and swept collision during drive; movement away and disabled contact work; an over-budget drive fails without committing the proposed state.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_swept_contact_stops_between_clear_endpoints_and_disabled_passes"
+      },
+      "remaining": [
+        "Executed integration includes translating and rotating blockers with clear endpoints; thin tilted plates and curved moving-body fixtures remain to be added.",
+        "No contact forces, compliance or friction are modeled."
+      ]
+    },
+    {
+      "id": "A12",
+      "status": "implemented",
+      "workflow": "All native-body pairs, exact clearance/intersection, containment, tangency, positive gap and explicit unresolved budget results; report ignores exploded/pending display offsets.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_all_pairs_overlap_exact_clearance_bom_export_and_incomplete_policy"
+      },
+      "remaining": []
+    },
+    {
+      "id": "A13",
+      "status": "partial",
+      "workflow": "Native keyed studies/playback, retained pose exports, duration-scaled kinematics, sampled interference, associative trace creation/editing and provenance-aware saved reports.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_motion_kinematics_trace_and_explode_leave_engineering_pose_unchanged"
+      },
+      "remaining": [
+        "Executed integration uses a linear slider and exact kinematic numbers; closed-loop four-bar and lead-screw trajectories still need independent acceptance.",
+        "Sampled motion interference is explicitly labeled sampled; between-sample safety comes from enabled swept contact, not an empty sampled collision list."
+      ]
+    },
+    {
+      "id": "A14",
+      "status": "implemented",
+      "workflow": "Persisted automatic/manual exploded-view definitions; display transforms do not modify canonical engineering placements; reset restores assembled display.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_motion_kinematics_trace_and_explode_leave_engineering_pose_unchanged"
+      },
+      "remaining": [
+        "Storyboard timing and rendered animation publication belong to visualization; these views are assembly presentation poses only."
+      ]
+    },
+    {
+      "id": "A15",
+      "status": "partial",
+      "workflow": "Native flat/top BOM, repeated quantities, part-number/definition grouping, kit controls, metadata and CSV; stable row keys/feature IDs/full occurrence paths for drawing associations; explicit per-configuration procurement exclusions.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_atomic_relation_sets_and_configuration_specific_procurement"
+      },
+      "remaining": [
+        "Grouped-kit children retain upstream display items and do not yet carry stable drawing association keys; default flat ungrouped BOM provides stable associations.",
+        "A configured exclusion inside a grouped kit is explicitly refused; use ungrouped BOM until native child identities are exposed.",
+        "Geometry suppression alone retains a procurement item; exclusion must be explicit."
+      ]
+    },
+    {
+      "id": "A16",
+      "status": "partial",
+      "workflow": "Saved explicit signed worst-case dimensional intervals support hole/shaft clearance and axial fastener engagement/grip arithmetic with acceptance limits; missing limits remain unresolved.",
+      "acceptance": {
+        "file": "tests/test_assemblies.py",
+        "test": "test_explicit_fit_and_fastener_stacks_missing_limits_and_invalid_inputs"
+      },
+      "remaining": [
+        "No ISO fit-class lookup or standards table, thread strength, preload, bottoming surface model or manufacturing process assumption is inferred.",
+        "Measured physical fit and supplier review remain separate validation."
+      ]
+    }
+  ],
+  "limitations": [
+    "Rows describe executed workflows and explicit gaps, not a claimed percentage of Fusion parity.",
+    "Source-link imports with unresolved external dependencies are rejected. Filesystem paths are not accepted as untrusted assembly command parameters.",
+    "Long operations are child-process jobs; engine failures and budget exhaustion remain errors/unresolved rather than passed motion or fit."
+  ]
+}

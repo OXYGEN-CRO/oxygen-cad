@@ -130,6 +130,13 @@
 .assembly-report a {
   color: var(--accent-text);
 }
+.assembly-anchor-warning {
+  color: var(--warning);
+  background: var(--warning-wash);
+  border: 1px solid var(--border-bright);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
 .assembly-report table {
   width: 100%;
   border-collapse: collapse;
