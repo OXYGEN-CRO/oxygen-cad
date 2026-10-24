@@ -29,4 +29,4 @@ if __name__ == "__main__":
         result = build(store, store.load())
         store.import_step(store.artifact(result["artifacts"]["step"]).read_bytes(), "immutable-reference.step", 1)
         build(store, store.load())
-        uvicorn.run(create_app(store.root), host="127.0.0.1", port=port)
+        uvicorn.run(create_app(store.root), host=os.environ.get("O3D_PLATFORM_TEST_HOST", "127.0.0.1"), port=port)

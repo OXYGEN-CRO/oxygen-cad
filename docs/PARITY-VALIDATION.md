@@ -46,6 +46,11 @@ Assembly acceptance is seeded with `examples/assemblies/slider.json`. Specs that
 generate native source files invoke the image's engine through a short-lived
 helper container with their generated fixture working directory mounted. The
 native-scene 10/1000 occurrence browser check is explicitly enabled in both modes.
+Platform lifecycle acceptance uses `tests/platform_browser_server.py`: its own
+temporary project catalog, real imported STEP reference, and child projects are
+removed together. The runner explicitly enables that test in both modes. Docker
+binds this API to container port 9371 and publishes only the selected loopback
+host port; native mode uses `O3D_PLATFORM_TEST_PORT`.
 The CI workflow runs these commands, preserves browser evidence, packages the
 tested runtime, and retains the Apple Silicon build, ad-hoc signing, and archive
 jobs. The independent parts-catalog workflow is unchanged.

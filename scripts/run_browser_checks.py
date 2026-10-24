@@ -71,7 +71,7 @@ def prepare_fixture(base: str, alive, timeout: int, template: Path | None) -> No
 
 
 @contextmanager
-def fixture(args, directory: Path, env: dict[str, str], template: Path | None):
+def fixture(args, directory: Path, env: dict[str, str], template: Path | None, platform: bool):
     port = available_port(args.port)
     base = f"http://127.0.0.1:{port}"
     process = None
@@ -80,10 +80,13 @@ def fixture(args, directory: Path, env: dict[str, str], template: Path | None):
     with (directory / "fixture.log").open("w") as log:
         try:
             if args.mode == "docker":
+                container_port = 9371 if platform else 8787
+                platform_command = ["python", "tests/platform_browser_server.py"] if platform else []
+                platform_env = ["-e", "O3D_PLATFORM_TEST_HOST=0.0.0.0", "-e", "O3D_PLATFORM_TEST_PORT=9371"] if platform else []
                 subprocess.run(
                     docker + ["run", "--rm", "-d", "--name", name,
-                              "-p", f"127.0.0.1:{port}:8787", "--tmpfs", "/projects:rw,nosuid,nodev",
-                              args.image],
+                              "-p", f"127.0.0.1:{port}:{container_port}", "--tmpfs", "/projects:rw,nosuid,nodev"]
+                    + platform_env + [args.image] + platform_command,
                     check=True, stdout=log, stderr=subprocess.STDOUT,
                 )
                 alive = lambda: subprocess.run(
@@ -91,9 +94,11 @@ def fixture(args, directory: Path, env: dict[str, str], template: Path | None):
                     capture_output=True, text=True,
                 ).stdout.strip() == "true"
             else:
-                fixture_env = env | {"O3D_TEST_PORT": str(port)}
+                fixture_env = env | {"O3D_TEST_PORT": str(port), "O3D_PLATFORM_TEST_PORT": str(port),
+                                     "O3D_PLATFORM_TEST_HOST": "127.0.0.1"}
+                server = ROOT / ("tests/platform_browser_server.py" if platform else "scripts/test_server.py")
                 process = subprocess.Popen(
-                    [str(args.python), str(ROOT / "scripts/test_server.py")],
+                    [str(args.python), str(server)],
                     cwd=ROOT, env=fixture_env, stdout=log, stderr=subprocess.STDOUT,
                     start_new_session=True,
                 )
@@ -176,13 +181,15 @@ def main() -> int:
             result = {"spec": spec, "mode": args.mode, "status": "failed"}
             try:
                 template = ROOT / "examples/assemblies/slider.json" if spec == "assemblies.spec.ts" else None
-                with fixture(args, directory, env, template) as base:
+                platform = spec == "platform-lifecycle.spec.ts"
+                with fixture(args, directory, env, template, platform) as base:
                     result["fixture_url"] = base
                     browser_env = env | {
                         "O3D_BROWSER_URL": base,
                         "O3D_BROWSER_DISPOSABLE": "1",
                         "O3D_BROWSER_EVIDENCE": str(directory / "artifacts"),
                         "O3D_TEST_PORT": base.rsplit(":", 1)[1],
+                        "O3D_PLATFORM_BROWSER_FIXTURE": "1" if platform else "",
                     }
                     if args.mode == "docker":
                         # Some specs generate native source files outside the API.
