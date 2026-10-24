@@ -1,6 +1,7 @@
 """Measured exchange/preparation workflows using disposable project assets."""
 import base64
 import hashlib
+import json
 import threading
 
 import numpy as np
@@ -280,3 +281,107 @@ def test_svg_declared_physical_dimensions_are_not_scaled_twice(store):
         "sketch": result["result"]["native"]["sketch"], "distance": "5 mm"}, store=store)
     apply_result(store, {"changed": True, "project": proposal.model_dump(mode="json")})
     assert measure(store)["total"]["volume_mm3"] == pytest.approx(25.4 * 50.8 * 5)
+
+
+def test_surface_revolve_offset_and_cylinder_construction_references(store):
+    from o3d.native_document import prepare_native_command, query_native
+    project = store.load()
+    commands = [
+        ("sketch.create", {"name": "Generator", "plane": "XY"}),
+        ("sketch.line", {"points": [[10, 0], [10, 20]]}),
+        ("sketch.finish", {}),
+        ("surface.revolve", {"sketch": "Generator", "curves": ["l1"], "axis": "Y", "body_name": "Tube"}),
+        ("surface.offset", {"body": "Tube", "faces": [[10, 10, 0]], "distance": "2 mm", "chain": True, "body_name": "Offset tube"}),
+        ("construct.axis.through_cylinder", {"face": {"face": [10, 10, 0]}, "name": "Tube axis"}),
+        ("construct.point.center", {"of": {"edge": [0, 20, 10]}, "name": "Rim center"}),
+    ]
+    for command, params in commands:
+        project, _ = prepare_native_command(project, command, params, store=store)
+    apply_result(store, {"changed": True, "project": project.model_dump(mode="json")})
+    result = measure(store)
+    tube = next(body for body in result["bodies"] if body["name"] == "Tube")
+    offset = next(body for body in result["bodies"] if body["name"] == "Offset tube")
+    assert tube["area_mm2"] == pytest.approx(2 * np.pi * 10 * 20, rel=1e-4)
+    assert offset["area_mm2"] == pytest.approx(2 * np.pi * 12 * 20, rel=1e-4)
+    assert np.subtract(offset["bbox"]["max"], offset["bbox"]["min"]) == pytest.approx([24, 20, 24])
+    doc = query_native(store.load(), "document.inspect", {}, store=store)
+    assert any(feature["name"] == "Tube axis" for feature in doc["timeline"])
+    assert any(feature["name"] == "Rim center" for feature in doc["timeline"])
+    # Native display measurements are tessellated; verify exact exported B-rep area independently.
+    exported = interop.execute(store, store.load(), "export", {"format": "step"})
+    import build123d as bd
+    shape = bd.import_step(store.artifact(exported["artifact"]))
+    assert shape.area == pytest.approx(2 * np.pi * (10 + 12) * 20, rel=1e-6)
+
+
+def test_surface_sweep_loft_and_path_plane_are_real_persisted_features(store):
+    from o3d.native_document import prepare_native_command, query_native
+    project = store.load()
+    commands = [
+        ("sketch.create", {"name": "Section A", "plane": "XY"}),
+        ("sketch.line", {"points": [[0, 0], [10, 0]]}),
+        ("sketch.finish", {}),
+        ("sketch.create", {"name": "Path", "plane": "YZ"}),
+        ("sketch.line", {"points": [[0, 0], [0, 20]]}),
+        ("sketch.finish", {}),
+        ("surface.sweep", {"sketch": "Section A", "curves": ["l1"], "path_sketch": "Path", "path": ["l1"], "body_name": "Swept"}),
+        ("construct.plane.along_path", {"path": {"sketch": "Path", "curve": "l1"}, "t": 0.5, "name": "Path midpoint"}),
+        ("sketch.create", {"name": "Section B", "plane": "Path midpoint"}),
+        ("sketch.line", {"points": [[0, 0], [10, 0]]}),
+        ("sketch.finish", {}),
+        ("surface.loft", {"sections": [{"sketch": "Section A", "curves": ["l1"]}, {"sketch": "Section B", "curves": ["l1"]}], "body_name": "Lofted"}),
+    ]
+    for command, params in commands:
+        project, _ = prepare_native_command(project, command, params, store=store)
+    apply_result(store, {"changed": True, "project": project.model_dump(mode="json")})
+    result = measure(Store(store.root))
+    swept = next(body for body in result["bodies"] if body["name"] == "Swept")
+    lofted = next(body for body in result["bodies"] if body["name"] == "Lofted")
+    assert swept["area_mm2"] == pytest.approx(200, rel=1e-6)
+    assert lofted["area_mm2"] > 0
+    # The named path-normal plane is truly at its reference curve's midpoint.
+    doc = query_native(store.load(), "sketch.inspect", {"sketch": "Section B"}, store=store)
+    assert doc["plane"]["origin"][2] == pytest.approx(10)
+    exported = interop.execute(store, store.load(), "export", {"format": "step"})
+    import build123d as bd
+    shape = bd.import_step(store.artifact(exported["artifact"]))
+    assert shape.is_valid
+    assert shape.area == pytest.approx(swept["area_mm2"] + lofted["area_mm2"], rel=1e-3)
+
+
+@pytest.mark.parametrize("extension", ["solidcraft", "json"])
+def test_native_design_upload_register_and_link_through_supported_adapter(store, extension):
+    from o3d.native import NativeSession
+    path = store.root / f"fixture.{extension}"
+    with NativeSession() as session:
+        session.execute("solid.box", {"length": 10, "width": 20, "height": 30})
+        session.execute("file.save_as", {"path": str(path)})
+    content = path.read_bytes()
+    registered = interop.execute(store, store.load(), "import", {
+        "name": f"part.{extension}", "content_base64": base64.b64encode(content).decode(),
+        "units": "file", "register_only": True})
+    assert registered["result"]["registered"]
+    assert registered["project"]["native_document"] is None
+    apply_result(store, registered)
+    asset_id = registered["result"]["asset"]["id"]
+    inserted = interop.execute(store, store.load(), "insert_asset", {"asset_id": asset_id})
+    apply_result(store, inserted)
+    assert inserted["result"]["native"]["component"]
+    assert measure(Store(store.root))["total"]["volume_mm3"] == pytest.approx(6000)
+    # Persisted links use portable immutable asset paths, never host paths.
+    assert all(link["path"].startswith("assets/") for link in store.load().native_document["links"].values())
+    assert interop._asset_path(store, interop._find_asset(store.load(), asset_id)).read_bytes() == content
+
+
+def test_native_upload_refuses_external_links_before_source_registration(store):
+    from o3d.native import NativeSession
+    with NativeSession() as session:
+        session.execute("solid.box", {"length": 1, "width": 2, "height": 3})
+        document = session.execute("oxygen.document.get")["document"]
+    document["links"] = {"1": {"path": "/outside/untrusted.solidcraft", "feature": 1}}
+    with pytest.raises(ValueError, match="external link dependencies"):
+        interop.execute(store, store.load(), "import", {
+            "name": "linked.json", "content_base64": base64.b64encode(json.dumps(document).encode()).decode(),
+            "units": "file", "register_only": True})
+    assert store.load().revision == 1
+    assert "interop" not in store.load().domains

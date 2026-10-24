@@ -12,3 +12,5 @@
 
 .interop-native-fields { display: grid; gap: 10px; }
 .interop-native-fields summary { font-size: 12px; cursor: pointer; margin-bottom: 6px; }
+
+.interop-panel .interop-checkbox { display: flex; align-items: center; gap: 8px; }

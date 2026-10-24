@@ -13,7 +13,7 @@
   },
   "validation": {
     "tests": "tests/test_interop.py",
-    "executed": "13 passed with the source-built native bridge",
+    "executed": "18 passed with the source-built native bridge",
     "frontend": "npm ci and npm run build passed",
     "browser": "Integrated Playwright acceptance: 2 tests passed against a disposable project and real API. Verified UI inch-STL import, diagnostics, OBJ export/reopen, construction midplane with DXF import, native patch/trim/thicken, undo/redo and cold reopen; no page or console errors. Tests: frontend/tests/interop.spec.ts",
     "platform": "Linux only"
@@ -23,14 +23,21 @@
       "id": "MOD-006",
       "status": "partial",
       "implemented": "DXF and SVG immutable sources become actual editable native sketch curves. DXF declared units and overrides are handled relative to the native reader's conversion; SVG physical dimensions use its native unit conversion.",
-      "tests": ["test_dxf_inches_to_editable_sketch_extrude_export_and_reopen", "test_svg_declared_physical_dimensions_are_not_scaled_twice"],
+      "tests": [
+        "test_dxf_inches_to_editable_sketch_extrude_export_and_reopen",
+        "test_svg_declared_physical_dimensions_are_not_scaled_twice"
+      ],
       "remaining": "Calibrated raster reference imagery and text authoring are outside this panel. Large drawing text is subject to the native command payload limit."
     },
     {
       "id": "MOD-007",
       "status": "bounded_workflow_passed",
       "implemented": "Named offset/angled/mid/three-point/tangent/path/perpendicular planes, axes and points use actual native reference features. Primary controls expose fields and nested reference editors, with additional native options available.",
-      "tests": ["test_surface_trim_thicken_and_construction_persist"],
+      "tests": [
+        "test_surface_trim_thicken_and_construction_persist",
+        "test_surface_revolve_offset_and_cylinder_construction_references",
+        "test_surface_sweep_loft_and_path_plane_are_real_persisted_features"
+      ],
       "measured": "Changing an offset plane from 10 to 20 mm moves its dependent midplane sketch and trimmed/thickened solid from Z=5 to Z=10 while retaining 280 mm^3 solid volume.",
       "remaining": "Not every geometric reference variant has a dedicated acceptance case; no general user-coordinate-system parity is claimed."
     },
@@ -38,29 +45,42 @@
       "id": "MOD-017",
       "status": "bounded_workflow_passed",
       "implemented": "Sixteen native surface operations are exposed with per-tool controls: patch, extrude, revolve, sweep, loft, offset, ruled, blend, trim, stitch, thicken, extend, untrim, unstitch, reverse normals and B-spline fairing.",
-      "tests": ["test_surface_trim_thicken_and_construction_persist", "test_surface_stitch_closes_shell_with_measured_volume"],
-      "measured": "A trimmed 7 by 20 mm patch thickens to a 280 mm^3 solid. Extruded rectangle walls and two caps stitch to one 600 mm^3 solid.",
+      "tests": [
+        "test_surface_trim_thicken_and_construction_persist",
+        "test_surface_stitch_closes_shell_with_measured_volume",
+        "test_surface_revolve_offset_and_cylinder_construction_references",
+        "test_surface_sweep_loft_and_path_plane_are_real_persisted_features"
+      ],
+      "measured": "A trimmed 7 by 20 mm patch thickens to a 280 mm^3 solid. Extruded rectangle walls and two caps stitch to one 600 mm^3 solid. A radius-10 mm cylindrical surface offsets its smooth chain to radius 12 mm with independently checked STEP area. Native sweep/loft and a plane at the path midpoint persist and independently export valid surface B-rep.",
       "remaining": "Advanced loft/blend continuity combinations and nonlinear fairing require broader acceptance. Surface fillet is explicitly unavailable because the upstream handler is planned."
     },
     {
       "id": "MOD-018",
       "status": "partial",
       "implemented": "Native trim/stitch and their companion repair operations persist in the canonical document. OCCT STEP diagnostics and tolerance-bounded ShapeFix healing produce an explicitly separate derived import, preserving the original source.",
-      "tests": ["test_surface_stitch_closes_shell_with_measured_volume", "test_step_import_healing_and_native_followup_edit"],
+      "tests": [
+        "test_surface_stitch_closes_shell_with_measured_volume",
+        "test_step_import_healing_and_native_followup_edit"
+      ],
       "remaining": "Healing acceptance uses a valid manufactured fixture; this does not establish automatic repair of arbitrary corrupt CAD or missing geometry. Gap visualization and automatic repair suggestions are not implemented."
     },
     {
       "id": "MOD-019",
       "status": "unavailable",
       "implemented": "The UI and capability query state the exact limitation and enable no fake Form operation.",
-      "tests": ["test_cancelled_operation_and_unavailable_form_are_explicit"],
+      "tests": [
+        "test_cancelled_operation_and_unavailable_form_are_explicit"
+      ],
       "remaining": "The pinned engine provides no persisted Form control-cage editing or general T-spline-to-B-rep command workflow. Low-level T-spline code and B-spline fairing are insufficient to claim this family."
     },
     {
       "id": "MOD-020",
       "status": "bounded_workflow_passed",
       "implemented": "STL/OBJ native mesh bodies retain source provenance and explicit source units. Derived normalized sources retain the original bytes. Native bodies export as STL/OBJ; actual mesh-plane intersections export as unit-declared 3D DXF lines.",
-      "tests": ["test_inch_stl_import_native_reopen_and_obj_roundtrip", "test_mesh_worker_edits_and_section_keep_source_immutable"],
+      "tests": [
+        "test_inch_stl_import_native_reopen_and_obj_roundtrip",
+        "test_mesh_worker_edits_and_section_keep_source_immutable"
+      ],
       "measured": "A 1 by 2 by 3 inch STL reopens with 25.4 by 50.8 by 76.2 mm bounds, survives OBJ re-import and undoes correctly.",
       "remaining": "Section DXF is an exchange artifact, not an associative section-sketch feature. This upload adapter does not yet expose 3MF/glTF."
     },
@@ -68,23 +88,36 @@
       "id": "MOD-021",
       "status": "partial",
       "implemented": "Actual mesh diagnostics, duplicate/degenerate triangle cleanup, winding repair, triangle/quad hole filling, transforms, subdivision, vertex-clustering reduction, Laplacian smoothing, open plane cuts and native mechanical reconstruction are available. Diagnostics report boundaries, nonmanifold edges, winding, component count, bounds and volume only for valid volume meshes.",
-      "tests": ["test_mesh_topology_repair_reports_real_boundary_change", "test_mesh_cluster_smooth_and_open_cut_report_measured_changes", "test_mesh_convert_closed_mechanical_shape_and_reject_open_source"],
+      "tests": [
+        "test_mesh_topology_repair_reports_real_boundary_change",
+        "test_mesh_cluster_smooth_and_open_cut_report_measured_changes",
+        "test_mesh_convert_closed_mechanical_shape_and_reject_open_source"
+      ],
       "measured": "A missing triangle is repaired to a watertight 6000 mm^3 box. A closed box mesh reconstructs six editable planar faces and STEP export; an open mesh is rejected. Reduction reports measured vertex displacement and topology; cuts report their remaining open boundary.",
       "remaining": "No general remeshing, self-intersection repair, arbitrary organic reconstruction, face-group editor, mesh Boolean or capped plane-cut parity. Clustering can change topology, smoothing can shrink shape, and each limitation is reported."
     },
     {
       "id": "MOD-026",
       "status": "bounded_workflow_passed",
-      "implemented": "STEP imports become editable native base bodies with immutable source hashes. Source B-rep diagnostics and derived healing preserve original file bytes and unit meaning.",
-      "tests": ["test_step_import_healing_and_native_followup_edit", "test_asset_hash_scope_and_missing_source_units"],
+      "implemented": "STEP imports become editable native base bodies with immutable source hashes. Source B-rep diagnostics and derived healing preserve original file bytes and unit meaning. Native .solidcraft and native JSON uploads are parsed by the real engine, hash-registered for assembly reuse or inserted as linked components. External source links are rejected before registration.",
+      "tests": [
+        "test_step_import_healing_and_native_followup_edit",
+        "test_asset_hash_scope_and_missing_source_units",
+        "test_native_design_upload_register_and_link_through_supported_adapter",
+        "test_native_upload_refuses_external_links_before_source_registration"
+      ],
       "measured": "A 6000 mm^3 imported STEP box accepts a 1 mm open-top native shell edit, yielding 1824 mm^3, while the immutable source remains 6000 mm^3.",
       "remaining": "This adapter exposes STEP rather than every proprietary/native CAD translator. Corrupt topology families need additional fixtures."
     },
     {
       "id": "MOD-027",
       "status": "bounded_workflow_passed",
-      "implemented": "Current native STEP/STL/OBJ/native JSON and editable sketch DXF export to cache-scoped artifacts with byte counts and hashes. No project-controlled output path reaches the filesystem.",
-      "tests": ["test_inch_stl_import_native_reopen_and_obj_roundtrip", "test_dxf_inches_to_editable_sketch_extrude_export_and_reopen", "test_mesh_convert_closed_mechanical_shape_and_reject_open_source"],
+      "implemented": "Current native STEP/STL/OBJ/native JSON and editable sketch DXF export to cache-scoped artifacts with byte counts and hashes. No project-controlled output path reaches the filesystem. Native JSON is accepted again through the same validated immutable-source adapter.",
+      "tests": [
+        "test_inch_stl_import_native_reopen_and_obj_roundtrip",
+        "test_dxf_inches_to_editable_sketch_extrude_export_and_reopen",
+        "test_mesh_convert_closed_mechanical_shape_and_reject_open_source"
+      ],
       "remaining": "Native JSON is not a complete portable archive for separately linked assets. Platform package export owns that workflow."
     }
   ],

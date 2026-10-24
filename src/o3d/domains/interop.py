@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_SOURCE_BYTES = 50 * 1024 * 1024
 UNIT_SCALE = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "ft": 304.8}
-EXTENSIONS = {"step", "stp", "stl", "obj", "dxf", "svg"}
+EXTENSIONS = {"step", "stp", "stl", "obj", "dxf", "svg", "solidcraft", "json"}
 
 
 class Asset(BaseModel):
@@ -27,7 +27,7 @@ class Asset(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     file: str
-    format: Literal["step", "stp", "stl", "obj", "dxf", "svg"]
+    format: Literal["step", "stp", "stl", "obj", "dxf", "svg", "solidcraft", "json"]
     source_units: Literal["mm", "cm", "m", "in", "ft", "file"] = "mm"
     scale_to_mm: float = Field(default=1, gt=0)
     source_asset: str | None = None
@@ -95,7 +95,7 @@ def _put_asset(store, content: bytes, name: str, extension: str, **metadata) -> 
     if not content or len(content) > MAX_SOURCE_BYTES:
         raise ValueError("Source must contain 1 byte to 50 MiB")
     if extension not in EXTENSIONS:
-        raise ValueError("Supported exchange formats: STEP, STL, OBJ, DXF and SVG")
+        raise ValueError("Supported exchange formats: STEP, STL, OBJ, DXF, SVG and native designs")
     digest = hashlib.sha256(content).hexdigest()
     asset = Asset(id=f"asset_{digest[:24]}", name=Path(name).name, sha256=digest,
                   file=f"assets/{digest}.{extension}", format=extension, **metadata)
@@ -205,7 +205,9 @@ def _drawing_scale(text, declared):
 def _import_asset(store, project, asset, payload, cancel=None):
     _check_cancel(cancel)
     project = _with_assets(project, asset)
-    if asset.format in {"step", "stp"}:
+    if asset.format in {"solidcraft", "json"}:
+        project, result = _native(project, store, "component.insert_design", {"asset_id": asset.id, "name": asset.name, "reuse": bool(payload.get("reuse", False))})
+    elif asset.format in {"step", "stp"}:
         project, result = _native(project, store, "file.insert_step", {"asset_id": asset.id, "name": asset.name,
                                           "up": payload.get("up", "z"), "names": payload.get("names", "auto")})
     elif asset.format in {"stl", "obj"}:
@@ -239,7 +241,7 @@ def _upload(store, project, payload, cancel):
     name = Path(str(payload.get("name", ""))).name
     extension = name.rsplit(".", 1)[-1].lower()
     if extension not in EXTENSIONS:
-        raise ValueError("Choose a STEP, STL, OBJ, DXF or SVG file")
+        raise ValueError("Choose a STEP, STL, OBJ, DXF, SVG or native .solidcraft/.json design")
     encoded = payload.get("content_base64", "")
     if not isinstance(encoded, str) or len(encoded) > MAX_SOURCE_BYTES * 4 // 3 + 8:
         raise ValueError("Source exceeds the 50 MiB upload limit")
@@ -247,10 +249,27 @@ def _upload(store, project, payload, cancel):
         content = base64.b64decode(encoded, validate=True)
     except (ValueError, TypeError) as error:
         raise ValueError("Invalid base64 source content") from error
-    units = payload.get("units", "file" if extension in {"step", "stp", "dxf", "svg"} else "mm")
+    units = payload.get("units", "file" if extension in {"step", "stp", "dxf", "svg", "solidcraft", "json"} else "mm")
     if units not in {*UNIT_SCALE, "file"}:
         raise ValueError("Choose mm, cm, m, in, ft or declared file units")
-    if extension in {"step", "stp"}:
+    if extension in {"solidcraft", "json"}:
+        if units != "file":
+            raise ValueError("Native designs retain their declared dimensions; choose declared file units")
+        source = _put_asset(store, content, name, extension, source_units="file")
+        # Validate the real upstream document before the asset can be registered
+        # or inserted. Sources with unresolved external links are refused first.
+        from ..native_document import _check_imported_design
+        from ..native import NativeSession
+        path = _asset_path(store, source)
+        _check_imported_design(path)
+        with NativeSession() as session:
+            session.execute("doc.open", {"path": str(path)})
+            document = session.execute("oxygen.document.get")["document"]
+        if payload.get("register_only", False):
+            project = _with_assets(project, source)
+            return _proposal(project, {"asset": source.model_dump(mode="json"), "registered": True,
+                                      "native_source": {"name": document.get("name"), "features": len(document.get("features", []))}})
+    elif extension in {"step", "stp"}:
         if not content.lstrip().startswith(b"ISO-10303-21;"):
             raise ValueError("Expected an ISO-10303-21 STEP exchange file")
         if units != "file":

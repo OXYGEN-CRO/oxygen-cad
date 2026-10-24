@@ -11,7 +11,7 @@ const surfaceTools: Tool[] = [
   { command: "surface.revolve", label: "Revolve surface", params: { sketch: "Outline", axis: "Y", angle: "360 deg", body_name: "Revolved" }, hint: "Revolve a curve chain about a world, sketch or construction axis." },
   { command: "surface.sweep", label: "Sweep surface", params: { sketch: "Outline", path_sketch: "Path", path: ["l1"], body_name: "Swept" }, hint: "Sweep an open or closed chain; the native engine validates the path and orientation." },
   { command: "surface.loft", label: "Loft surface", params: { sections: [{ sketch: "Section A" }, { sketch: "Section B" }], body_name: "Lofted" }, hint: "Loft two or more section chains. Advanced end continuity and guide rails are native parameters." },
-  { command: "surface.offset", label: "Offset faces", params: { body: "Body", faces: [[5, 5, 10]], distance: "1 mm" }, hint: "Pick faces by point. Analytic planes/cylinders offset exactly; other surfaces may be fitted." },
+  { command: "surface.offset", label: "Offset faces", params: { body: "Body", faces: [[5, 5, 10]], distance: "1 mm", chain: true }, hint: "Pick faces by point. Analytic planes/cylinders offset exactly; other surfaces may be fitted." },
   { command: "surface.ruled", label: "Ruled surface", params: { body: "Body", edges: [[5, 0, 10]], distance: "5 mm", mode: "tangent" }, hint: "Create a strip from a boundary chain with normal, tangent, angle or direction control." },
   { command: "surface.blend", label: "Blend boundaries", params: { from: { body: "First", edges: [[5, 0, 0]] }, to: { body: "Second", edges: [[5, 10, 5]] }, continuity: ["g1", "g1"] }, hint: "Connect two boundary chains. The engine diagnoses invalid continuity or references." },
   { command: "surface.trim", label: "Trim surface", params: { body: "Sheet", plane: { origin: [5, 0, 0], normal: [1, 0, 0] }, keep: [8, 5, 0] }, hint: "Keep the region containing the supplied point. Supports planes, faces, sketch curves and mutual trim." },
@@ -77,6 +77,7 @@ export default function InteropPanel(props: DomainPanelProps) {
   const [result, setResult] = useState<JsonObject | null>(null);
   const [units, setUnits] = useState("file");
   const [importPlane, setImportPlane] = useState("XY");
+  const [registerOnly, setRegisterOnly] = useState(false);
   const [assetId, setAssetId] = useState("");
   const [format, setFormat] = useState("step");
   const [sketch, setSketch] = useState("");
@@ -110,7 +111,7 @@ export default function InteropPanel(props: DomainPanelProps) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-    await run("import", { name: file.name, content_base64: btoa(binary), units, plane: importPlane });
+    await run("import", { name: file.name, content_base64: btoa(binary), units, plane: importPlane, register_only: registerOnly });
   };
   const tools = tab === "construction" ? constructionTools : surfaceTools;
   const selectedTool = tools[selected] ?? tools[0];
@@ -123,13 +124,14 @@ export default function InteropPanel(props: DomainPanelProps) {
     </div>
     {tab === "exchange" && <>
       <h3>Import editable geometry</h3>
-      <p>STEP becomes native B-rep bodies. STL and OBJ become mesh bodies. DXF and SVG become editable sketch curves. Source files remain immutable.</p>
+      <p>STEP becomes native B-rep bodies. STL and OBJ become mesh bodies. DXF and SVG become editable sketch curves. Native .solidcraft and native JSON designs become linked components. Source files remain immutable.</p>
       <label>Source units<SelectControl aria-label="Source units" value={units} onChange={e => setUnits(e.target.value)}>
-        <option value="file">Declared file units (STEP / DXF / SVG)</option><option value="mm">Millimetres</option><option value="cm">Centimetres</option><option value="m">Metres</option><option value="in">Inches</option><option value="ft">Feet</option>
+        <option value="file">Declared file units (CAD / drawings)</option><option value="mm">Millimetres</option><option value="cm">Centimetres</option><option value="m">Metres</option><option value="in">Inches</option><option value="ft">Feet</option>
       </SelectControl></label>
       <label>Sketch import plane<Input aria-label="Sketch import plane" value={importPlane} onChange={e => setImportPlane(e.target.value)} placeholder="XY or a construction plane name" /></label>
       <p>DXF and SVG use this plane. Choose an origin plane or a named construction reference.</p>
-      <label>Import file<Input aria-label="Import exchange file" type="file" accept=".step,.stp,.stl,.obj,.dxf,.svg" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} /></label>
+      <label className="interop-checkbox"><input aria-label="Register native source only" type="checkbox" checked={registerOnly} onChange={e => setRegisterOnly(e.target.checked)} />Register native source only, for later assembly insertion or relinking</label>
+      <label>Import file<Input aria-label="Import exchange file" type="file" accept=".step,.stp,.stl,.obj,.dxf,.svg,.solidcraft,.json" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} /></label>
       <h3>Export current native document</h3>
       <label>Format<SelectControl aria-label="Export format" value={format} onChange={e => setFormat(e.target.value)}>
         <option value="step">STEP</option><option value="stl">STL</option><option value="obj">OBJ</option><option value="dxf">Sketch DXF</option><option value="json">Native JSON</option>
