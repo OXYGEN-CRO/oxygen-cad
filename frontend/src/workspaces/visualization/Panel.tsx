@@ -68,6 +68,7 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       : null;
   const cameraRef = useRef<CameraState | null>(null);
   const activeOperations = useRef(0);
+  const submittedSnapshots = useRef(new Set<string>());
   const run = async (operation: string, input: JsonObject = {}) =>
     props.runDomain("visualization", operation, input);
   const act = async (fn: () => Promise<void>) => {
@@ -103,12 +104,30 @@ export default function VisualizationPanel(props: DomainPanelProps) {
       ),
     }));
   const save = async () => {
-    await props.saveDomain("visualization", data as unknown as JsonObject);
+    const submitted = stableJson(data);
+    // A real save may commit before its response/refresh reaches the editor.
+    // Remember that exact snapshot so its acknowledgement cannot erase edits
+    // made while the transaction was in flight. Unchanged saves need no entry.
+    if (submitted !== stableJson(props.domainData))
+      submittedSnapshots.current.add(submitted);
+    try {
+      await props.saveDomain("visualization", data as unknown as JsonObject);
+    } catch (error) {
+      submittedSnapshots.current.delete(submitted);
+      throw error;
+    }
     setStatus("Scene and storyboards saved");
   };
   const persistedData = stableJson(props.domainData);
   useEffect(() => {
-    setData(persistedData !== "{}" ? JSON.parse(persistedData) : dataDefault());
+    const ownAcknowledgement = submittedSnapshots.current.delete(persistedData);
+    setData((current) =>
+      ownAcknowledgement && stableJson(current) !== persistedData
+        ? current
+        : persistedData !== "{}"
+          ? JSON.parse(persistedData)
+          : dataDefault(),
+    );
   }, [persistedData]);
   useEffect(() => {
     let alive = true;

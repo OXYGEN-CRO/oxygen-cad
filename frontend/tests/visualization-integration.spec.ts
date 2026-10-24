@@ -2,6 +2,113 @@ import { test, expect } from "@playwright/test";
 import { dataDefault } from "../src/workspaces/visualization/scene";
 test.use({ actionTimeout: 15000 });
 
+test("post-save draft edits survive delayed real save acknowledgements and still undo correctly", async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    process.env.O3D_VISUALIZATION_INTEGRATION !== "1",
+    "Requires the integrated domain shell and disposable fixture",
+  );
+  test.setTimeout(60000);
+  const original = await (await request.get("/api/project")).json();
+  expect(original.name).toBe("Visualization browser fixture");
+  await page.goto("/");
+  await page
+    .getByLabel("Workspace", { exact: true })
+    .selectOption("visualization");
+  const panel = page.getByRole("region", { name: "Visualization workspace" });
+  const save = panel.getByRole("button", { name: "Save scene", exact: true });
+  const width = panel.getByLabel("Render width", { exact: true });
+  await expect(save).toBeEnabled({ timeout: 30000 });
+  await panel
+    .getByLabel("Scene name", { exact: true })
+    .fill(`Acknowledged scene ${original.revision}`);
+  await width.fill("128");
+  let release!: () => void, committed!: () => void;
+  const acknowledgement = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const transactionCommitted = new Promise<void>((resolve) => {
+    committed = resolve;
+  });
+  let holding = true;
+  // Delay only delivery: every request reaches the actual API/Store, and every
+  // fulfilled response is the real server response. Polling is held too so the
+  // editor definitely receives the save acknowledgement after the newer edit.
+  await page.route("**/api/state", async (route) => {
+    const response = await route.fetch();
+    if (holding) await acknowledgement;
+    await route.fulfill({ response });
+  });
+  await page.route("**/api/domains/visualization", async (route) => {
+    if (route.request().method() !== "PUT" || !holding) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    committed();
+    await acknowledgement;
+    await route.fulfill({ response });
+  });
+  try {
+    await save.click();
+    await transactionCommitted;
+    expect(
+      (await (await request.get("/api/project")).json()).domains.visualization
+        .scenes[0].width,
+    ).toBe(128);
+    await width.fill("160");
+  } finally {
+    holding = false;
+    release();
+  }
+  await expect(save).toBeEnabled({ timeout: 30000 });
+  await page.waitForTimeout(1900);
+  await expect(width).toHaveValue("160");
+  expect(
+    (await (await request.get("/api/project")).json()).domains.visualization
+      .scenes[0].width,
+  ).toBe(128);
+  await save.click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get("/api/project")).json()).domains.visualization
+          .scenes[0].width,
+    )
+    .toBe(160);
+  await expect(save).toBeEnabled({ timeout: 30000 });
+  // An unchanged save must not leave a pending entry that swallows a later redo.
+  const beforeNoop = (await (await request.get("/api/project")).json())
+    .revision;
+  await save.click();
+  await expect
+    .poll(
+      async () => (await (await request.get("/api/project")).json()).revision,
+    )
+    .toBeGreaterThan(beforeNoop);
+  await expect(save).toBeEnabled({ timeout: 30000 });
+  await page
+    .getByRole("button", { name: "Project tools", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Undo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Project tools", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Undo", exact: true }).click();
+  await expect(width).toHaveValue("128");
+  await page
+    .getByRole("button", { name: "Project tools", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Redo", exact: true }).click();
+  await expect(width).toHaveValue("160");
+  const final = await (await request.get("/api/project")).json();
+  expect(final.features).toEqual(original.features);
+  expect(final.material).toEqual(original.material);
+});
+
 test("integrated Render workspace saves drafts, renders through real jobs, reopens, undoes and publishes", async ({
   page,
   request,
