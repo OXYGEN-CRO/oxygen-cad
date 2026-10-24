@@ -1,5 +1,84 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+
+async function openTool(page: Page, name: string) {
+  await page
+    .getByRole("button", { name: "Project tools", exact: true })
+    .click();
+  await page.getByRole("button", { name, exact: true }).click();
+}
+
+test("minimal studio keeps editing tools accessible across screen sizes", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const before = await (await request.get("/api/project")).json();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator(".right-panel")).toHaveCount(0);
+  await expect(page.locator(".verification-panel")).toHaveCount(0);
+  const viewport = await page.locator("canvas").boundingBox();
+  expect(viewport!.width * viewport!.height).toBeGreaterThan(1512 * 982 * 0.7);
+  for (const width of [320, 390, 768, 1024, 1512]) {
+    await page.setViewportSize({ width, height: 982 });
+    for (const view of ["Design", "Verify", "History", "Source"]) {
+      if (["Design", "Verify"].includes(view)) {
+        const tab = page.getByRole("button", { name: view, exact: true });
+        await tab.click();
+        await expect(tab).toHaveAttribute("aria-pressed", "true");
+      } else await openTool(page, view);
+      const appearance = await page.evaluate(() => {
+        const rgb = (value: string) =>
+          value
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number);
+        const left = getComputedStyle(document.querySelector(".canvas-panel")!);
+        const input = getComputedStyle(document.querySelector("input")!);
+        return {
+          scheme: getComputedStyle(document.documentElement).colorScheme,
+          inputBackground: rgb(input.backgroundColor),
+          inputText: rgb(input.color),
+          radius: parseFloat(left.borderRadius),
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      expect(appearance.scheme).toBe("dark");
+      expect(
+        appearance.inputBackground.every((channel) => channel < 60),
+      ).toBeTruthy();
+      expect(
+        appearance.inputText.every((channel) => channel > 150),
+      ).toBeTruthy();
+      expect(appearance.radius).toBeGreaterThanOrEqual(12);
+      expect(
+        appearance.overflow,
+        `${view} overflows at ${width}px`,
+      ).toBeFalsy();
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openTool(page, "Agent tools");
+  await expect(page.getByText("Agent commands", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await openTool(page, "Source");
+  await page.getByLabel("Project JSON").scrollIntoViewIfNeeded();
+  await expect(page.getByLabel("Project JSON")).toBeVisible();
+  await page.screenshot({
+    path: "test-results/studio-mobile.png",
+    fullPage: true,
+  });
+  const after = await (await request.get("/api/project")).json();
+  expect(after).toEqual(before);
+  expect(errors).toEqual([]);
+});
 
 test("native editing, revision persistence, checks, context and release", async ({
   page,
@@ -34,10 +113,12 @@ test("native editing, revision persistence, checks, context and release", async 
   await expect(page.getByText("Geometry current", { exact: true })).toBeVisible(
     { timeout: 30000 },
   );
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
   await page.getByRole("button", { name: "Check fit", exact: true }).click();
   await expect(
     page.getByText("One valid connected solid", { exact: true }),
   ).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Design", exact: true }).click();
   // Pick an actual rendered face, then verify the agent sees the selected geometry.
   const canvas = page.locator("canvas");
   const box = await canvas.boundingBox();
@@ -59,10 +140,8 @@ test("native editing, revision persistence, checks, context and release", async 
   }
   const state = await (await request.get("/api/state")).json();
   expect(state.context.selection?.face).toBeTruthy();
-  await page.getByRole("button", { name: "Agent tools", exact: true }).click();
-  await expect(
-    page.getByText("Your agent works on the same project."),
-  ).toBeVisible();
+  await openTool(page, "Agent tools");
+  await expect(page.getByText("Agent commands", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Export", exact: true }).click();
   await expect(page.getByRole("link", { name: /Download r/ })).toBeVisible({
     timeout: 30000,
@@ -82,9 +161,9 @@ test("native editing, revision persistence, checks, context and release", async 
   await expect(
     page.getByRole("button", { name: "Run static study" }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "History", exact: true }).click();
-  await expect(page.getByText("Every change, recorded.")).toBeVisible();
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await openTool(page, "History");
+  await expect(page.getByText("Revision 1", { exact: true })).toBeVisible();
+  await openTool(page, "Source");
   const source = page.getByLabel("Project JSON");
   const document = JSON.parse(await source.inputValue());
   document.name = "Source-edited mounting bracket";

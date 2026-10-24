@@ -31,12 +31,23 @@ export function Viewport(props: Props) {
   const runtime = useRef<any>(null);
   useEffect(() => {
     const element = host.current!;
+    const theme = getComputedStyle(document.documentElement);
+    const color = (token: string) => theme.getPropertyValue(token).trim();
+    const palette = {
+      background: color("--viewport-bg"),
+      part: color("--viewport-part"),
+      edge: color("--viewport-edge"),
+      reference: color("--viewport-reference"),
+      referenceEdge: color("--viewport-reference-edge"),
+      selection: color("--viewport-selection"),
+      selectionEdge: color("--viewport-selection-edge"),
+    };
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#e9eef2");
+    scene.background = new THREE.Color(palette.background);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.localClippingEnabled = true;
-    renderer.setClearColor("#e9eef2");
+    renderer.setClearColor(palette.background);
     element.appendChild(renderer.domElement);
     const camera = new THREE.OrthographicCamera(-70, 70, 55, -55, 0.1, 10000);
     camera.up.set(0, 0, 1);
@@ -44,11 +55,21 @@ export function Viewport(props: Props) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x587389, 2.8));
-    const light = new THREE.DirectionalLight(0xffffff, 3);
+    scene.add(new THREE.HemisphereLight(0xdbe8ff, 0x263243, 2.1));
+    const light = new THREE.DirectionalLight(0xe6efff, 3);
     light.position.set(60, -80, 160);
     scene.add(light);
-    const grid = new THREE.GridHelper(500, 50, 0xaebcc7, 0xd7e0e6);
+    const rim = new THREE.DirectionalLight(0xb9d1f4, 0.9);
+    rim.position.set(-80, 60, 90);
+    scene.add(rim);
+    const grid = new THREE.GridHelper(
+      500,
+      50,
+      color("--viewport-grid-major"),
+      color("--viewport-grid"),
+    );
+    grid.material.transparent = true;
+    grid.material.opacity = 0.4;
     grid.rotation.x = Math.PI / 2;
     grid.position.z = -0.1;
     scene.add(grid);
@@ -60,9 +81,15 @@ export function Viewport(props: Props) {
       const w = element.clientWidth,
         h = element.clientHeight;
       renderer.setSize(w, h);
-      const size = camera.top;
-      camera.left = (-size * w) / h;
-      camera.right = (size * w) / h;
+      const aspect = w / Math.max(h, 1);
+      const previousAspect = camera.right / camera.top;
+      const size =
+        (camera.top * Math.min(previousAspect, 1)) /
+        Math.max(Math.min(aspect, 1), 0.01);
+      camera.top = size;
+      camera.bottom = -size;
+      camera.left = -size * aspect;
+      camera.right = size * aspect;
       camera.updateProjectionMatrix();
     };
     const observer = new ResizeObserver(resize);
@@ -115,6 +142,7 @@ export function Viewport(props: Props) {
       model,
       grid,
       axes,
+      palette,
       framed: false,
     };
     return () => {
@@ -167,9 +195,9 @@ export function Viewport(props: Props) {
           .clone()
           .add(new THREE.Vector3(1, -1.5, 1).multiplyScalar(diameter * 1.8)),
       );
-      r.camera.top = diameter * 0.7;
-      r.camera.bottom = -diameter * 0.7;
       const aspect = host.current!.clientWidth / host.current!.clientHeight;
+      r.camera.top = (diameter * 0.7) / Math.min(aspect, 1);
+      r.camera.bottom = -r.camera.top;
       r.camera.left = -r.camera.top * aspect;
       r.camera.right = r.camera.top * aspect;
       r.camera.updateProjectionMatrix();
@@ -190,9 +218,13 @@ export function Viewport(props: Props) {
       bg.computeVertexNormals();
       const selected = props.selected?.id === face.id;
       const material = new THREE.MeshStandardMaterial({
-        color: selected ? "#f2aa52" : reference ? "#96a4ae" : "#7299ae",
-        metalness: reference ? 0.05 : 0.3,
-        roughness: 0.48,
+        color: selected
+          ? r.palette.selection
+          : reference
+            ? r.palette.reference
+            : r.palette.part,
+        metalness: reference ? 0.05 : 0.35,
+        roughness: 0.4,
         transparent: !!reference,
         opacity: reference ? 0.3 : 1,
         side: THREE.DoubleSide,
@@ -205,7 +237,11 @@ export function Viewport(props: Props) {
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(bg, 25),
         new THREE.LineBasicMaterial({
-          color: selected ? "#b96c16" : reference ? "#8999a6" : "#344d5e",
+          color: selected
+            ? r.palette.selectionEdge
+            : reference
+              ? r.palette.referenceEdge
+              : r.palette.edge,
           transparent: true,
           opacity: reference ? 0.3 : 0.65,
           clippingPlanes: clip,
@@ -376,9 +412,9 @@ export function Viewport(props: Props) {
     r.camera.position.copy(
       center.clone().add(new THREE.Vector3(1, -1.5, 1).multiplyScalar(d * 1.8)),
     );
-    r.camera.top = d * 0.7;
-    r.camera.bottom = -d * 0.7;
     const aspect = host.current!.clientWidth / host.current!.clientHeight;
+    r.camera.top = (d * 0.7) / Math.min(aspect, 1);
+    r.camera.bottom = -r.camera.top;
     r.camera.left = -r.camera.top * aspect;
     r.camera.right = r.camera.top * aspect;
     r.camera.updateProjectionMatrix();

@@ -8,6 +8,8 @@ The workflow is familiar from code-driven creative tools such as Hyperframes and
 
 ![Oxygen CAD studio](docs/studio.png)
 
+The studio uses [Oxygen Glass](docs/UI.md): a dark interface with frosted panels, rounded controls and floating tools around the real CAD viewport. The same design extends to engineering studies, history and source editing, with an adaptive layout on smaller screens.
+
 ## Quickstart
 
 Requires Git and Docker with Compose. Linux x86_64 is tested. Apple Silicon uses the same amd64 images through Docker Desktop emulation; physical Mac validation is pending. The first image build downloads the CAD and analysis dependencies.
@@ -18,7 +20,7 @@ cd oxygen-cad
 ./o3d studio
 ```
 
-Open **http://localhost:8787**. A camera mounting bracket is created automatically. Click **Build model** if geometry has not yet been generated. Select a feature, edit its dimensions, save, and rebuild.
+Open **http://localhost:8787**. A camera mounting bracket is created automatically. Click **Build model** if geometry has not yet been generated. Select a feature, edit its dimensions, save, and rebuild. The default view keeps the model and feature tree visible; selecting a feature or face opens its properties. **Verify** opens fit and stress tools. The **⋯** menu contains parameters and requirements, source, history, STEP import and agent commands. Save and rebuild controls appear when needed.
 
 From another terminal in the repository:
 

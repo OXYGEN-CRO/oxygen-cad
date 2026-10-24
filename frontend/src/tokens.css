@@ -1,0 +1,60 @@
+/* Oxygen Glass · v0.1 · Semantic dark theme. No dependencies. */
+:root {
+  color-scheme: dark;
+  --viewport-bg: #11151c;
+  --viewport-part: #b9c1cf;
+  --viewport-edge: #506480;
+  --viewport-reference: #8c9cba;
+  --viewport-reference-edge: #b1bfd4;
+  --viewport-grid: #202936;
+  --viewport-grid-major: #354358;
+  --viewport-selection: #f1c68e;
+  --viewport-selection-edge: #be8c51;
+  --success-wash: rgba(162, 217, 189, 0.08);
+  --warning-wash: rgba(229, 195, 143, 0.08);
+  --danger-wash: rgba(239, 164, 164, 0.08);
+  --primary-ink: #192439;
+  --ink: var(--text);
+  --line: var(--border);
+  --muted: var(--text-muted);
+  --orange: var(--warning);
+  --canvas: #0c0e12;
+  --surface: #1b1e25;
+  --surface-glass: rgba(28, 31, 39, 0.64);
+  --surface-raised: rgba(48, 53, 64, 0.72);
+  --surface-inset: rgba(9, 11, 16, 0.38);
+  --text: #f0f1f4;
+  --text-secondary: #a3a8b4;
+  --text-muted: #858b99;
+  --border: rgba(211, 221, 245, 0.1);
+  --border-bright: rgba(225, 234, 255, 0.19);
+  --accent: #9bbfff;
+  --accent-text: #b5cefb;
+  --accent-wash: rgba(133, 174, 245, 0.12);
+  --success: #a2d9bd;
+  --warning: #e5c38f;
+  --danger: #efa4a4;
+  --focus: #b0ceff;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --radius-sm: 8px;
+  --radius-control: 12px;
+  --radius-card: 20px;
+  --radius-window: 28px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --glass-blur: 24px;
+  --glass-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(235, 242, 255, 0.075);
+  --raised-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --duration: 160ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}

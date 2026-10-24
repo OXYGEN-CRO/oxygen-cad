@@ -8,7 +8,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   Code2,
   Copy,
   Eye,
@@ -16,11 +15,9 @@ import {
   FileBox,
   Focus,
   History,
-  Layers3,
   Loader2,
   Lock,
-  Maximize2,
-  MousePointer2,
+  MoreHorizontal,
   Play,
   Plus,
   Ruler,
@@ -41,7 +38,6 @@ import {
   api,
   artifact,
   post,
-  type Feature,
   type Project,
   type Selection,
   type State,
@@ -157,11 +153,30 @@ export default function App() {
     [checks, setChecks] = useState<any>(null),
     [source, setSource] = useState(""),
     [showAgent, setShowAgent] = useState(false),
-    [showBottom, setShowBottom] = useState(true);
+    [showBottom, setShowBottom] = useState(false),
+    [toolsOpen, setToolsOpen] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const upload = useRef<HTMLInputElement>(null);
-  const previousJobs = useRef("");
+  const toolsMenu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (!toolsMenu.current?.contains(event.target as Node))
+        setToolsOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setToolsOpen(false);
+        setAddOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
   const refresh = useCallback(async () => {
     try {
       const result = await api("state");
@@ -238,6 +253,7 @@ export default function App() {
     setError("");
     try {
       if (dirty) throw new Error("Save your edits before running an operation");
+      if (kind === "check") setShowBottom(true);
       await post(`jobs/${kind}`, {});
       await refresh();
     } catch (e) {
@@ -366,14 +382,11 @@ export default function App() {
   const lastExport = state?.jobs.find(
     (j) => j.kind === "export" && j.state === "succeeded",
   );
-  const compare = state?.history.length
-    ? state.history[state.history.length - 2]
-    : null;
   if (!current || !state)
     return (
       <div className="loading-screen">
-        <div className="brand-symbol">
-          O<span />
+        <div className="brand-symbol" aria-hidden="true">
+          <Box />
         </div>
         <h1>Oxygen CAD</h1>
         <p>{error || "Opening your engineering workspace…"}</p>
@@ -393,81 +406,150 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-symbol">
-            O<span />
-          </div>
-          <strong>
-            oxygen<span>CAD</span>
-          </strong>
-          <span className="alpha">OPEN SOURCE</span>
+        <div className="brand" title="Oxygen CAD">
+          <Box size={22} aria-hidden="true" />
+          <strong>oxygen</strong>
         </div>
         <div className="project-title">
-          <span className="divider" />
-          <FileBox size={16} />
           <input
             aria-label="Project name"
             value={current.name}
             onChange={(e) => edit((p) => (p.name = e.target.value))}
           />
-          <span className="revision">r{state.project.revision}</span>
-          {dirty && <span className="unsaved">Unsaved edits</span>}
+          {dirty && (
+            <span className="unsaved" title="Unsaved edits">
+              •
+            </span>
+          )}
         </div>
-        <div className="top-actions">
-          <button onClick={() => history("undo")} title="Undo">
-            <ArrowLeft size={15} />
-          </button>
-          <button onClick={() => history("redo")} title="Redo">
-            <ArrowRight size={15} />
-          </button>
-          <button onClick={() => setShowAgent(!showAgent)}>
-            <Terminal size={15} />
-            Agent tools
-          </button>
-          <button
-            className="primary"
-            disabled={!dirty || busy}
-            onClick={() => {
-              try {
-                save(tab === "source" ? JSON.parse(source) : draft);
-              } catch (e) {
-                setError(String(e));
-              }
-            }}
-          >
-            <Save size={15} />
-            Save changes
-          </button>
-        </div>
-      </header>
-      <nav className="workspace-nav">
-        <div className="nav-tabs">
+        <nav className="nav-tabs" aria-label="Workspace">
           {[
-            ["design", Box, "Design"],
-            ["verify", ShieldCheck, "Verify"],
-            ["history", History, "History"],
-            ["source", Code2, "Source"],
-          ].map(([id, Icon, label]: any) => (
+            ["design", "Design"],
+            ["verify", "Verify"],
+          ].map(([id, label]) => (
             <button
               key={id}
               className={tab === id ? "active" : ""}
+              aria-pressed={tab === id}
               onClick={() => setTab(id)}
             >
-              <Icon size={16} />
               {label}
             </button>
           ))}
+        </nav>
+        <div className="top-actions">
+          {dirty && (
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                try {
+                  save(tab === "source" ? JSON.parse(source) : draft);
+                } catch (e) {
+                  setError(String(e));
+                }
+              }}
+            >
+              <Save size={15} />
+              Save changes
+            </button>
+          )}
+          <button
+            title="Export"
+            aria-label="Export"
+            disabled={
+              busy || dirty || pending || state.geometry_state !== "current"
+            }
+            onClick={() => run("export")}
+          >
+            <ArrowDownToLine size={16} />
+          </button>
+          {lastExport && (
+            <a
+              className="download-link"
+              href={artifact(lastExport.result.artifact)}
+              download
+            >
+              Download r{lastExport.revision}
+            </a>
+          )}
+          <div className="tools-menu" ref={toolsMenu}>
+            <button
+              title="Project tools"
+              aria-label="Project tools"
+              aria-expanded={toolsOpen}
+              onClick={() => setToolsOpen(!toolsOpen)}
+            >
+              <MoreHorizontal size={19} />
+            </button>
+            {toolsOpen && (
+              <div className="tools-popover" aria-label="Project tools menu">
+                {[
+                  ["project", Settings2, "Parameters & requirements"],
+                  ["source", Code2, "Source"],
+                  ["history", History, "History"],
+                ].map(([id, Icon, label]: any) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setTab(id);
+                      setToolsOpen(false);
+                    }}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </button>
+                ))}
+                <button
+                  disabled={dirty}
+                  onClick={() => {
+                    upload.current?.click();
+                    setToolsOpen(false);
+                  }}
+                >
+                  <Upload size={15} />
+                  Import STEP
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAgent(!showAgent);
+                    setToolsOpen(false);
+                  }}
+                >
+                  <Terminal size={15} />
+                  Agent tools
+                </button>
+                <div className="menu-divider" />
+                <button
+                  disabled={dirty || state.project.revision === 0}
+                  onClick={() => {
+                    history("undo");
+                    setToolsOpen(false);
+                  }}
+                >
+                  <ArrowLeft size={15} />
+                  Undo
+                </button>
+                <button
+                  disabled={dirty}
+                  onClick={() => {
+                    history("redo");
+                    setToolsOpen(false);
+                  }}
+                >
+                  <ArrowRight size={15} />
+                  Redo
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <span className="local-status">
-          <i />
-          Local workspace<span>·</span>Millimeters
-        </span>
-      </nav>
+      </header>
       {error && (
         <div role="alert" className="error-banner">
           <AlertTriangle size={16} />
           <span>{error.replace("Error: ", "")}</span>
-          <button onClick={() => setError("")}>
+          <button onClick={() => setError("")} aria-label="Dismiss error">
             <X size={16} />
           </button>
         </div>
@@ -476,11 +558,7 @@ export default function App() {
         <div className="agent-banner">
           <Terminal size={18} />
           <div>
-            <strong>Your agent works on the same project.</strong>
-            <p>
-              Inspect the model, write a proposal, then apply it with the
-              current revision. Locked parameters are preserved.
-            </p>
+            <strong>Agent commands</strong>
             <code>
               ./o3d inspect --json &nbsp; · &nbsp; ./o3d context --json &nbsp; ·
               &nbsp; ./o3d apply proposal.json --expected-revision{" "}
@@ -488,6 +566,7 @@ export default function App() {
             </code>
           </div>
           <button
+            aria-label="Copy agent commands"
             onClick={() =>
               navigator.clipboard.writeText(
                 `./o3d inspect --json\n./o3d context --json\n./o3d apply proposal.json --expected-revision ${state.project.revision}`,
@@ -496,27 +575,28 @@ export default function App() {
           >
             <Copy size={16} />
           </button>
+          <button
+            aria-label="Close agent tools"
+            onClick={() => setShowAgent(false)}
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
       <main className="workspace">
         <aside className="left-panel">
           <div className="panel-heading">
-            <span>PROJECT</span>
+            <span>Features</span>
             <button
               onClick={() => setAddOpen(!addOpen)}
               aria-label="Add feature"
+              aria-expanded={addOpen}
             >
               <Plus size={16} />
             </button>
           </div>
-          <div className="tree-heading">
-            <ChevronDown size={13} />
-            <Layers3 size={14} />
-            <span>Features</span>
-            <small>{current.features.length}</small>
-          </div>
           <div className="feature-list">
-            {current.features.map((f, index) => (
+            {current.features.map((f) => (
               <button
                 key={f.id}
                 className={`tree-item ${active === f.id ? "selected" : ""} ${f.suppressed ? "suppressed" : ""}`}
@@ -534,7 +614,6 @@ export default function App() {
                   <Settings2 size={15} />
                 )}
                 <span>{f.name || f.id}</span>
-                <small>{String(index + 1).padStart(2, "0")}</small>
               </button>
             ))}
           </div>
@@ -550,16 +629,12 @@ export default function App() {
               )}
             </div>
           )}
-          <button className="add-feature" onClick={() => setAddOpen(!addOpen)}>
-            <Plus size={14} />
-            Add feature
-          </button>
-          <div className="tree-heading references-heading">
-            <ChevronDown size={13} />
-            <FileBox size={14} />
-            <span>Reference parts</span>
-            <small>{current.references.length}</small>
-          </div>
+          {current.references.length > 0 && (
+            <div className="tree-heading references-heading">
+              <FileBox size={14} />
+              <span>References</span>
+            </div>
+          )}
           {current.references.map((ref) => (
             <div className="reference-row" key={ref.id}>
               <button
@@ -585,14 +660,6 @@ export default function App() {
               </button>
             </div>
           ))}
-          <button
-            className="add-feature"
-            disabled={dirty}
-            onClick={() => upload.current?.click()}
-          >
-            <Upload size={14} />
-            Import STEP
-          </button>
           <input
             ref={upload}
             type="file"
@@ -604,29 +671,14 @@ export default function App() {
               e.target.value = "";
             }}
           />
-          <div className="left-footer">
-            <div className="mini-label">DESIGN INTENT</div>
-            <p>
-              Agent-authored.
-              <br />
-              Human-editable.
-            </p>
-            <span>One project. Every change traceable.</span>
-          </div>
         </aside>
         <section className="canvas-panel">
           <div className="canvas-toolbar">
             <div>
               <button
-                className={!measureMode ? "tool-active" : ""}
-                title="Select"
-                onClick={() => setMeasureMode(false)}
-              >
-                <MousePointer2 size={17} />
-              </button>
-              <button
                 className={measureMode ? "tool-active" : ""}
                 title="Measure between two surface points"
+                aria-pressed={measureMode}
                 onClick={() => {
                   setMeasureMode(!measureMode);
                   setMeasure([]);
@@ -638,32 +690,38 @@ export default function App() {
               <button
                 className={section ? "tool-active" : ""}
                 title="Section view"
+                aria-pressed={section}
                 onClick={() => setSection(!section)}
               >
                 <Scissors size={17} />
               </button>
-              <button
-                className={isolate ? "tool-active" : ""}
-                title="Isolate manufactured part"
-                onClick={() => setIsolate(!isolate)}
-              >
-                <Eye size={17} />
-              </button>
+              {current.references.length > 0 && (
+                <button
+                  className={isolate ? "tool-active" : ""}
+                  title="Isolate manufactured part"
+                  aria-pressed={isolate}
+                  onClick={() => setIsolate(!isolate)}
+                >
+                  <Eye size={17} />
+                </button>
+              )}
             </div>
             <div>
-              <select
-                aria-label="Viewport display"
-                value={field}
-                onChange={(e) => setField(e.target.value as any)}
-              >
-                <option value="solid">Solid model</option>
-                <option value="stress" disabled={!state.analysis}>
-                  Stress field
-                </option>
-                <option value="displacement" disabled={!state.analysis}>
-                  Displacement
-                </option>
-              </select>
+              {state.analysis && (
+                <select
+                  aria-label="Viewport display"
+                  value={field}
+                  onChange={(e) => setField(e.target.value as any)}
+                >
+                  <option value="solid">Solid model</option>
+                  <option value="stress" disabled={!state.analysis}>
+                    Stress field
+                  </option>
+                  <option value="displacement" disabled={!state.analysis}>
+                    Displacement
+                  </option>
+                </select>
+              )}
               <button title="Fit model" onClick={() => setFit((v) => v + 1)}>
                 <Focus size={17} />
               </button>
@@ -683,29 +741,12 @@ export default function App() {
             showStudy={tab === "verify"}
             isolate={isolate}
           />
-          {!geometry && (
-            <div className="empty-canvas">
-              <Box size={42} />
-              <h2>Make your first build</h2>
-              <p>Your features become exact, editable geometry.</p>
-              <button className="primary" onClick={() => run("build")}>
-                <Play size={15} />
-                Build model
-              </button>
-            </div>
-          )}
           {state.geometry_state === "stale" && (
             <div className="stale-label">
               <AlertTriangle size={14} />
               Showing previous geometry · rebuild required
             </div>
           )}
-          <div className="viewport-corner">
-            <div className="view-label">ORTHOGRAPHIC / ISOMETRIC</div>
-            <span>
-              Drag to orbit · Scroll to zoom · Click a face to inspect
-            </span>
-          </div>
           <div className="model-card">
             <span
               className={`status-dot ${state.geometry_state === "current" ? "good" : ""}`}
@@ -764,1109 +805,1076 @@ export default function App() {
               </label>
             </div>
           )}
-          <div className="canvas-actions">
-            <button
-              className="build-button"
-              disabled={busy || dirty || pending}
-              onClick={() => run("build")}
-            >
-              {pending ? (
-                <Loader2 size={15} className="spin" />
-              ) : (
-                <Play size={15} />
-              )}
-              Build model
-            </button>
-            <button
-              disabled={busy || dirty || pending}
-              onClick={() => run("check")}
-            >
-              <ShieldCheck size={15} />
-              Check fit
-            </button>
-            <button
-              disabled={
-                busy || dirty || pending || state.geometry_state !== "current"
-              }
-              onClick={() => run("export")}
-            >
-              <ArrowDownToLine size={15} />
-              Export
-            </button>
-            {lastExport && (
-              <a
-                className="download-link"
-                href={artifact(lastExport.result.artifact)}
-                download
+          {(state.geometry_state !== "current" || pending) && (
+            <div className="canvas-actions">
+              <button
+                className="build-button"
+                disabled={busy || dirty || pending}
+                onClick={() => run("build")}
               >
-                Download r{lastExport.revision}
-              </a>
-            )}
-          </div>
+                {pending ? (
+                  <Loader2 size={15} className="spin" />
+                ) : (
+                  <Play size={15} />
+                )}
+                {pending ? "Working…" : "Build model"}
+              </button>
+            </div>
+          )}
         </section>
-        <aside className="right-panel">
-          <div className="panel-heading">
-            <span>
-              {tab === "verify"
-                ? "ENGINEERING STUDY"
-                : tab === "history"
-                  ? "REVISION HISTORY"
-                  : tab === "source"
-                    ? "PROJECT SOURCE"
-                    : "PROPERTIES"}
-            </span>
-            <Settings2 size={14} />
-          </div>
-          <div className="properties">
-            {tab === "design" && (
-              <>
-                {feature ? (
-                  <>
-                    <div className="inspector-title">
-                      <div className="feature-glyph">
-                        <Box size={18} />
+        {(tab !== "design" || feature || reference || selection) && (
+          <aside
+            className={`right-panel ${tab === "source" ? "source-panel" : ""}`}
+          >
+            <div className="panel-heading">
+              <span>
+                {tab === "verify"
+                  ? "ENGINEERING STUDY"
+                  : tab === "history"
+                    ? "REVISION HISTORY"
+                    : tab === "source"
+                      ? "PROJECT SOURCE"
+                      : tab === "project"
+                        ? "PROJECT"
+                        : "PROPERTIES"}
+              </span>
+              <button
+                aria-label="Close properties"
+                onClick={() => {
+                  setTab("design");
+                  setActive("");
+                  setSelection(null);
+                }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="properties">
+              {tab === "design" && (
+                <>
+                  {feature ? (
+                    <>
+                      <div className="inspector-title">
+                        <div className="feature-glyph">
+                          <Box size={18} />
+                        </div>
+                        <div>
+                          <h2>{feature.name || feature.id}</h2>
+                          <span>
+                            {feature.type} · {feature.id}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <h2>{feature.name || feature.id}</h2>
-                        <span>
-                          {feature.type} · {feature.id}
-                        </span>
-                      </div>
-                    </div>
-                    <Field
-                      label="Feature name"
-                      value={feature.name}
-                      onChange={(v: string) => patchFeature({ name: v })}
-                    />
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={feature.suppressed}
-                        onChange={(e) =>
-                          patchFeature({ suppressed: e.target.checked })
-                        }
+                      <Field
+                        label="Feature name"
+                        value={feature.name}
+                        onChange={(v: string) => patchFeature({ name: v })}
                       />
-                      Suppress feature
-                    </label>
-                    {feature.type === "profile" && (
-                      <>
-                        <Select
-                          label="Profile shape"
-                          value={feature.shape}
-                          options={["rectangle", "circle", "polygon"]}
-                          onChange={(v: string) =>
-                            patchFeature({
-                              shape: v,
-                              ...(v === "polygon" && !feature.points.length
-                                ? {
-                                    points: [
-                                      [-10, -10],
-                                      [10, -10],
-                                      [0, 10],
-                                    ],
-                                  }
-                                : {}),
-                            })
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={feature.suppressed}
+                          onChange={(e) =>
+                            patchFeature({ suppressed: e.target.checked })
                           }
                         />
-                        {feature.shape === "rectangle" && (
-                          <>
-                            <Field
-                              label="Width"
-                              value={feature.width}
-                              unit="mm"
-                              onChange={(v: string) =>
-                                patchFeature({ width: scalar(v) })
-                              }
-                            />
-                            <Field
-                              label="Height"
-                              value={feature.height}
-                              unit="mm"
-                              onChange={(v: string) =>
-                                patchFeature({ height: scalar(v) })
-                              }
-                            />
-                          </>
-                        )}
-                        {feature.shape === "circle" && (
-                          <Field
-                            label="Radius"
-                            value={feature.radius}
-                            unit="mm"
+                        Suppress feature
+                      </label>
+                      {feature.type === "profile" && (
+                        <>
+                          <Select
+                            label="Profile shape"
+                            value={feature.shape}
+                            options={["rectangle", "circle", "polygon"]}
                             onChange={(v: string) =>
-                              patchFeature({ radius: scalar(v) })
+                              patchFeature({
+                                shape: v,
+                                ...(v === "polygon" && !feature.points.length
+                                  ? {
+                                      points: [
+                                        [-10, -10],
+                                        [10, -10],
+                                        [0, 10],
+                                      ],
+                                    }
+                                  : {}),
+                              })
                             }
                           />
-                        )}{" "}
-                        {feature.shape === "polygon" && (
-                          <label className="source-field">
-                            Polygon vertices (JSON)
-                            <textarea
-                              aria-label="Polygon vertices"
-                              defaultValue={pretty(feature.points)}
-                              key={feature.id}
-                              onBlur={(e) => {
-                                try {
-                                  patchFeature({
-                                    points: JSON.parse(e.target.value),
-                                  });
-                                } catch {
-                                  setError(
-                                    "Polygon vertices must be a JSON array",
-                                  );
-                                }
-                              }}
-                            />
-                          </label>
-                        )}
-                        <Select
-                          label="Construction plane"
-                          value={feature.plane}
-                          options={["XY", "XZ", "YZ"]}
-                          onChange={(v: string) => patchFeature({ plane: v })}
-                        />
-                        <VectorField
-                          label="Origin"
-                          value={feature.origin}
-                          onChange={(v) => patchFeature({ origin: v })}
-                        />
-                        <VectorField
-                          label="Rotation"
-                          unit="deg"
-                          value={feature.rotation}
-                          onChange={(v) => patchFeature({ rotation: v })}
-                        />
-                      </>
-                    )}
-                    {feature.type === "extrude" && (
-                      <>
-                        <Select
-                          label="Profile"
-                          value={feature.profile}
-                          options={current.features
-                            .filter((f) => f.type === "profile")
-                            .map((f) => ({
-                              value: f.id,
-                              label: f.name || f.id,
-                            }))}
-                          onChange={(v: string) => patchFeature({ profile: v })}
-                        />
-                        <Field
-                          label="Extrusion distance"
-                          value={feature.distance}
-                          unit="mm"
-                          onChange={(v: string) =>
-                            patchFeature({ distance: scalar(v) })
-                          }
-                        />
-                        <Select
-                          label="Operation"
-                          value={feature.operation}
-                          options={["add", "cut"]}
-                          onChange={(v: string) =>
-                            patchFeature({ operation: v })
-                          }
-                        />
-                      </>
-                    )}
-                    {feature.type === "hole" && (
-                      <>
-                        <Field
-                          label="Hole diameter"
-                          value={feature.diameter}
-                          unit="mm"
-                          onChange={(v: string) =>
-                            patchFeature({ diameter: scalar(v) })
-                          }
-                        />
-                        <VectorField
-                          label="Hole center"
-                          value={feature.center}
-                          onChange={(v) => patchFeature({ center: v })}
-                        />
-                        <Select
-                          label="Hole axis"
-                          value={feature.axis}
-                          options={["X", "Y", "Z"]}
-                          onChange={(v: string) => patchFeature({ axis: v })}
-                        />
-                        <label className="checkbox">
-                          <input
-                            type="checkbox"
-                            checked={feature.through}
-                            onChange={(e) =>
-                              patchFeature({ through: e.target.checked })
-                            }
-                          />
-                          Through all
-                        </label>
-                        {!feature.through && (
-                          <>
-                            <Field
-                              label="Hole depth"
-                              value={feature.depth}
-                              unit="mm"
-                              onChange={(v: string) =>
-                                patchFeature({ depth: scalar(v) })
-                              }
-                            />
-                            <label className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={feature.reverse}
-                                onChange={(e) =>
-                                  patchFeature({ reverse: e.target.checked })
+                          {feature.shape === "rectangle" && (
+                            <>
+                              <Field
+                                label="Width"
+                                value={feature.width}
+                                unit="mm"
+                                onChange={(v: string) =>
+                                  patchFeature({ width: scalar(v) })
                                 }
                               />
-                              Drill in negative axis direction
+                              <Field
+                                label="Height"
+                                value={feature.height}
+                                unit="mm"
+                                onChange={(v: string) =>
+                                  patchFeature({ height: scalar(v) })
+                                }
+                              />
+                            </>
+                          )}
+                          {feature.shape === "circle" && (
+                            <Field
+                              label="Radius"
+                              value={feature.radius}
+                              unit="mm"
+                              onChange={(v: string) =>
+                                patchFeature({ radius: scalar(v) })
+                              }
+                            />
+                          )}{" "}
+                          {feature.shape === "polygon" && (
+                            <label className="source-field">
+                              Polygon vertices (JSON)
+                              <textarea
+                                aria-label="Polygon vertices"
+                                defaultValue={pretty(feature.points)}
+                                key={feature.id}
+                                onBlur={(e) => {
+                                  try {
+                                    patchFeature({
+                                      points: JSON.parse(e.target.value),
+                                    });
+                                  } catch {
+                                    setError(
+                                      "Polygon vertices must be a JSON array",
+                                    );
+                                  }
+                                }}
+                              />
                             </label>
-                          </>
-                        )}
-                        <div className="two-fields">
-                          <Field
-                            label="Columns"
-                            type="number"
-                            value={feature.columns}
-                            onChange={(v: number) =>
-                              patchFeature({ columns: v })
+                          )}
+                          <Select
+                            label="Construction plane"
+                            value={feature.plane}
+                            options={["XY", "XZ", "YZ"]}
+                            onChange={(v: string) => patchFeature({ plane: v })}
+                          />
+                          <VectorField
+                            label="Origin"
+                            value={feature.origin}
+                            onChange={(v) => patchFeature({ origin: v })}
+                          />
+                          <VectorField
+                            label="Rotation"
+                            unit="deg"
+                            value={feature.rotation}
+                            onChange={(v) => patchFeature({ rotation: v })}
+                          />
+                        </>
+                      )}
+                      {feature.type === "extrude" && (
+                        <>
+                          <Select
+                            label="Profile"
+                            value={feature.profile}
+                            options={current.features
+                              .filter((f) => f.type === "profile")
+                              .map((f) => ({
+                                value: f.id,
+                                label: f.name || f.id,
+                              }))}
+                            onChange={(v: string) =>
+                              patchFeature({ profile: v })
                             }
                           />
                           <Field
-                            label="Rows"
-                            type="number"
-                            value={feature.rows}
-                            onChange={(v: number) => patchFeature({ rows: v })}
+                            label="Extrusion distance"
+                            value={feature.distance}
+                            unit="mm"
+                            onChange={(v: string) =>
+                              patchFeature({ distance: scalar(v) })
+                            }
                           />
-                        </div>
-                        <div className="two-fields">
-                          {feature.spacing.map((v: number, i: number) => (
-                            <Field
-                              key={i}
-                              label={`${i ? "Row" : "Column"} spacing`}
-                              type="number"
-                              value={v}
-                              unit="mm"
-                              onChange={(n: number) =>
-                                patchFeature({
-                                  spacing: feature.spacing.map(
-                                    (x: number, j: number) => (j === i ? n : x),
-                                  ),
-                                })
+                          <Select
+                            label="Operation"
+                            value={feature.operation}
+                            options={["add", "cut"]}
+                            onChange={(v: string) =>
+                              patchFeature({ operation: v })
+                            }
+                          />
+                        </>
+                      )}
+                      {feature.type === "hole" && (
+                        <>
+                          <Field
+                            label="Hole diameter"
+                            value={feature.diameter}
+                            unit="mm"
+                            onChange={(v: string) =>
+                              patchFeature({ diameter: scalar(v) })
+                            }
+                          />
+                          <VectorField
+                            label="Hole center"
+                            value={feature.center}
+                            onChange={(v) => patchFeature({ center: v })}
+                          />
+                          <Select
+                            label="Hole axis"
+                            value={feature.axis}
+                            options={["X", "Y", "Z"]}
+                            onChange={(v: string) => patchFeature({ axis: v })}
+                          />
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={feature.through}
+                              onChange={(e) =>
+                                patchFeature({ through: e.target.checked })
                               }
                             />
-                          ))}
-                        </div>
-                      </>
-                    )}
-                    {["fillet", "chamfer"].includes(feature.type) && (
-                      <>
-                        <Field
-                          label="Edge selection"
-                          value={feature.selection}
-                          onChange={(v: string) =>
-                            patchFeature({ selection: v })
+                            Through all
+                          </label>
+                          {!feature.through && (
+                            <>
+                              <Field
+                                label="Hole depth"
+                                value={feature.depth}
+                                unit="mm"
+                                onChange={(v: string) =>
+                                  patchFeature({ depth: scalar(v) })
+                                }
+                              />
+                              <label className="checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={feature.reverse}
+                                  onChange={(e) =>
+                                    patchFeature({ reverse: e.target.checked })
+                                  }
+                                />
+                                Drill in negative axis direction
+                              </label>
+                            </>
+                          )}
+                          <div className="two-fields">
+                            <Field
+                              label="Columns"
+                              type="number"
+                              value={feature.columns}
+                              onChange={(v: number) =>
+                                patchFeature({ columns: v })
+                              }
+                            />
+                            <Field
+                              label="Rows"
+                              type="number"
+                              value={feature.rows}
+                              onChange={(v: number) =>
+                                patchFeature({ rows: v })
+                              }
+                            />
+                          </div>
+                          <div className="two-fields">
+                            {feature.spacing.map((v: number, i: number) => (
+                              <Field
+                                key={i}
+                                label={`${i ? "Row" : "Column"} spacing`}
+                                type="number"
+                                value={v}
+                                unit="mm"
+                                onChange={(n: number) =>
+                                  patchFeature({
+                                    spacing: feature.spacing.map(
+                                      (x: number, j: number) =>
+                                        j === i ? n : x,
+                                    ),
+                                  })
+                                }
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {["fillet", "chamfer"].includes(feature.type) && (
+                        <>
+                          <Field
+                            label="Edge selection"
+                            value={feature.selection}
+                            onChange={(v: string) =>
+                              patchFeature({ selection: v })
+                            }
+                          />
+                          <Select
+                            label="Semantic edge group"
+                            value={feature.selection}
+                            options={[
+                              "part:vertical_edges",
+                              "part:top_edges",
+                              "part:bottom_edges",
+                              "part:all_edges",
+                            ]}
+                            onChange={(v: string) =>
+                              patchFeature({ selection: v })
+                            }
+                          />
+                          <Field
+                            label="Edge size"
+                            value={feature.size}
+                            unit="mm"
+                            onChange={(v: string) =>
+                              patchFeature({ size: scalar(v) })
+                            }
+                          />
+                        </>
+                      )}
+                      <div className="feature-order">
+                        <button
+                          disabled={current.features[0].id === feature.id}
+                          onClick={() =>
+                            edit((p) => {
+                              const i = p.features.findIndex(
+                                (f) => f.id === feature.id,
+                              );
+                              [p.features[i - 1], p.features[i]] = [
+                                p.features[i],
+                                p.features[i - 1],
+                              ];
+                            })
                           }
-                        />
-                        <Select
-                          label="Semantic edge group"
-                          value={feature.selection}
-                          options={[
-                            "part:vertical_edges",
-                            "part:top_edges",
-                            "part:bottom_edges",
-                            "part:all_edges",
-                          ]}
-                          onChange={(v: string) =>
-                            patchFeature({ selection: v })
+                        >
+                          Move earlier
+                        </button>
+                        <button
+                          disabled={current.features.at(-1)?.id === feature.id}
+                          onClick={() =>
+                            edit((p) => {
+                              const i = p.features.findIndex(
+                                (f) => f.id === feature.id,
+                              );
+                              [p.features[i], p.features[i + 1]] = [
+                                p.features[i + 1],
+                                p.features[i],
+                              ];
+                            })
                           }
-                        />
-                        <Field
-                          label="Edge size"
-                          value={feature.size}
-                          unit="mm"
-                          onChange={(v: string) =>
-                            patchFeature({ size: scalar(v) })
-                          }
-                        />
-                      </>
-                    )}
-                    <div className="feature-order">
+                        >
+                          Move later
+                        </button>
+                      </div>
                       <button
-                        disabled={current.features[0].id === feature.id}
-                        onClick={() =>
-                          edit((p) => {
-                            const i = p.features.findIndex(
-                              (f) => f.id === feature.id,
-                            );
-                            [p.features[i - 1], p.features[i]] = [
-                              p.features[i],
-                              p.features[i - 1],
-                            ];
-                          })
-                        }
+                        className="danger-link"
+                        onClick={() => {
+                          edit(
+                            (p) =>
+                              (p.features = p.features.filter(
+                                (f) => f.id !== feature.id,
+                              )),
+                          );
+                          setActive("");
+                        }}
                       >
-                        Move earlier
+                        <Trash2 size={14} />
+                        Delete feature
                       </button>
-                      <button
-                        disabled={current.features.at(-1)?.id === feature.id}
-                        onClick={() =>
-                          edit((p) => {
-                            const i = p.features.findIndex(
-                              (f) => f.id === feature.id,
-                            );
-                            [p.features[i], p.features[i + 1]] = [
-                              p.features[i + 1],
-                              p.features[i],
-                            ];
-                          })
-                        }
-                      >
-                        Move later
-                      </button>
-                    </div>
-                    <button
-                      className="danger-link"
-                      onClick={() => {
-                        edit(
-                          (p) =>
-                            (p.features = p.features.filter(
-                              (f) => f.id !== feature.id,
-                            )),
-                        );
-                        setActive("");
-                      }}
-                    >
-                      <Trash2 size={14} />
-                      Delete feature
-                    </button>
-                  </>
-                ) : reference ? (
-                  <>
-                    <h2>{reference.name}</h2>
-                    <p className="muted">
-                      Immutable STEP reference. Placement remains editable.
-                    </p>
-                    <VectorField
-                      label="Reference translation"
-                      value={reference.placement.translation}
-                      onChange={(v) =>
-                        edit(
-                          (p) =>
-                            (p.references.find(
-                              (r) => r.id === active,
-                            )!.placement.translation = v),
-                        )
-                      }
-                    />
-                    <VectorField
-                      label="Reference rotation"
-                      unit="deg"
-                      value={reference.placement.rotation}
-                      onChange={(v) =>
-                        edit(
-                          (p) =>
-                            (p.references.find(
-                              (r) => r.id === active,
-                            )!.placement.rotation = v),
-                        )
-                      }
-                    />
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={reference.check_interference}
-                        onChange={(e) =>
+                    </>
+                  ) : reference ? (
+                    <>
+                      <h2>{reference.name}</h2>
+                      <p className="muted">
+                        Immutable STEP reference. Placement remains editable.
+                      </p>
+                      <VectorField
+                        label="Reference translation"
+                        value={reference.placement.translation}
+                        onChange={(v) =>
                           edit(
                             (p) =>
                               (p.references.find(
                                 (r) => r.id === active,
-                              )!.check_interference = e.target.checked),
+                              )!.placement.translation = v),
                           )
                         }
                       />
-                      Check interference
-                    </label>
+                      <VectorField
+                        label="Reference rotation"
+                        unit="deg"
+                        value={reference.placement.rotation}
+                        onChange={(v) =>
+                          edit(
+                            (p) =>
+                              (p.references.find(
+                                (r) => r.id === active,
+                              )!.placement.rotation = v),
+                          )
+                        }
+                      />
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={reference.check_interference}
+                          onChange={(e) =>
+                            edit(
+                              (p) =>
+                                (p.references.find(
+                                  (r) => r.id === active,
+                                )!.check_interference = e.target.checked),
+                            )
+                          }
+                        />
+                        Check interference
+                      </label>
+                      <button
+                        className="danger-link"
+                        onClick={() => {
+                          edit(
+                            (p) =>
+                              (p.references = p.references.filter(
+                                (r) => r.id !== active,
+                              )),
+                          );
+                          setActive("");
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Remove reference
+                      </button>
+                    </>
+                  ) : null}
+                </>
+              )}
+              {tab === "project" && (
+                <>
+                  <div className="section-heading">
+                    PARAMETERS
                     <button
-                      className="danger-link"
+                      title="Add parameter"
                       onClick={() => {
+                        const name = prompt(
+                          "Parameter name (letters, numbers, underscores)",
+                        );
+                        if (name)
+                          edit(
+                            (p) =>
+                              (p.parameters[name] = {
+                                value: 10,
+                                unit: "mm",
+                                locked: false,
+                              }),
+                          );
+                      }}
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  {Object.entries(current.parameters).map(([name, p]) => (
+                    <div className="parameter" key={name}>
+                      <Field
+                        label={name}
+                        type="number"
+                        value={p.value}
+                        unit={p.unit}
+                        onChange={(v: number) =>
+                          edit((d) => (d.parameters[name].value = v))
+                        }
+                      />
+                      <button
+                        aria-label={`${p.locked ? "Unlock" : "Lock"} ${name}`}
+                        className={p.locked ? "locked" : ""}
+                        onClick={() =>
+                          edit((d) => (d.parameters[name].locked = !p.locked))
+                        }
+                      >
+                        {p.locked ? <Lock size={14} /> : <Unlock size={14} />}
+                      </button>
+                      <button
+                        title={`Delete ${name}`}
+                        onClick={() =>
+                          edit((d) => {
+                            delete d.parameters[name];
+                          })
+                        }
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <details>
+                    <summary>Part placement</summary>
+                    <VectorField
+                      label="Part translation"
+                      value={current.placement.translation}
+                      onChange={(v) =>
+                        edit((p) => (p.placement.translation = v))
+                      }
+                    />
+                    <VectorField
+                      label="Part rotation"
+                      value={current.placement.rotation}
+                      unit="deg"
+                      onChange={(v) => edit((p) => (p.placement.rotation = v))}
+                    />
+                  </details>
+                  <div className="section-heading">
+                    REQUIREMENTS
+                    <button
+                      title="Add requirement"
+                      onClick={() =>
+                        edit((p) =>
+                          p.requirements.push({
+                            id: `limit_${p.requirements.length + 1}`,
+                            kind: "max_dimension",
+                            axis: "X",
+                            value: 100,
+                            enabled: true,
+                          }),
+                        )
+                      }
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  {current.requirements.map((req, i) => (
+                    <div className="requirement-card" key={req.id}>
+                      <div>
+                        <strong>{req.id}</strong>
+                        <button
+                          title="Delete requirement"
+                          onClick={() =>
+                            edit((p) => p.requirements.splice(i, 1))
+                          }
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <Select
+                        label="Requirement type"
+                        value={req.kind}
+                        options={[
+                          "max_dimension",
+                          "max_mass",
+                          "min_clearance",
+                          "max_displacement",
+                        ]}
+                        onChange={(v: string) =>
+                          edit((p) => (p.requirements[i].kind = v))
+                        }
+                      />
+                      <Field
+                        label="Requirement limit"
+                        type="number"
+                        value={req.value}
+                        onChange={(v: number) =>
+                          edit((p) => (p.requirements[i].value = v))
+                        }
+                      />
+                      {req.kind === "max_dimension" && (
+                        <Select
+                          label="Dimension axis"
+                          value={req.axis}
+                          options={["X", "Y", "Z"]}
+                          onChange={(v: string) =>
+                            edit((p) => (p.requirements[i].axis = v))
+                          }
+                        />
+                      )}{" "}
+                      {req.kind === "min_clearance" && (
+                        <Select
+                          label="Clearance reference"
+                          value={req.reference ?? ""}
+                          options={[
+                            { value: "", label: "Select component" },
+                            ...current.references.map((r) => ({
+                              value: r.id,
+                              label: r.name,
+                            })),
+                          ]}
+                          onChange={(v: string) =>
+                            edit((p) => (p.requirements[i].reference = v))
+                          }
+                        />
+                      )}
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={req.enabled}
+                          onChange={(e) =>
+                            edit(
+                              (p) =>
+                                (p.requirements[i].enabled = e.target.checked),
+                            )
+                          }
+                        />
+                        Enabled
+                      </label>
+                    </div>
+                  ))}
+                </>
+              )}
+              {tab === "verify" && (
+                <>
+                  <button
+                    className="wide-button"
+                    disabled={busy || dirty || pending}
+                    onClick={() => run("check")}
+                  >
+                    <ShieldCheck size={15} />
+                    Check fit
+                  </button>
+                  <div className="inspector-title">
+                    <div className="feature-glyph">
+                      <Activity size={18} />
+                    </div>
+                    <div>
+                      <h2>Static stress</h2>
+                      <span>One solid · Linear elastic</span>
+                    </div>
+                  </div>
+                  <p className="muted">
+                    Select planar faces in the viewport to define supports and
+                    distributed forces.
+                  </p>
+                  {selection?.kind === "face" &&
+                    selection.face.kind === "PLANE" &&
+                    state.geometry_state === "current" && (
+                      <div className="selection-card">
+                        <code>{selection.id}</code>
+                        <div>
+                          <button onClick={() => fixed(selection.id)}>
+                            <Lock size={13} />
+                            Fix face
+                          </button>
+                          <button onClick={() => force(selection.id)}>
+                            <Plus size={13} />
+                            Apply force
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  <div className="section-heading">MATERIAL</div>
+                  {!current.material ? (
+                    <button
+                      className="wide-button"
+                      onClick={() =>
                         edit(
                           (p) =>
-                            (p.references = p.references.filter(
-                              (r) => r.id !== active,
-                            )),
-                        );
+                            (p.material = {
+                              name: "User-defined material",
+                              youngs_modulus_mpa: 0,
+                              poisson_ratio: 0.3,
+                              density_g_cm3: 0,
+                              yield_strength_mpa: null,
+                              source: "",
+                            }),
+                        )
+                      }
+                    >
+                      <Plus size={14} />
+                      Define material
+                    </button>
+                  ) : (
+                    <>
+                      <Field
+                        label="Material name"
+                        value={current.material.name}
+                        onChange={(v: string) =>
+                          edit((p) => (p.material.name = v))
+                        }
+                      />
+                      <Field
+                        label="Young’s modulus"
+                        type="number"
+                        value={current.material.youngs_modulus_mpa}
+                        unit="MPa"
+                        onChange={(v: number) =>
+                          edit((p) => (p.material.youngs_modulus_mpa = v))
+                        }
+                      />
+                      <Field
+                        label="Poisson ratio"
+                        type="number"
+                        value={current.material.poisson_ratio}
+                        onChange={(v: number) =>
+                          edit((p) => (p.material.poisson_ratio = v))
+                        }
+                      />
+                      <Field
+                        label="Density"
+                        type="number"
+                        value={current.material.density_g_cm3}
+                        unit="g/cm³"
+                        onChange={(v: number) =>
+                          edit((p) => (p.material.density_g_cm3 = v))
+                        }
+                      />
+                      <Field
+                        label="Material data source"
+                        value={current.material.source}
+                        onChange={(v: string) =>
+                          edit((p) => (p.material.source = v))
+                        }
+                      />
+                    </>
+                  )}
+                  <div className="section-heading">FIXED SUPPORTS</div>
+                  {current.study.fixed_faces.length === 0 && (
+                    <p className="empty-note">No fixed faces selected</p>
+                  )}
+                  {current.study.fixed_faces.map((face, i) => (
+                    <div className="region-chip" key={face}>
+                      <Lock size={13} />
+                      <code>{face}</code>
+                      <button
+                        title="Remove support"
+                        onClick={() =>
+                          edit((p) => p.study.fixed_faces.splice(i, 1))
+                        }
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="section-heading">DISTRIBUTED FORCES</div>
+                  {current.study.forces.length === 0 && (
+                    <p className="empty-note">No applied forces</p>
+                  )}
+                  {current.study.forces.map((load, i) => (
+                    <div className="load-card" key={load.face}>
+                      <div>
+                        <code>{load.face}</code>
+                        <button
+                          title="Remove force"
+                          onClick={() =>
+                            edit((p) => p.study.forces.splice(i, 1))
+                          }
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <VectorField
+                        label="Force"
+                        unit="N"
+                        value={load.vector_n}
+                        onChange={(v) =>
+                          edit((p) => (p.study.forces[i].vector_n = v))
+                        }
+                      />
+                    </div>
+                  ))}
+                  <div className="section-heading">NUMERICAL SETTINGS</div>
+                  <Field
+                    label="Initial mesh size"
+                    type="number"
+                    value={current.study.mesh_size_mm}
+                    unit="mm"
+                    onChange={(v: number) =>
+                      edit((p) => (p.study.mesh_size_mm = v))
+                    }
+                  />
+                  <Field
+                    label="Refinement steps"
+                    type="number"
+                    value={current.study.refinement_steps}
+                    onChange={(v: number) =>
+                      edit((p) => (p.study.refinement_steps = v))
+                    }
+                  />
+                  <Field
+                    label="Convergence tolerance"
+                    type="number"
+                    value={current.study.convergence_tolerance}
+                    onChange={(v: number) =>
+                      edit((p) => (p.study.convergence_tolerance = v))
+                    }
+                  />
+                  {current.study.stress_probe_mm ? (
+                    <>
+                      <VectorField
+                        label="Stress probe"
+                        value={current.study.stress_probe_mm}
+                        onChange={(v) =>
+                          edit((p) => (p.study.stress_probe_mm = v))
+                        }
+                      />
+                      <button
+                        className="text-button"
+                        onClick={() =>
+                          edit((p) => (p.study.stress_probe_mm = null))
+                        }
+                      >
+                        Remove stress probe
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="wide-button"
+                      onClick={() =>
+                        edit(
+                          (p) =>
+                            (p.study.stress_probe_mm = selection?.point ?? [
+                              0, 0, 0,
+                            ]),
+                        )
+                      }
+                    >
+                      Add named stress probe
+                    </button>
+                  )}
+                  <label className="assumptions">
+                    <input
+                      type="checkbox"
+                      checked={current.study.assumptions_confirmed}
+                      onChange={(e) =>
+                        edit(
+                          (p) =>
+                            (p.study.assumptions_confirmed = e.target.checked),
+                        )
+                      }
+                    />
+                    <span>
+                      I have reviewed the supports, forces and material data.
+                      Small deformation, linear elasticity and negligible
+                      dynamic effects apply.
+                    </span>
+                  </label>
+                  <button
+                    className="primary full-width"
+                    disabled={
+                      dirty ||
+                      busy ||
+                      pending ||
+                      !current.study.assumptions_confirmed
+                    }
+                    onClick={() => run("simulate")}
+                  >
+                    <Play size={15} />
+                    Run static study
+                  </button>
+                  <div className="section-heading">
+                    RESULTS{" "}
+                    <span className="result-state">
+                      {state.analysis_state.replace("_", " ")}
+                    </span>
+                  </div>
+                  {state.analysis ? (
+                    <>
+                      <div className="result-metric">
+                        <span>Maximum displacement</span>
+                        <strong>
+                          {state.analysis.max_displacement_mm.toPrecision(4)}{" "}
+                          <small>mm</small>
+                        </strong>
+                      </div>
+                      <div className="result-metric">
+                        <span>Peak von Mises stress</span>
+                        <strong>
+                          {state.analysis.max_stress_mpa.toPrecision(4)}{" "}
+                          <small>MPa</small>
+                        </strong>
+                      </div>
+                      <div className="two-fields">
+                        <button
+                          className="wide-button"
+                          onClick={() => setField("stress")}
+                        >
+                          View stress
+                        </button>
+                        <button
+                          className="wide-button"
+                          onClick={() => setField("displacement")}
+                        >
+                          View displacement
+                        </button>
+                      </div>
+                      <p className="muted">
+                        Reaction balance error:{" "}
+                        {(state.analysis.force_balance_error * 100).toFixed(3)}%
+                      </p>
+                      {state.analysis.iterations.map((it: any, i: number) => (
+                        <div className="iteration-row" key={i}>
+                          <span>
+                            Mesh {i + 1} · {it.nodes} nodes
+                          </span>
+                          <strong>
+                            {it.max_displacement_mm.toPrecision(4)} mm
+                          </strong>
+                        </div>
+                      ))}
+                      {state.analysis.warnings.map((w: string) => (
+                        <p className="study-warning" key={w}>
+                          <AlertTriangle size={13} />
+                          {w}
+                        </p>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="empty-note">No study results.</p>
+                  )}
+                </>
+              )}
+              {tab === "history" && (
+                <>
+                  {[...state.history].reverse().map((item) => (
+                    <div className="history-card" key={item.revision}>
+                      <div>
+                        <strong>Revision {item.revision}</strong>
+                        <span>{item.actor}</span>
+                      </div>
+                      <p>{item.summary}</p>
+                      <small>{new Date(item.time).toLocaleString()}</small>
+                      {item.revision !== current.revision && (
+                        <button
+                          onClick={() => history("restore", item.revision)}
+                        >
+                          <RotateCcw size={13} />
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+              {tab === "source" && (
+                <>
+                  <textarea
+                    className="project-source"
+                    aria-label="Project JSON"
+                    spellCheck={false}
+                    value={source}
+                    onChange={(e) => {
+                      setSource(e.target.value);
+                      dirtyRef.current = true;
+                      setDirty(true);
+                    }}
+                  />
+                  <button
+                    className="primary full-width"
+                    onClick={() => {
+                      try {
+                        save(JSON.parse(source));
+                      } catch (e) {
+                        setError(String(e));
+                      }
+                    }}
+                  >
+                    <Check size={15} />
+                    Apply source document
+                  </button>
+                  <a className="schema-link" href="/api/schema" target="_blank">
+                    View project JSON Schema ↗
+                  </a>
+                </>
+              )}
+              {selection && tab === "design" && (
+                <>
+                  <div className="section-heading">SELECTED GEOMETRY</div>
+                  <div className="selection-card">
+                    <code>{selection.id}</code>
+                    <p>
+                      {selection.face.kind} ·{" "}
+                      {selection.face.area_mm2.toFixed(2)} mm²
+                    </p>
+                    <small>
+                      Point{" "}
+                      {selection.point.map((v) => v.toFixed(3)).join(", ")} mm
+                    </small>
+                    <button
+                      className="wide-button"
+                      onClick={() => {
+                        setTab("verify");
                         setActive("");
                       }}
                     >
-                      <Trash2 size={14} />
-                      Remove reference
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="inspector-title">
-                      <div className="feature-glyph">
-                        <Settings2 size={18} />
-                      </div>
-                      <div>
-                        <h2>Project parameters</h2>
-                        <span>Your shared design controls</span>
-                      </div>
-                    </div>
-                    <p className="muted">
-                      Use <code>$name</code> in a feature dimension to link it
-                      to a parameter.
-                    </p>
-                  </>
-                )}
-                <div className="section-heading">
-                  PARAMETERS
-                  <button
-                    title="Add parameter"
-                    onClick={() => {
-                      const name = prompt(
-                        "Parameter name (letters, numbers, underscores)",
-                      );
-                      if (name)
-                        edit(
-                          (p) =>
-                            (p.parameters[name] = {
-                              value: 10,
-                              unit: "mm",
-                              locked: false,
-                            }),
-                        );
-                    }}
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-                {Object.entries(current.parameters).map(([name, p]) => (
-                  <div className="parameter" key={name}>
-                    <Field
-                      label={name}
-                      type="number"
-                      value={p.value}
-                      unit={p.unit}
-                      onChange={(v: number) =>
-                        edit((d) => (d.parameters[name].value = v))
-                      }
-                    />
-                    <button
-                      aria-label={`${p.locked ? "Unlock" : "Lock"} ${name}`}
-                      className={p.locked ? "locked" : ""}
-                      onClick={() =>
-                        edit((d) => (d.parameters[name].locked = !p.locked))
-                      }
-                    >
-                      {p.locked ? <Lock size={14} /> : <Unlock size={14} />}
-                    </button>
-                    <button
-                      title={`Delete ${name}`}
-                      onClick={() =>
-                        edit((d) => {
-                          delete d.parameters[name];
-                        })
-                      }
-                    >
-                      <X size={12} />
+                      Use in study
                     </button>
                   </div>
-                ))}
-                <details>
-                  <summary>Part placement</summary>
-                  <VectorField
-                    label="Part translation"
-                    value={current.placement.translation}
-                    onChange={(v) => edit((p) => (p.placement.translation = v))}
-                  />
-                  <VectorField
-                    label="Part rotation"
-                    value={current.placement.rotation}
-                    unit="deg"
-                    onChange={(v) => edit((p) => (p.placement.rotation = v))}
-                  />
-                </details>
-                <div className="section-heading">
-                  REQUIREMENTS
-                  <button
-                    title="Add requirement"
-                    onClick={() =>
-                      edit((p) =>
-                        p.requirements.push({
-                          id: `limit_${p.requirements.length + 1}`,
-                          kind: "max_dimension",
-                          axis: "X",
-                          value: 100,
-                          enabled: true,
-                        }),
-                      )
-                    }
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-                {current.requirements.map((req, i) => (
-                  <div className="requirement-card" key={req.id}>
-                    <div>
-                      <strong>{req.id}</strong>
-                      <button
-                        title="Delete requirement"
-                        onClick={() => edit((p) => p.requirements.splice(i, 1))}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <Select
-                      label="Requirement type"
-                      value={req.kind}
-                      options={[
-                        "max_dimension",
-                        "max_mass",
-                        "min_clearance",
-                        "max_displacement",
-                      ]}
-                      onChange={(v: string) =>
-                        edit((p) => (p.requirements[i].kind = v))
-                      }
-                    />
-                    <Field
-                      label="Requirement limit"
-                      type="number"
-                      value={req.value}
-                      onChange={(v: number) =>
-                        edit((p) => (p.requirements[i].value = v))
-                      }
-                    />
-                    {req.kind === "max_dimension" && (
-                      <Select
-                        label="Dimension axis"
-                        value={req.axis}
-                        options={["X", "Y", "Z"]}
-                        onChange={(v: string) =>
-                          edit((p) => (p.requirements[i].axis = v))
-                        }
-                      />
-                    )}{" "}
-                    {req.kind === "min_clearance" && (
-                      <Select
-                        label="Clearance reference"
-                        value={req.reference ?? ""}
-                        options={[
-                          { value: "", label: "Select component" },
-                          ...current.references.map((r) => ({
-                            value: r.id,
-                            label: r.name,
-                          })),
-                        ]}
-                        onChange={(v: string) =>
-                          edit((p) => (p.requirements[i].reference = v))
-                        }
-                      />
-                    )}
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={req.enabled}
-                        onChange={(e) =>
-                          edit(
-                            (p) =>
-                              (p.requirements[i].enabled = e.target.checked),
-                          )
-                        }
-                      />
-                      Enabled
-                    </label>
-                  </div>
-                ))}
-              </>
-            )}
-            {tab === "verify" && (
-              <>
-                <div className="inspector-title">
-                  <div className="feature-glyph">
-                    <Activity size={18} />
-                  </div>
-                  <div>
-                    <h2>Static stress</h2>
-                    <span>One solid · Linear elastic</span>
-                  </div>
-                </div>
-                <p className="muted">
-                  Select planar faces in the viewport to define supports and
-                  distributed forces.
-                </p>
-                {selection?.kind === "face" &&
-                  selection.face.kind === "PLANE" &&
-                  state.geometry_state === "current" && (
-                    <div className="selection-card">
-                      <code>{selection.id}</code>
-                      <div>
-                        <button onClick={() => fixed(selection.id)}>
-                          <Lock size={13} />
-                          Fix face
-                        </button>
-                        <button onClick={() => force(selection.id)}>
-                          <Plus size={13} />
-                          Apply force
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                <div className="section-heading">MATERIAL</div>
-                {!current.material ? (
-                  <button
-                    className="wide-button"
-                    onClick={() =>
-                      edit(
-                        (p) =>
-                          (p.material = {
-                            name: "User-defined material",
-                            youngs_modulus_mpa: 0,
-                            poisson_ratio: 0.3,
-                            density_g_cm3: 0,
-                            yield_strength_mpa: null,
-                            source: "",
-                          }),
-                      )
-                    }
-                  >
-                    <Plus size={14} />
-                    Define material
-                  </button>
-                ) : (
-                  <>
-                    <Field
-                      label="Material name"
-                      value={current.material.name}
-                      onChange={(v: string) =>
-                        edit((p) => (p.material.name = v))
-                      }
-                    />
-                    <Field
-                      label="Young’s modulus"
-                      type="number"
-                      value={current.material.youngs_modulus_mpa}
-                      unit="MPa"
-                      onChange={(v: number) =>
-                        edit((p) => (p.material.youngs_modulus_mpa = v))
-                      }
-                    />
-                    <Field
-                      label="Poisson ratio"
-                      type="number"
-                      value={current.material.poisson_ratio}
-                      onChange={(v: number) =>
-                        edit((p) => (p.material.poisson_ratio = v))
-                      }
-                    />
-                    <Field
-                      label="Density"
-                      type="number"
-                      value={current.material.density_g_cm3}
-                      unit="g/cm³"
-                      onChange={(v: number) =>
-                        edit((p) => (p.material.density_g_cm3 = v))
-                      }
-                    />
-                    <Field
-                      label="Material data source"
-                      value={current.material.source}
-                      onChange={(v: string) =>
-                        edit((p) => (p.material.source = v))
-                      }
-                    />
-                  </>
-                )}
-                <div className="section-heading">FIXED SUPPORTS</div>
-                {current.study.fixed_faces.length === 0 && (
-                  <p className="empty-note">No fixed faces selected</p>
-                )}
-                {current.study.fixed_faces.map((face, i) => (
-                  <div className="region-chip" key={face}>
-                    <Lock size={13} />
-                    <code>{face}</code>
-                    <button
-                      title="Remove support"
-                      onClick={() =>
-                        edit((p) => p.study.fixed_faces.splice(i, 1))
-                      }
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))}
-                <div className="section-heading">DISTRIBUTED FORCES</div>
-                {current.study.forces.length === 0 && (
-                  <p className="empty-note">No applied forces</p>
-                )}
-                {current.study.forces.map((load, i) => (
-                  <div className="load-card" key={load.face}>
-                    <div>
-                      <code>{load.face}</code>
-                      <button
-                        title="Remove force"
-                        onClick={() => edit((p) => p.study.forces.splice(i, 1))}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <VectorField
-                      label="Force"
-                      unit="N"
-                      value={load.vector_n}
-                      onChange={(v) =>
-                        edit((p) => (p.study.forces[i].vector_n = v))
-                      }
-                    />
-                  </div>
-                ))}
-                <div className="section-heading">NUMERICAL SETTINGS</div>
-                <Field
-                  label="Initial mesh size"
-                  type="number"
-                  value={current.study.mesh_size_mm}
-                  unit="mm"
-                  onChange={(v: number) =>
-                    edit((p) => (p.study.mesh_size_mm = v))
-                  }
-                />
-                <Field
-                  label="Refinement steps"
-                  type="number"
-                  value={current.study.refinement_steps}
-                  onChange={(v: number) =>
-                    edit((p) => (p.study.refinement_steps = v))
-                  }
-                />
-                <Field
-                  label="Convergence tolerance"
-                  type="number"
-                  value={current.study.convergence_tolerance}
-                  onChange={(v: number) =>
-                    edit((p) => (p.study.convergence_tolerance = v))
-                  }
-                />
-                {current.study.stress_probe_mm ? (
-                  <>
-                    <VectorField
-                      label="Stress probe"
-                      value={current.study.stress_probe_mm}
-                      onChange={(v) =>
-                        edit((p) => (p.study.stress_probe_mm = v))
-                      }
-                    />
-                    <button
-                      className="text-button"
-                      onClick={() =>
-                        edit((p) => (p.study.stress_probe_mm = null))
-                      }
-                    >
-                      Remove stress probe
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="wide-button"
-                    onClick={() =>
-                      edit(
-                        (p) =>
-                          (p.study.stress_probe_mm = selection?.point ?? [
-                            0, 0, 0,
-                          ]),
-                      )
-                    }
-                  >
-                    Add named stress probe
-                  </button>
-                )}
-                <label className="assumptions">
-                  <input
-                    type="checkbox"
-                    checked={current.study.assumptions_confirmed}
-                    onChange={(e) =>
-                      edit(
-                        (p) =>
-                          (p.study.assumptions_confirmed = e.target.checked),
-                      )
-                    }
-                  />
-                  <span>
-                    I have reviewed the supports, forces and material data.
-                    Small deformation, linear elasticity and negligible dynamic
-                    effects apply.
-                  </span>
-                </label>
-                <button
-                  className="primary full-width"
-                  disabled={
-                    dirty ||
-                    busy ||
-                    pending ||
-                    !current.study.assumptions_confirmed
-                  }
-                  onClick={() => run("simulate")}
-                >
-                  <Play size={15} />
-                  Run static study
-                </button>
-                <div className="section-heading">
-                  RESULTS{" "}
-                  <span className="result-state">
-                    {state.analysis_state.replace("_", " ")}
-                  </span>
-                </div>
-                {state.analysis ? (
-                  <>
-                    <div className="result-metric">
-                      <span>Maximum displacement</span>
-                      <strong>
-                        {state.analysis.max_displacement_mm.toPrecision(4)}{" "}
-                        <small>mm</small>
-                      </strong>
-                    </div>
-                    <div className="result-metric">
-                      <span>Peak von Mises stress</span>
-                      <strong>
-                        {state.analysis.max_stress_mpa.toPrecision(4)}{" "}
-                        <small>MPa</small>
-                      </strong>
-                    </div>
-                    <div className="two-fields">
-                      <button
-                        className="wide-button"
-                        onClick={() => setField("stress")}
-                      >
-                        View stress
-                      </button>
-                      <button
-                        className="wide-button"
-                        onClick={() => setField("displacement")}
-                      >
-                        View displacement
-                      </button>
-                    </div>
-                    <p className="muted">
-                      Reaction balance error:{" "}
-                      {(state.analysis.force_balance_error * 100).toFixed(3)}%
-                    </p>
-                    {state.analysis.iterations.map((it: any, i: number) => (
-                      <div className="iteration-row" key={i}>
-                        <span>
-                          Mesh {i + 1} · {it.nodes} nodes
-                        </span>
-                        <strong>
-                          {it.max_displacement_mm.toPrecision(4)} mm
-                        </strong>
-                      </div>
-                    ))}
-                    {state.analysis.warnings.map((w: string) => (
-                      <p className="study-warning" key={w}>
-                        <AlertTriangle size={13} />
-                        {w}
-                      </p>
-                    ))}
-                  </>
-                ) : (
-                  <p className="empty-note">
-                    A completed study will appear here. Stale results are never
-                    shown as current.
-                  </p>
-                )}
-              </>
-            )}
-            {tab === "history" && (
-              <>
-                <h2>Every change, recorded.</h2>
-                <p className="muted">
-                  Restore creates a new revision. Your existing history stays
-                  intact.
-                </p>
-                {[...state.history].reverse().map((item) => (
-                  <div className="history-card" key={item.revision}>
-                    <div>
-                      <strong>Revision {item.revision}</strong>
-                      <span>{item.actor}</span>
-                    </div>
-                    <p>{item.summary}</p>
-                    <small>{new Date(item.time).toLocaleString()}</small>
-                    {item.revision !== current.revision && (
-                      <button onClick={() => history("restore", item.revision)}>
-                        <RotateCcw size={13} />
-                        Restore
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
-            {tab === "source" && (
-              <>
-                <h2>Editable project source</h2>
-                <p className="muted">
-                  This is the same typed document used by the UI and CLI.
-                  Changes are validated when applied.
-                </p>
-                <textarea
-                  className="project-source"
-                  aria-label="Project JSON"
-                  spellCheck={false}
-                  value={source}
-                  onChange={(e) => {
-                    setSource(e.target.value);
-                    dirtyRef.current = true;
-                    setDirty(true);
-                  }}
-                />
-                <button
-                  className="primary full-width"
-                  onClick={() => {
-                    try {
-                      save(JSON.parse(source));
-                    } catch (e) {
-                      setError(String(e));
-                    }
-                  }}
-                >
-                  <Check size={15} />
-                  Apply source document
-                </button>
-                <a className="schema-link" href="/api/schema" target="_blank">
-                  View project JSON Schema ↗
-                </a>
-              </>
-            )}
-            {selection && tab === "design" && (
-              <>
-                <div className="section-heading">SELECTED GEOMETRY</div>
-                <div className="selection-card">
-                  <code>{selection.id}</code>
-                  <p>
-                    {selection.face.kind} · {selection.face.area_mm2.toFixed(2)}{" "}
-                    mm²
-                  </p>
-                  <small>
-                    Point {selection.point.map((v) => v.toFixed(3)).join(", ")}{" "}
-                    mm
-                  </small>
-                  <button
-                    className="wide-button"
-                    onClick={() => {
-                      setTab("verify");
-                      setActive("");
-                    }}
-                  >
-                    Use in study
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </aside>
-      </main>
-      <section
-        className={`verification-panel ${showBottom ? "" : "collapsed"}`}
-      >
-        <button
-          className="verification-heading"
-          onClick={() => setShowBottom(!showBottom)}
-        >
-          <ShieldCheck size={16} />
-          <strong>Verification</strong>
-          <span>{checks?.state ?? "Run checks to verify this revision"}</span>
-          <ChevronDown size={15} />
-        </button>
-        {showBottom && (
-          <div className="verification-body">
-            <div className="check-list">
-              {checks?.key === state.geometry_key ? (
-                checks.findings.map((f: any, i: number) => (
-                  <div key={i} className={`finding ${f.severity}`}>
-                    <span>
-                      {f.severity === "error" ? (
-                        <X size={13} />
-                      ) : f.severity === "warning" ? (
-                        <AlertTriangle size={13} />
-                      ) : (
-                        <Check size={13} />
-                      )}
-                    </span>
-                    <div>
-                      <strong>{f.message}</strong>
-                      {f.value !== null && (
-                        <small>
-                          Measured {Number(f.value).toPrecision(5)}
-                          {f.limit !== null ? ` · Limit ${f.limit}` : ""}
-                        </small>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="check-placeholder">
-                  <ShieldCheck size={24} />
-                  <div>
-                    <strong>Engineering evidence lives here.</strong>
-                    <p>
-                      Build your model, then check dimensions, clearances and
-                      exported mesh integrity.
-                    </p>
-                  </div>
-                </div>
+                </>
               )}
             </div>
-            <div className="job-list">
-              {state.jobs.slice(0, 4).map((job) => (
-                <div className={`job ${job.state}`} key={job.id}>
-                  {["running", "queued"].includes(job.state) ? (
-                    <Loader2 size={14} className="spin" />
-                  ) : job.state === "succeeded" ? (
-                    <CheckCircle2 size={14} />
-                  ) : (
-                    <AlertTriangle size={14} />
-                  )}
-                  <div>
-                    <strong>
-                      {job.kind}{" "}
-                      <small>
-                        r{job.revision} · {job.state}
-                      </small>
-                    </strong>
-                    {job.state === "failed" && (
-                      <p title={job.message}>{job.message.slice(-240)}</p>
+          </aside>
+        )}
+      </main>
+      {(showBottom || pending || state.jobs[0]?.state === "failed") && (
+        <section
+          className={`verification-panel ${showBottom ? "" : "collapsed"}`}
+        >
+          <button
+            className="verification-heading"
+            aria-expanded={showBottom}
+            aria-controls="verification-body"
+            onClick={() => setShowBottom(!showBottom)}
+          >
+            <ShieldCheck size={16} />
+            <strong>Verification</strong>
+            <span>{checks?.state ?? state.jobs[0]?.state}</span>
+            <ChevronDown size={15} />
+          </button>
+          {showBottom && (
+            <div className="verification-body" id="verification-body">
+              <div className="check-list">
+                {checks?.key === state.geometry_key
+                  ? checks.findings.map((f: any, i: number) => (
+                      <div key={i} className={`finding ${f.severity}`}>
+                        <span>
+                          {f.severity === "error" ? (
+                            <X size={13} />
+                          ) : f.severity === "warning" ? (
+                            <AlertTriangle size={13} />
+                          ) : (
+                            <Check size={13} />
+                          )}
+                        </span>
+                        <div>
+                          <strong>{f.message}</strong>
+                          {f.value !== null && (
+                            <small>
+                              Measured {Number(f.value).toPrecision(5)}
+                              {f.limit !== null ? ` · Limit ${f.limit}` : ""}
+                            </small>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  : null}
+              </div>
+              <div className="job-list">
+                {state.jobs.slice(0, 4).map((job) => (
+                  <div className={`job ${job.state}`} key={job.id}>
+                    {["running", "queued"].includes(job.state) ? (
+                      <Loader2 size={14} className="spin" />
+                    ) : job.state === "succeeded" ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <AlertTriangle size={14} />
+                    )}
+                    <div>
+                      <strong>
+                        {job.kind}{" "}
+                        <small>
+                          r{job.revision} · {job.state}
+                        </small>
+                      </strong>
+                      {job.state === "failed" && (
+                        <p title={job.message}>{job.message.slice(-240)}</p>
+                      )}
+                    </div>
+                    {["running", "queued"].includes(job.state) && (
+                      <button
+                        title="Cancel job"
+                        onClick={() =>
+                          post(`jobs/${job.id}/cancel`, {}).then(refresh)
+                        }
+                      >
+                        <X size={13} />
+                      </button>
                     )}
                   </div>
-                  {["running", "queued"].includes(job.state) && (
-                    <button
-                      title="Cancel job"
-                      onClick={() =>
-                        post(`jobs/${job.id}/cancel`, {}).then(refresh)
-                      }
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </section>
-      <footer className="statusbar">
-        <span>
-          <i />
-          All computation runs locally
-        </span>
-        <span>
-          {current.features.filter((f) => !f.suppressed).length} active features
-          ·{" "}
-          {geometry
-            ? `${geometry.faces.length} faces · ${(geometry.volume_mm3 / 1000).toFixed(2)} cm³`
-            : "No built geometry"}
-        </span>
-        <span>Oxygen CAD · 0.1 alpha</span>
-      </footer>
+          )}
+        </section>
+      )}
     </div>
   );
 }
