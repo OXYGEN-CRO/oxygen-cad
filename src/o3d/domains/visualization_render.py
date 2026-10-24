@@ -46,6 +46,10 @@ def validate_targets(geometry, scene):
     missing = targets - bodies - faces - {"*"}
     if missing:
         raise ValueError("Unresolved scene targets; repair assignments: " + ", ".join(sorted(missing)[:5]))
+    if set(scene.transforms)-bodies:
+        raise ValueError("Presentation translations require exact body targets")
+    if "*" in scene.hidden or "*" in scene.isolated:
+        raise ValueError("Visibility actions require exact body or face targets")
 
 
 def clip_polygon(vertices, normal, offset):
@@ -59,13 +63,17 @@ def clip_polygon(vertices, normal, offset):
     return output
 
 
-def load_textures(store, assets):
+def load_textures(store, assets, decode=True):
     textures = {}
+    if decode and sum(a.width*a.height for a in assets.values())>8_388_608:
+        raise ValueError("Active textures exceed eight million decoded pixels")
     for digest, asset in assets.items():
         path = (store.root / asset.file).resolve()
         root = (store.root / "assets" / "visualization").resolve()
         if not root.is_relative_to(store.root.resolve()) or not path.is_relative_to(root) or not path.is_file():
             raise ValueError("Project texture is missing")
+        if path.stat().st_size>8*1024*1024:
+            raise ValueError("Project texture exceeds 8 MiB")
         content = path.read_bytes()
         if hashlib.sha256(content).hexdigest() != digest:
             raise ValueError("Project texture hash mismatch")
@@ -75,7 +83,8 @@ def load_textures(store, assets):
         with Image.open(path) as image:
             if image.size != (asset.width,asset.height):
                 raise ValueError("Project texture dimensions changed")
-            textures[digest] = np.asarray(image.convert("RGBA"), dtype=float)/255
+            if decode:
+                textures[digest] = np.asarray(image.convert("RGBA"), dtype=float)/255
     return textures
 
 
@@ -108,7 +117,10 @@ def apply_texture(base, points, mapping, textures):
 def render_image(store, geometry, scene, assets, cancel=None):
     """Perspective-correct triangle rasterization with per-pixel depth and direct lights."""
     validate_targets(geometry, scene)
-    textures = load_textures(store, assets)
+    needed={a.texture.asset for a in scene.appearances.values() if a.texture}
+    if needed-assets.keys():
+        raise ValueError("Project texture asset metadata is missing")
+    textures = load_textures(store, {digest:assets[digest] for digest in needed})
     width,height = scene.width,scene.height
     image = np.empty((height,width,4),dtype=float)
     image[:,:,:3] = rgb(scene.background)

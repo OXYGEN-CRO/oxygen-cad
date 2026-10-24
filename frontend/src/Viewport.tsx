@@ -364,10 +364,10 @@ export function Viewport(props: Props) {
         (b) =>
           b.mesh?.positions ?? b.mesh?.faces?.flatMap((f) => f.vertices) ?? [],
       ) ?? [];
-    host.current!.dataset.visualBodies=String(nativeBodies?.length??1);
-    if(nativeBodies?.length===0){
-      host.current!.dataset.fieldReady="true";
-      r.renderer.render(r.scene,r.camera);
+    host.current!.dataset.visualBodies = String(nativeBodies?.length ?? 1);
+    if (nativeBodies?.length === 0) {
+      host.current!.dataset.fieldReady = "true";
+      r.renderer.render(r.scene, r.camera);
       return;
     }
     const geometry = nativePoints.length

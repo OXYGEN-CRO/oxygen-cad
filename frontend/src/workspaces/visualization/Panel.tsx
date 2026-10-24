@@ -6,7 +6,6 @@ import {
   appearanceDefault,
   cameraEvent,
   dataDefault,
-  nativeFaces,
   previewEvent,
   sampleScene,
   type CameraState,
@@ -39,11 +38,14 @@ export default function VisualizationPanel(props: DomainPanelProps) {
     data.scenes.find((s) => s.name === data.active_scene) ?? data.scenes[0];
   const board = data.storyboards[boardIndex];
   const look = scene.appearances[target] ?? appearanceDefault();
+  const selectedNativeFace =
+    props.selection &&
+    geometry?.bodies.some((body) =>
+      props.selection!.id.startsWith(body.id + ":face:"),
+    )
+      ? props.selection
+      : null;
   const cameraRef = useRef<CameraState | null>(null);
-  const dataRef = useRef(data);
-  dataRef.current = data;
-  const sceneRef = useRef(scene);
-  sceneRef.current = scene;
   const run = async (operation: string, input: JsonObject = {}) =>
     props.runDomain("visualization", operation, input);
   const act = async (fn: () => Promise<void>) => {
@@ -382,8 +384,8 @@ export default function VisualizationPanel(props: DomainPanelProps) {
                 {b.name}
               </option>
             ))}
-            {props.selection && (
-              <option value={props.selection.id}>Selected face</option>
+            {selectedNativeFace && (
+              <option value={selectedNativeFace.id}>Selected face</option>
             )}
           </SelectControl>
         </label>

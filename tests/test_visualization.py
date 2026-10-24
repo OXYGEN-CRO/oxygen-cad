@@ -176,3 +176,90 @@ def test_validation_resource_guards_and_real_cancel(visual_store):
     with pytest.raises(Cancelled):
         render_image(visual_store,geometry,scene_fixture(),{},CancelDuringRaster())
     assert execute(visual_store,visual_store.load(),"gallery",{})["results"]==[]
+
+
+def test_saved_scenes_storyboards_undo_redo_reopen_and_stale_gallery(visual_store):
+    from o3d.model import Command
+    if "domains" not in Project.model_fields:
+        pytest.skip("Requires integrated Project domain envelope")
+    store=visual_store
+    initial=store.load()
+    data=Visualization(scenes=[scene_fixture()],storyboards=[Storyboard(name="Instructions")])
+    draft=initial.model_copy(deep=True)
+    draft.domains["visualization"]=validate(data.model_dump(mode="json"))
+    saved=store.apply(Command(expected_revision=initial.revision,actor="human",project=draft,summary="Save scene"))
+    assert geometry_key(saved)==geometry_key(initial)
+    assert study_key(saved)==study_key(initial)
+    assert Store(store.root).load().domains["visualization"]==data.model_dump(mode="json")
+    first=execute(store,saved,"render",{})
+    edited=saved.model_copy(deep=True)
+    edited.domains["visualization"]["scenes"][0]["camera"]["distance"]=100
+    updated=store.apply(Command(expected_revision=saved.revision,actor="agent",project=edited,summary="Edit camera"))
+    undone=store.apply(Command(expected_revision=updated.revision,actor="human",action="undo"))
+    assert undone.domains["visualization"]==saved.domains["visualization"]
+    redone=store.apply(Command(expected_revision=undone.revision,actor="human",action="redo"))
+    assert redone.domains["visualization"]==updated.domains["visualization"]
+    assert redone.material==initial.material
+    assert study_key(redone)==study_key(initial)
+    gallery=execute(Store(store.root),redone,"gallery",{})["results"]
+    assert len(gallery)==1 and gallery[0]["stale"]
+    assert gallery[0]["document_sha256"]==first["document_sha256"]
+
+
+def test_canonical_multibody_scene_explode_preserves_native_assembly(visual_store):
+    pytest.importorskip("o3d.native_document")
+    from o3d.native import NativeSession
+    from o3d.native_document import query_native
+    with NativeSession() as engine:
+        engine.execute("component.create",{"name":"Cover"})
+        engine.execute("solid.box",{"length":20,"width":16,"height":3,"body_name":"Cover"})
+        engine.execute("component.activate",{"component":0})
+        engine.execute("component.create",{"name":"Base"})
+        engine.execute("solid.box",{"length":20,"width":16,"height":6,"corner":[0,0,-8],"body_name":"Base"})
+        state=engine.execute("oxygen.document.get")
+    project=Project(name="Presentation assembly",native_document=state["document"],domains={"modeling":{"schema_version":1,"native_context":state["context"]}})
+    store=Store(visual_store.root.parent/"assembly");store.init(project)
+    original=store.load()
+    geometry=capture_scene(store,original)
+    assert len(geometry["bodies"])==2
+    target=next(b["id"] for b in geometry["bodies"] if b["name"]=="Cover")
+    scene=scene_fixture();scene.camera.target=[10,8,0];scene.transparent=True
+    assembled,_=render_image(store,geometry,scene,{})
+    scene.transforms[target]=[0,0,18]
+    exploded,_=render_image(store,geometry,scene,{})
+    assert np.count_nonzero(np.asarray(assembled)!=np.asarray(exploded))>200
+    measured=query_native(store.load(),"inspect.measure",store=store)
+    assert measured["body_count"]==2
+    assert measured["total"]["volume_mm3"]==pytest.approx(2880)
+    assert store.load().native_document==original.native_document
+    scene.transforms={};scene.width=96;scene.height=64
+    board=Storyboard(name="Cover removal",duration=10,fps=10,keyframes=[Keyframe(time=0),Keyframe(time=10,transforms={target:[0,0,18]},callout="Lift cover")])
+    sequence=execute(store,original,"publish",{"data":Visualization(scenes=[scene],storyboards=[board]).model_dump(mode="json"),"storyboard":board.name,"format":"png_sequence"})
+    assert sequence["duration"]==10 and sequence["frame_count"]==100 and sequence["fps"]==10
+    with zipfile.ZipFile(store.artifact(sequence["artifacts"]["sequence"])) as archive:
+        assert len([p for p in archive.namelist() if p.endswith(".png")])==100
+        with Image.open(io.BytesIO(archive.read("frame-0000.png"))) as first, Image.open(io.BytesIO(archive.read("frame-0099.png"))) as last:
+            assert np.count_nonzero(np.asarray(first)!=np.asarray(last))>200
+    assert store.load()==original
+
+
+def test_native_raytrace_runs_only_when_the_installed_host_advertises_it(visual_store):
+    pytest.importorskip("o3d.native_document")
+    store=visual_store;project=store.load()
+    caps=execute(store,project,"capabilities",{})
+    available=any(e["id"]=="cpu-raytrace" and e["availability"]["status"]=="available"
+        for backend in caps["native"]["backends"] for e in backend["executors"])
+    scene=scene_fixture();scene.style="shaded";scene.renderer="native-cpu-raytrace"
+    scene.appearances["*"]=Appearance(color="#d06020",metallic=0.8,roughness=0.2)
+    payload={"data":Visualization(scenes=[scene]).model_dump(mode="json")}
+    if not available:
+        with pytest.raises(ValueError,match="raytrace|image host|integrator"):
+            execute(store,project,"render",payload)
+    else:
+        result=execute(store,project,"render",payload)
+        assert result["renderer"]=="native-cpu-raytrace"
+        assert result["preflight"]["request"]["integrator"]=="raytrace"
+        with Image.open(store.artifact(result["artifacts"]["image"])) as image:
+            assert image.size==(128,96)
+            assert np.unique(np.asarray(image).reshape(-1,len(image.getbands())),axis=0).shape[0]>8
+    assert store.load()==project

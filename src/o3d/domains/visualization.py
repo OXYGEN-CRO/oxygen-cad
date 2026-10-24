@@ -195,22 +195,7 @@ def _data(project, payload):
 
 def capture_scene(store, project):
     """Read native geometry without evaluating host-controlled code or editing a design."""
-    try:
-        from ..native_document import opened_native
-    except ImportError:
-        # Transitional compatibility until native-document support is integrated.
-        from ..native import NativeSession
-        from ..model import geometry_key
-        from ..geometry import build
-        folder = store.cache / "builds" / geometry_key(project)
-        if not (folder / "build.json").exists():
-            build(store, project)
-        with NativeSession() as engine:
-            engine.execute("doc.open", {"path": str((folder / "part.solidcraft").resolve())})
-            metadata = engine.execute("render.scene")
-        geometry = json.loads((folder / "build.json").read_text())
-        return {"schema_version": 1, "bodies": [{"id": "part", "name": "Oxygen part", "visible": True,
-            "mesh": {"faces": geometry["faces"]}}], "native": metadata}
+    from ..native_document import opened_native
     with opened_native(project, store) as engine:
         return engine.execute("oxygen.scene", {"mesh": True})
 
@@ -265,6 +250,8 @@ def _import_image(store, payload):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
     content = buffer.getvalue()
+    if len(content)>8*1024*1024:
+        raise ValueError("Normalized texture exceeds 8 MiB; reduce image dimensions")
     digest = hashlib.sha256(content).hexdigest()
     relative = f"assets/visualization/{digest}.png"
     path = store.root / relative
@@ -310,7 +297,7 @@ def execute(store, project, operation, payload, cancel=None):
             "lights_units": "relative intensity; positional falloff uses explicit reference distance"}
     if operation == "scene":
         from .visualization_render import load_textures
-        load_textures(store, _data(project, payload).assets)
+        load_textures(store, _data(project, payload).assets, decode=False)
         return capture_scene(store, project)
     if operation == "gallery":
         results = []
@@ -357,6 +344,10 @@ def execute(store, project, operation, payload, cancel=None):
         raise ValueError("Unsupported animation format")
     if format_name == "mp4" and not shutil.which("ffmpeg"):
         raise ValueError("MP4 requires an installed ffmpeg encoder; PNG sequence and GIF are available")
+    if format_name == "mp4" and (scene.width%2 or scene.height%2):
+        raise ValueError("H.264 yuv420p export requires even pixel dimensions")
+    if format_name == "gif" and 100%board.fps:
+        raise ValueError("GIF needs a frame rate dividing 100 (1, 2, 4, 5, 10, 20, 25); use PNG sequence for other rates")
     count = math.ceil(board.duration*board.fps)
     if scene.width*scene.height*count > 120_000_000:
         raise ValueError("Animation exceeds 120 million output pixels; reduce resolution/duration/FPS")
@@ -386,8 +377,6 @@ def execute(store, project, operation, payload, cancel=None):
     elif format_name == "gif":
         from PIL import Image
         # GIF timing is centiseconds. Refuse lossy timing, rather than claiming exact FPS.
-        if 100 % board.fps:
-            raise ValueError("GIF needs a frame rate dividing 100 (1, 2, 4, 5, 10, 20, 25); use PNG sequence for other rates")
         images = [Image.open(p).convert("RGB") for p in frames]
         images[0].save(folder/"movie.gif", save_all=True, append_images=images[1:], duration=1000//board.fps, loop=0, disposal=2)
         for image in images:
