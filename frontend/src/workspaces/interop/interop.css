@@ -1,0 +1,14 @@
+.interop-panel { display: grid; gap: 12px; min-width: 0; }
+.interop-panel p { margin: 0; color: var(--text-secondary, inherit); font-size: 12px; line-height: 1.5; }
+.interop-panel h3 { margin: 12px 0 0; font-size: 13px; }
+.interop-panel label { display: grid; gap: 6px; font-size: 12px; }
+.interop-tabs, .interop-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.interop-tabs [aria-selected="true"] { background: var(--surface-selected, rgba(127,127,127,.18)); }
+.interop-panel textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--border, #7775); border-radius: 6px; background: var(--surface, transparent); color: var(--text-primary, inherit); font: 12px/1.5 monospace; resize: vertical; }
+.interop-limitation { border-left: 2px solid var(--border, #777); padding-left: 10px; }
+.interop-provenance { overflow-wrap: anywhere; font-family: monospace; }
+.interop-result { min-width: 0; }
+.interop-result pre { max-height: 360px; overflow: auto; font-size: 11px; line-height: 1.4; }
+
+.interop-native-fields { display: grid; gap: 10px; }
+.interop-native-fields summary { font-size: 12px; cursor: pointer; margin-bottom: 6px; }
