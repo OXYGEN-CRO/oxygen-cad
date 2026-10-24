@@ -63,8 +63,9 @@ def save_domain(store, domain, data, expected_revision, actor="agent"):
 def execute(store, project, domain, operation, payload, cancel=None, actor="agent"):
     if not isinstance(operation, str) or not operation or len(operation) > 100:
         raise ValueError("A workspace operation is required")
-    if not isinstance(payload, dict) or len(json.dumps(payload, allow_nan=False).encode()) > 10 * 1024 * 1024:
-        raise ValueError("Workspace input must be an object of at most 10 MiB")
+    limit_mb = 70 if domain == "interop" and operation == "import" else 10
+    if not isinstance(payload, dict) or len(json.dumps(payload, allow_nan=False).encode()) > limit_mb * 1024 * 1024:
+        raise ValueError(f"Workspace input must be an object of at most {limit_mb} MiB")
     payload = deepcopy(payload)
     # Electronics consumes the authenticated actor to enforce its edit locks.
     # Other domains accept their own strict operation payloads unchanged.

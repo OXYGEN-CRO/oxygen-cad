@@ -1547,6 +1547,7 @@ option {
 .right-panel.domain-panel { width: clamp(300px, 40vw, 540px); }
 .domain-panel .properties { overflow: auto; }
 .domain-panel svg { max-width: 100%; }
+.workspace-editor { position: absolute; inset: 0; overflow: auto; background: var(--surface); }
 @media (max-width: 760px) {
   .right-panel.domain-panel { width: min(94vw, 540px); }
   .topbar .workspace-switcher { width: 110px; }

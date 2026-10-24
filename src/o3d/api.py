@@ -133,7 +133,14 @@ def create_app(root=None, *, project_windows=True):
     @app.get("/api/artifacts/{relative:path}")
     def artifact(relative: str):
         try:
-            return FileResponse(store.artifact(relative))
+            path = store.artifact(relative)
+            if relative.startswith("manufacturing/"):
+                from .domains.manufacturing import validate_artifact
+                try:
+                    validate_artifact(store, relative)
+                except ValueError as error:
+                    raise HTTPException(409, str(error)) from error
+            return FileResponse(path)
         except ValueError:
             raise HTTPException(404, "Artifact not found")
 
@@ -147,9 +154,21 @@ def create_app(root=None, *, project_windows=True):
 
     @app.get("/api/events")
     async def events(request: Request):
+        from .identity import Identity, principal_context
+        captured = principal_context.get()
         async def stream():
             previous = None
             while not await request.is_disconnected():
+                identity = Identity(store)
+                if identity.enabled:
+                    if not captured:
+                        return
+                    try:
+                        identity.resolve(captured.id).require("read")
+                    except PermissionError:
+                        return
+                elif captured:
+                    return
                 value = {"revision": store.load().revision, "jobs": jobs.list()}
                 serialized = json.dumps(value)
                 if serialized != previous:

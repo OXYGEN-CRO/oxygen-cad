@@ -11,7 +11,7 @@ dependencies = ["build123d==0.13.0", "fastapi>=0.115,<1", "uvicorn[standard]>=0.
 
 [project.optional-dependencies]
 skills = ["reportlab>=4.4,<5"]
-test = ["pytest>=8,<10", "httpx>=0.28,<1"]
+test = ["pytest>=8,<10", "httpx>=0.28,<1", "pypdf==6.4.0", "gerbonara==1.5.0"]
 catalog = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1"]
 catalog-semantic = ["psycopg[binary]>=3.2,<4", "httpx>=0.28,<1", "fastembed>=0.7,<1"]
 

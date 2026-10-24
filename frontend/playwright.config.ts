@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 const fixtureUrl = `http://127.0.0.1:${process.env.O3D_TEST_PORT ?? "8877"}`;
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: ["**/modeling/**"],
   workers: 1,
   timeout: 60000,
   use: {

@@ -294,6 +294,7 @@ export default function App() {
       if (job.state === "succeeded") {
         if (job.result?.project) acceptProject(job.result.project);
         await refresh();
+        if (job.result?.stale) throw new Error("The project changed while this operation ran. Run it again for current results.");
         return job.result;
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -505,8 +506,9 @@ export default function App() {
   const pending = state?.jobs.some((j) =>
     ["queued", "running"].includes(j.state),
   );
+  const centralWorkspace = tab === "electronics" || tab === "drawings";
   const inspectorVisible =
-    rightOpen && Boolean(tab !== "design" || feature || reference || selection);
+    !centralWorkspace && rightOpen && Boolean(tab !== "design" || feature || reference || selection);
   function openPanel(panel: string) {
     setTab(panel);
     setRightOpen(true);
@@ -551,6 +553,13 @@ export default function App() {
         p.study.forces.push({ face: id, vector_n: [0, 0, -10] });
       p.study.assumptions_confirmed = false;
     });
+  const workspacePanel = isWorkspace(tab) ? <WorkspacePanel
+    domain={tab} project={state.project} state={state} selection={selection}
+    domainData={state.project.domains?.[tab] ?? {}}
+    native={native} inspectNative={() => api("native/inspect")}
+    saveDomain={saveDomain} runDomain={runDomain}
+    refresh={async () => { await refresh(); }} setError={setError}
+  /> : null;
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -578,9 +587,9 @@ export default function App() {
             },
             {
               label: panelLabel,
-              expanded: inspectorVisible,
-              controls: "inspector-sidebar",
-              onToggle: toggleInspector,
+              expanded: centralWorkspace || inspectorVisible,
+              controls: centralWorkspace ? "workspace-editor" : "inspector-sidebar",
+              onToggle: centralWorkspace ? () => setTab("design") : toggleInspector,
             },
           ]}
         />
@@ -737,6 +746,7 @@ export default function App() {
                 : "Expand inspector sidebar"
             }
             onClick={toggleInspector}
+            style={centralWorkspace ? { display: "none" } : undefined}
           >
             <PanelRight size={16} />
           </Button>
@@ -882,6 +892,7 @@ export default function App() {
           />
         </aside>
         <section className="canvas-panel">
+          {centralWorkspace ? <div className="workspace-editor" id="workspace-editor">{workspacePanel}</div> : <>
           <div className="canvas-toolbar">
             <div>
               <Button
@@ -1083,6 +1094,7 @@ export default function App() {
               </Button>
             </div>
           )}
+          </>}
         </section>
         {inspectorVisible && (
           <aside
@@ -1111,13 +1123,7 @@ export default function App() {
               </Button>
             </div>
             <div className="properties">
-              {isWorkspace(tab) && <WorkspacePanel
-                domain={tab} project={state.project} state={state} selection={selection}
-                domainData={state.project.domains?.[tab] ?? {}}
-                native={native} inspectNative={() => api("native/inspect")}
-                saveDomain={saveDomain} runDomain={runDomain}
-                refresh={async () => { await refresh(); }} setError={setError}
-              />}
+              {workspacePanel}
               {tab === "design" && !canonical && (
                 <>
                   {feature ? (
@@ -1545,6 +1551,10 @@ export default function App() {
                     value={current.name}
                     onChange={(value: string) => edit((p) => (p.name = value))}
                   />
+                  {canonical ? <Button onClick={() => {
+                    openPanel("modeling");
+                    setTimeout(() => window.dispatchEvent(new CustomEvent("o3d:modeling", { detail: { tab: "parameters" } })), 100);
+                  }}>Edit parameters</Button> : <>
                   <div className="section-heading">
                     PARAMETERS
                     <Button
@@ -1615,6 +1625,7 @@ export default function App() {
                       onChange={(v) => edit((p) => (p.placement.rotation = v))}
                     />
                   </details>
+                  </>}
                   <div className="section-heading">
                     REQUIREMENTS
                     <Button

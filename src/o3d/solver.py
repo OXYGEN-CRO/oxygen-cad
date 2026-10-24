@@ -49,6 +49,8 @@ def run_process(command, directory: Path, log: Path, cancel: Event | None = None
                     raise Cancelled("Job cancelled")
                 raise RuntimeError(f"Worker timed out after {timeout}s; inspect {log.name}")
             time.sleep(0.1)
+        if cancel and cancel.is_set():
+            raise Cancelled("Job cancelled")
         if process.returncode != 0:
             raise RuntimeError(f"Worker exited {process.returncode}: {log.read_text()[-2500:]}")
 
