@@ -86,6 +86,7 @@ def contained(root: Path, relative: str, *, exists=True) -> Path:
 
 def verify_assets(root: Path, documents: list[dict]):
     """Check saved provenance, not just newly generated archive checksums."""
+    expected_hashes = {}
     for document in documents:
         domains = document.get("domains", {})
         declarations = list(document.get("references", []))
@@ -108,6 +109,9 @@ def verify_assets(root: Path, documents: list[dict]):
                 raise ValueError(f"Project dependency hash mismatch: {relative}")
             if relative in by_file and by_file[relative] != digest:
                 raise ValueError("Conflicting immutable asset declarations")
+            if relative in expected_hashes and expected_hashes[relative] != digest:
+                raise ValueError(f"Conflicting saved dependency hashes: {relative}")
+            expected_hashes[relative] = digest
             by_file[relative] = digest
             if reference.get("id"):
                 if reference["id"] in by_id and by_id[reference["id"]] != relative:
@@ -137,12 +141,17 @@ def verify_assets(root: Path, documents: list[dict]):
                         if isinstance(relative, str) and relative in artifact_paths:
                             if hashlib.sha256(_result_path(root, relative).read_bytes()).hexdigest() != digest:
                                 raise ValueError(f"Saved artifact provenance hash mismatch: {relative}")
+                            key = ".o3d/" + relative
+                            if key in expected_hashes and expected_hashes[key] != digest:
+                                raise ValueError(f"Conflicting saved dependency hashes: {relative}")
+                            expected_hashes[key] = digest
                 for item in value.values():
                     verify_evidence(item)
             elif isinstance(value, list):
                 for item in value:
                     verify_evidence(item)
         verify_evidence(domains)
+    return expected_hashes
 
 
 def project_metadata(store):
@@ -183,7 +192,7 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
         from .model import Project
         for value in documents:
             Project.model_validate(migrate_document(value)[0])
-        verify_assets(store.root, documents)
+        expected_hashes = verify_assets(store.root, documents)
         for document in documents:
             for relative in declared_artifacts(document):
                 files[".o3d/" + relative] = _result_path(store.root, relative)
@@ -192,13 +201,13 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
             if name not in files or (entry.get("sha256") and checksum(json.loads(files[name].read_text())) != entry["sha256"]):
                 raise ValueError(f"Revision {entry['revision']} is missing or corrupt; repair before export")
         size = sum(path.stat().st_size for path in files.values())
-        if size > MAX_ARCHIVE_BYTES:
-            raise ValueError("Portable archive exceeds the 512 MiB uncompressed limit")
+        if size > MAX_ARCHIVE_BYTES or len(files) + 1 > 100000:
+            raise ValueError("Portable archive exceeds its 512 MiB or 100,000 member limit")
         manifest = {"format": "oxygen-cad-project", "schema_version": ARCHIVE_VERSION, "project_schema": project.schema_version,
                     "revision": project.revision, "scope": {"history": "all retained revisions", "assets": "all registered and local immutable assets", "results": include_results,
                     "result_roots": list(RESULT_ROOTS) if include_results else [], "saved_artifact_dependencies": "always included",
                     "excluded": ["credentials", "jobs", "unsaved drafts", "derived exports"]},
-                    "files": {name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size} for name, path in sorted(files.items())}}
+                    "files": {}}
         destination = destination or store.cache / "exports" / str(project.revision) / "project.oxygen.zip"
         destination.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=".archive-", dir=destination.parent)
@@ -206,8 +215,19 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
         try:
             with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
                 # Fixed metadata makes archives reproducible for unchanged inputs.
+                written_bytes = 0
                 for name, path in sorted(files.items()):
-                    archive.writestr(zipfile.ZipInfo(name), path.read_bytes())
+                    # A job can publish a newer cache file while we hold the source lock.
+                    # Hash exactly the bytes written, rather than reading a second time.
+                    content = path.read_bytes()
+                    written_bytes += len(content)
+                    if written_bytes > MAX_ARCHIVE_BYTES:
+                        raise ValueError("Portable archive grew beyond its 512 MiB limit during capture")
+                    digest = hashlib.sha256(content).hexdigest()
+                    if name in expected_hashes and digest != expected_hashes[name]:
+                        raise ValueError(f"Saved dependency changed during capture: {name}")
+                    manifest["files"][name] = {"sha256": digest, "bytes": len(content)}
+                    archive.writestr(zipfile.ZipInfo(name), content)
                 archive.writestr(zipfile.ZipInfo("manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             with open(temporary, "rb") as output:
                 os.fsync(output.fileno())

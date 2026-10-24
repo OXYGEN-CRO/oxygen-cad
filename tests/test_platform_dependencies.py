@@ -166,3 +166,26 @@ def test_restore_checks_declared_asset_hashes_even_when_archive_manifest_is_reco
     with pytest.raises(ValueError, match="missing|hash mismatch"):
         restore_archive(modified.getvalue(), tmp_path / "restore")
     assert not (tmp_path / "restore").exists()
+
+
+def test_concurrent_cache_replacement_keeps_archive_manifest_consistent(tmp_path, monkeypatch):
+    store = Store(tmp_path / "source"); store.init(Project())
+    path = store.cache / "domains/simulation/latest/study.json"
+    path.parent.mkdir(parents=True)
+    original = b'{"result":"completed A"}'
+    replacement = b'{"result":"completed B"}'
+    path.write_bytes(original)
+    real_read = Path.read_bytes
+    reads = []
+    def cache_published_after_read(self):
+        content = real_read(self)
+        if self == path:
+            reads.append(content)
+            path.write_bytes(replacement)
+        return content
+    monkeypatch.setattr(Path, "read_bytes", cache_published_after_read)
+    backup = portable_archive(store)
+    restored = restore_archive(Path(backup["path"]), tmp_path / "restored")
+    assert real_read(Path(restored["path"]) / path.relative_to(store.root)) == original
+    assert reads == [original]
+    assert real_read(path) == replacement
