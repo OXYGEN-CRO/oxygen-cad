@@ -215,7 +215,7 @@ def cad_search(q: Annotated[str, typer.Argument()] = "", provider: str | None = 
 
 @cad_app.command("inspect")
 def cad_inspect(record_id: UUID, cad_url: str | None = None, expected_mm: str | None = None,
-                tolerance_mm: Annotated[float, typer.Option(gt=0)] = 0.05, cad_python: Path | None = None):
+                tolerance_mm: Annotated[float, typer.Option(min=0)] = 0.05, cad_python: Path | None = None):
     """Inspect one selected vendor CAD file locally; record geometry facts without an accuracy guarantee."""
     from .vendor_cad import VendorCAD
     expected = None
