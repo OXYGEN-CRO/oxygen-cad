@@ -833,7 +833,9 @@ export default function ElectronicsPanel(props: DomainPanelProps) {
                       )}
                       <p>
                         {getPart(c).name} @{c.library_version} · 3D{" "}
-                        {getPart(c).model3d ? "available" : "missing"}
+                        {getPart(c).model3d
+                          ? "declared; unresolved"
+                          : "missing"}
                       </p>
                       <div className="eda-fields">
                         {field(
@@ -1031,7 +1033,7 @@ export default function ElectronicsPanel(props: DomainPanelProps) {
                       <td>
                         {p.pins.length}/{p.pads.length}
                       </td>
-                      <td>{p.model3d ? "Available" : "Missing"}</td>
+                      <td>{p.model3d ? "Declared; unresolved" : "Missing"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1422,6 +1424,15 @@ export default function ElectronicsPanel(props: DomainPanelProps) {
           )}
         </div>
       )}
+      {result?.manifest != null &&
+        typeof result.manifest === "object" &&
+        "review_state" in result.manifest &&
+        result.manifest.review_state === "blocked_by_findings" && (
+          <p className="eda-error">
+            Production blocked by check findings. Review ERC/DRC reports before
+            release.
+          </p>
+        )}
       {result?.artifacts && (
         <div className="eda-artifacts">
           {result.artifacts.map((a) => (

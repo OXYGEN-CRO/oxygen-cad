@@ -272,5 +272,22 @@ test("electrical source survives human editing, real solve/fabrication, agent lo
       p.domains.electronics.components.find((c: any) => c.id === "r1").value,
     "3k",
   );
+  await panel.getByRole("tab", { name: "Board", exact: true }).click();
+  await page.screenshot({
+    path: test.info().outputPath("electronics-board-dark.png"),
+  });
+  await page
+    .getByRole("button", { name: "Switch to light mode", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.screenshot({
+    path: test.info().outputPath("electronics-board-light.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
   expect(errors).toEqual([]);
 });

@@ -25,6 +25,14 @@
     {
       "command": "cd frontend && npm run build",
       "result": "TypeScript and Vite build passed; host mounting verified separately"
+    },
+    {
+      "command": "O3D_BROWSER_URL=http://127.0.0.1:8958 npx playwright test tests/electronics.spec.ts --reporter=line",
+      "result": "1 passed (10.6s); real integrated UI, no page errors; direct and whole-project locks, forged actor rejection, stale source/revision, actual ngspice/fabrication artifacts and reopen persistence"
+    },
+    {
+      "command": "Fresh Python process: Store(disposable_project).load()",
+      "result": "Reloaded revision8 source, r1 value3k, locked placement(19,10), explicit v1/p1\u2192r1/p1 wire preserved"
     }
   ],
   "rows": [
@@ -35,7 +43,8 @@
       "remaining": "Rich junction/label/power-symbol UX and save/reopen host acceptance",
       "evidence": [
         "tests/test_electronics.py",
-        "docs/parity/electronics.md"
+        "docs/parity/electronics.md",
+        "frontend/tests/electronics.spec.ts"
       ]
     },
     {
@@ -321,8 +330,8 @@
     {
       "id": "E30",
       "status": "partial",
-      "implemented": "Versioned JSON, typed edits, source hashes, transition lock hook and shared panel callbacks",
-      "remaining": "Host Store/job/undo/CLI integration acceptance and durable external compiler merge",
+      "implemented": "Versioned JSON, typed edits, source hashes, Store lock hook and authenticated job actor; real browser/API tests cover revision conflicts, direct/full-project/forged-actor locks, persisted manual edits, stale source rejection and actual workers",
+      "remaining": "External compiler regeneration merge and broader undo/redo sequence qualification",
       "evidence": [
         "tests/test_electronics.py",
         "docs/parity/electronics.md"
