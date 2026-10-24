@@ -15,7 +15,7 @@
     "tests": "tests/test_interop.py",
     "executed": "13 passed with the source-built native bridge",
     "frontend": "npm ci and npm run build passed",
-    "browser": "Parent integration owns mounting and full browser acceptance; no browser pass is claimed here",
+    "browser": "Integrated Playwright acceptance: 2 tests passed against a disposable project and real API. Verified UI inch-STL import, diagnostics, OBJ export/reopen, construction midplane with DXF import, native patch/trim/thicken, undo/redo and cold reopen; no page or console errors. Tests: frontend/tests/interop.spec.ts",
     "platform": "Linux only"
   },
   "rows": [
