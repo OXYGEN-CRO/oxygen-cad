@@ -283,3 +283,32 @@ def execute_native(store, expected_revision: int, actor: str, command: str, para
         updated = store.apply(Command(expected_revision=expected_revision, actor=actor, project=updated,
             summary=f"Native {command}"))
     return {"project": updated, "result": result}
+
+
+def enforce_native_migration_guards(current: Project, updated: Project, store):
+    """Give Store a trusted canonical before-state for the first agent migration.
+
+    Legacy provenance features are not sufficient evidence that native bindings survived.
+    Reconstruct them from the current document, then reuse the same Store guards that
+    protect an already migrated design. Store calls this only for agent transactions.
+    """
+    if current.native_document is not None or updated.native_document is None or not any(p.locked for p in current.parameters.values()):
+        return
+    try:
+        with opened_native(current, store) as session:
+            snapshot = session.execute("oxygen.document.get")
+            parameter_map = dict(session.legacy_parameter_map)
+    except (ValueError, RuntimeError) as error:
+        raise Conflict("Cannot verify locked bindings during the first native migration. Have a human migrate this design first, then retry the agent edit. " + str(error)) from error
+    trusted = current.model_copy(deep=True)
+    trusted.native_document = snapshot["document"]
+    trusted.placement = Placement()
+    modeling = trusted.domains.setdefault("modeling", {"schema_version": 1})
+    modeling["native_context"] = snapshot["context"]
+    modeling["legacy_parameter_map"] = parameter_map
+    locks = modeling.setdefault("parameter_locks", {})
+    for name, parameter in current.parameters.items():
+        if parameter.locked:
+            locks[parameter_map.get(name, name)] = True
+    from .store import enforce_agent_guards
+    enforce_agent_guards(trusted, updated)

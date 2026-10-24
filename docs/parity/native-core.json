@@ -109,7 +109,7 @@
     {
       "id": "MOD-028",
       "status": "bounded",
-      "evidence": "HTTP and Python/CLI adapters use one Store optimistic transaction path. Failed operations leave project revision unchanged; context-only selections avoid geometry recompilation/invalidation."
+      "evidence": "HTTP and Python/CLI adapters use one Store optimistic transaction path. Failed operations leave project revision unchanged; context-only selections avoid geometry recompilation/invalidation. On the first agent migration, the universal Store hook reconstructs the trusted canonical before-state and reuses native lock/binding guards; unchanged legacy provenance cannot mask replaced native bindings."
     }
   ],
   "tests": [
@@ -117,14 +117,16 @@
     "tests/test_native_engine.py",
     "tests/test_engineering.py",
     "tests/test_editing_sequences.py",
-    "tests/test_native_modeling_workflows.py"
+    "tests/test_native_modeling_workflows.py",
+    "tests/test_native_migration_locks.py"
   ],
   "executed": [
     "35 source-native/backend tests passed before final edge-case increment",
     "Expanded source-native document + native-engine suite: 26 passed, including nested profile reuse, Keep Tools Boolean, surface physical-total exclusion, mesh audit, legacy aliases, projection break rollback and native render-host preservation",
     "11 original analytic source-native modeling workflow cases passed in 12.29 s; independent STEP imports validate every body before a persisted parameter edit is acknowledged",
     "Final complete backend suite: 68 passed in 97.51 s on the source-built Rust engine; through-hole and mixed-scene correctness checks rerun after final nullable-metric adjustment",
-    "Final source-native focused suite: 40 passed in 18.08 s; final targeted checks additionally verify degree-unit mirrors and user locks across parameter rename"
+    "Final source-native focused suite: 40 passed in 18.08 s; final targeted checks additionally verify degree-unit mirrors and user locks across parameter rename",
+    "First-migration lock integration: 7/7 real source-engine regressions passed with the actual platform Store hook, including native API and raw project replacement bypass attempts, normal and aliased v1 names, valid agent body creation, human migration, and safe refusal when canonical reconstruction is unavailable. Platform owner separately passed 59/59 combined Store and migration regressions against this helper."
   ],
   "remaining": [
     "Full acceptance of every Modeling row requires the domain fixtures and graphical workflows; a registered command is not a passing parity claim.",
