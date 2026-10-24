@@ -1,0 +1,11 @@
+{
+  "name": "oxygen-cad",
+  "version": "0.1.0",
+  "description": "Use the local Oxygen CAD studio and CLI to edit, verify and export revisioned CAD projects.",
+  "author": {
+    "name": "OXYGEN"
+  },
+  "repository": "https://github.com/OXYGEN-CRO/oxygen-cad",
+  "license": "MIT",
+  "skills": "./skills/"
+}

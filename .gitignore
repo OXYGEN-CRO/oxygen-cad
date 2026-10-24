@@ -12,6 +12,8 @@ projects/*
 test-results/
 *.log
 .DS_Store
+.agents/skills/oxygen-cad-*/
+.claude/skills/oxygen-cad-*/
 
 engine/target/
 third_party/solidcraft/target/

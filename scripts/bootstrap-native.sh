@@ -9,3 +9,7 @@ python3 -m venv .mesh-venv
 cd frontend
 npm ci
 npm run build
+cd ..
+if [ "${O3D_INSTALL_AGENT_SKILLS:-1}" != "0" ]; then
+    python3 scripts/agent_skills.py install --agent portable --json
+fi

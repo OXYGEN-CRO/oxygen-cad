@@ -4,6 +4,8 @@
 .tools
 __pycache__
 .pytest_cache
+.agents
+.claude
 frontend/node_modules
 frontend/dist
 frontend/test-results

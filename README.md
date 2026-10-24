@@ -43,6 +43,20 @@ From another terminal in the repository:
 
 The default project is `projects/demo/`. No account, built-in chat, or hosted backend is required. Model execution happens locally; your external coding agent retains its own network/data settings.
 
+## Bundled agent skills
+
+Oxygen CAD ships three focused skills: **oxygen-cad-setup**, **oxygen-cad-model** and **oxygen-cad-verify**. They teach the actual project, CLI, revision and engineering-result contracts. The same `skills/` directory is bundled by the Claude Code and Codex plugin manifests.
+
+For an agent workspace without the plugin, install the instructions with Python 3 on the host; Docker is not needed for this step:
+
+```sh
+./o3d skills list --json
+./o3d setup --agent codex --workspace /absolute/path/to/workspace --dry-run --json
+./o3d setup --agent codex --workspace /absolute/path/to/workspace --json
+```
+
+Use `--agent claude` for `.claude/skills`, or `--agent portable` for `.agents/skills`. Omit `--workspace` to install in this checkout. Setup can be rerun to update managed copies; it refuses to overwrite existing unowned skills or local edits. If the plugin already supplies the skills, use that route alone. See [agent setup and plugin installation](docs/AGENT-SKILLS.md).
+
 ## Work with a coding agent
 
 Open this repository in Claude Code, Codex, or another coding agent. Ask it to follow `AGENTS.md` and the generated instructions in `projects/demo/AGENTS.md`.

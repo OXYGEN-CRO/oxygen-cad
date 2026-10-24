@@ -32,6 +32,11 @@ RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requir
 COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
+COPY o3d ./
+COPY scripts/agent_skills.py scripts/
+COPY skills/ skills/
+COPY .claude-plugin/ .claude-plugin/
+COPY .codex-plugin/ .codex-plugin/
 COPY tests/ tests/
 COPY --from=frontend /web/dist frontend/dist/
 ENV PATH=/opt/cad/bin:$PATH O3D_PROJECT_DIR=/projects/demo

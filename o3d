@@ -2,6 +2,14 @@
 set -eu
 O3D_REPO=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 cd "$O3D_REPO"
+if [ "${1:-}" = "setup" ] || [ "${1:-}" = "skills" ]; then
+    O3D_SKILL_COMMAND=$1
+    shift
+    if [ "$O3D_SKILL_COMMAND" = "setup" ]; then
+        set -- install "$@"
+    fi
+    exec python3 "$O3D_REPO/scripts/agent_skills.py" "$@"
+fi
 if [ "${O3D_NATIVE:-0}" = "1" ]; then
     exec "$O3D_REPO/.venv/bin/python" -m o3d.cli "$@"
 fi

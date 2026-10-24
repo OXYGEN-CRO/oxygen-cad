@@ -1,0 +1,14 @@
+{
+  "name": "oxygen-cad",
+  "owner": {
+    "name": "OXYGEN"
+  },
+  "plugins": [
+    {
+      "name": "oxygen-cad",
+      "source": "./",
+      "description": "Use the local Oxygen CAD studio and CLI to edit, verify and export revisioned CAD projects."
+    }
+  ],
+  "description": "Local Oxygen CAD modelling and verification workflows for coding agents."
+}
