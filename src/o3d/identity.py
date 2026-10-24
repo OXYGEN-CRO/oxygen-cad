@@ -7,6 +7,7 @@ and scoped to the project that issued them. No hosted identity provider exists.
 from __future__ import annotations
 
 import contextvars
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -93,6 +94,12 @@ class Identity:
                 return Principal(**self._public(account))
         raise PermissionError("Project credential is invalid or revoked")
 
+    def resolve(self, identity_id):
+        for account in self._read()["accounts"]:
+            if account["id"] == identity_id and not account["revoked"]:
+                return Principal(**self._public(account))
+        raise PermissionError("Project identity is revoked or missing")
+
     def accounts(self, principal):
         principal.require("invite")
         with self.store.lock():
@@ -131,7 +138,7 @@ def action_for_request(method, path):
     if path.startswith("/api/artifacts/") or path.startswith("/api/platform/portable") or path == "/api/jobs/export":
         return "export"
     if path.startswith("/api/platform/identity"):
-        return "invite" if method == "GET" else "admin"
+        return "revoke" if path.endswith("/revoke") else "invite"
     if method in {"GET", "HEAD", "OPTIONS"}:
         return "read"
     if path == "/api/context":
@@ -146,3 +153,19 @@ def action_for_request(method, path):
 def effective_actor(requested="human"):
     principal = principal_context.get()
     return "agent" if principal and principal.kind == "agent" else requested
+
+
+@contextmanager
+def authorized(store, action):
+    """Revalidate at the mutation boundary; caller holds Store.lock."""
+    principal = principal_context.get()
+    identity = Identity(store)
+    if principal and identity.enabled:
+        principal = identity.resolve(principal.id)
+    if principal:
+        principal.require(action)
+    context = principal_context.set(principal)
+    try:
+        yield principal
+    finally:
+        principal_context.reset(context)

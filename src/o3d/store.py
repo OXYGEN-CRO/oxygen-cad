@@ -21,7 +21,7 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-from .recovery import write_json, commit, replay, checksum, atomic_bytes
+from .recovery import write_json, commit, replay, checksum, atomic_bytes, sync_directory
 
 
 def _bindings(before, after, name, path, native=False):
@@ -69,6 +69,24 @@ def enforce_agent_guards(current, updated):
             raise Conflict(f"Requirement {requirement.id} is user-owned; agents cannot weaken or remove it")
 
 
+def validate_domain_transitions(current, updated, actor):
+    """Domain-owned guards also cover full-document replacement and history actions."""
+    from importlib import import_module
+    known = {"modeling", "assemblies", "drawings", "manufacturing", "simulation", "electronics", "visualization", "interop", "platform"}
+    before, after = getattr(current, "domains", {}), getattr(updated, "domains", {})
+    for domain in sorted((set(before) | set(after)) & known):
+        name = f"o3d.domains.{domain}"
+        try:
+            module = import_module(name)
+        except ModuleNotFoundError as error:
+            if error.name == name:
+                continue
+            raise
+        hook = getattr(module, "validate_transition", None)
+        if hook:
+            hook(before.get(domain, {}), after.get(domain, {}), actor)
+
+
 class Store:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
@@ -78,6 +96,8 @@ class Store:
     @contextmanager
     def lock(self):
         self.cache.mkdir(parents=True, exist_ok=True)
+        sync_directory(self.root)
+        sync_directory(self.root.parent)
         with (self.cache / "lock").open("a+") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             try:
@@ -100,6 +120,8 @@ class Store:
             if (self.root / "o3d.json").exists():
                 raise Conflict("Project already exists")
             self._save(project, "human", "Create project", "create")
+            from .projects import project_metadata
+            project_metadata(self)
             self._agent_files()
         return project
 
@@ -125,11 +147,23 @@ class Store:
             return self._history()
 
     def recover(self):
-        """Inspect and repair from verified immutable revisions, retaining bad files."""
+        """Repair verified saved state, preserving damaged bytes and audit evidence."""
         with self.lock():
-            events = []
+            events, valid, invalid = [], {}, []
             history = self._history()
-            valid = {}
+            current_path = self.root / "o3d.json"
+            try:
+                current_value = json.loads(current_path.read_text())
+            except (OSError, ValueError):
+                current_value = None
+            if isinstance(current_value, dict) and current_value.get("schema_version", 1) != 1:
+                raise ValueError("Future project schema cannot be repaired by this version; original retained")
+            if current_value is not None:
+                try:
+                    Project.model_validate(current_value)
+                except ValueError:
+                    current_value = None
+            evidence_root = self.cache / "recovery" / now().replace(":", "-")
             for entry in history:
                 path = self.cache / "history" / f"{entry['revision']:08d}.json"
                 try:
@@ -139,21 +173,36 @@ class Store:
                         raise ValueError("checksum mismatch")
                     valid[entry["revision"]] = value
                 except (OSError, ValueError) as error:
-                    events.append({"revision": entry["revision"], "error": str(error)})
+                    # Current source is a second copy only when the recorded digest authenticates it.
+                    if current_value and current_value["revision"] == entry["revision"] and entry.get("sha256") == checksum(current_value):
+                        if path.exists():
+                            atomic_bytes(evidence_root / path.name, path.read_bytes())
+                        write_json(path, current_value)
+                        valid[entry["revision"]] = current_value
+                        events.append({"revision": entry["revision"], "repaired_snapshot": True, "error": str(error)})
+                    else:
+                        invalid.append((entry["revision"], path))
+                        events.append({"revision": entry["revision"], "error": str(error)})
             if not valid:
                 raise ValueError("No verified revision available; original evidence retained")
             revision = max(valid)
-            current_path = self.root / "o3d.json"
-            try:
-                intact = checksum(json.loads(current_path.read_text())) == checksum(valid[revision])
-            except (OSError, ValueError):
-                intact = False
+            intact = current_value is not None and checksum(current_value) == checksum(valid[revision])
             if not intact:
-                evidence = self.cache / "recovery" / (now().replace(":", "-") + "-o3d.json")
+                evidence = evidence_root / "o3d.json"
                 if current_path.exists():
                     atomic_bytes(evidence, current_path.read_bytes())
                 write_json(current_path, valid[revision])
                 events.append({"restored_revision": revision, "evidence": str(evidence.relative_to(self.root))})
+            if invalid:
+                # Preserve damaged immutable entries outside active history, making future edits usable.
+                history_path = self.cache / "history.jsonl"
+                atomic_bytes(evidence_root / "history.jsonl", history_path.read_bytes())
+                for _, path in invalid:
+                    if path.exists():
+                        target = evidence_root / path.name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(path, target)
+                atomic_bytes(history_path, b"".join((json.dumps(entry, sort_keys=True) + "\n").encode() for entry in history if entry["revision"] in valid))
             pointer = self.cache / "undo.json"
             try:
                 undo = json.loads(pointer.read_text())
@@ -162,17 +211,15 @@ class Store:
             write_json(pointer, {key: [r for r in undo.get(key, []) if r in valid] for key in ("undo", "redo")})
             report = {"revision": revision, "events": events, "valid_revisions": sorted(valid)}
             if events:
+                report["evidence_directory"] = str(evidence_root.relative_to(self.root))
                 write_json(self.cache / "recovery" / "last-report.json", report)
             return report
 
     def apply(self, command: Command, request_id: str | None = None) -> Project:
-        from .identity import principal_context
-        principal = principal_context.get()
-        if principal:
-            principal.require("edit")
-            if principal.kind == "agent":
+        from .identity import authorized
+        with self.lock(), authorized(self, "edit") as principal:
+            if principal and principal.kind == "agent":
                 command = command.model_copy(update={"actor": "agent"})
-        with self.lock():
             current = self._load()
             request_hash = checksum(command.model_dump(mode="json"))
             if request_id:
@@ -209,8 +256,14 @@ class Store:
                     state["undo"].append(current.revision)
                 else:
                     state = {"undo": state.get("undo", []) + [current.revision], "redo": []}
+            if command.action == "replace" and getattr(current, "native_document", None) is not None:
+                if updated.features != current.features:
+                    raise Conflict("Native document is canonical; edit its native timeline instead of legacy features")
+                if updated.native_document == current.native_document and updated.parameters != current.parameters:
+                    raise Conflict("Native document is canonical; edit dimensions through native parameter commands")
             if command.actor == "agent":
                 enforce_agent_guards(current, updated)
+            validate_domain_transitions(current, updated, command.actor)
             updated = Project.model_validate(updated.model_dump() | {"revision": current.revision + 1})
             self._save(updated, command.actor, command.summary, command.action, state, request_id, request_hash)
             return updated
@@ -226,10 +279,13 @@ class Store:
         asset_id = f"ref_{sha[:12]}"
         if any(r.id == asset_id for r in current.references):
             raise Conflict("This STEP asset is already in the project")
-        path = self.root / "assets" / f"{sha}.step"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            path.write_bytes(content)
+        from .projects import contained
+        path = contained(self.root, f"assets/{sha}.step", exists=False)
+        if path.exists():
+            if hashlib.sha256(path.read_bytes()).hexdigest() != sha:
+                raise ValueError("Existing immutable asset hash changed; original retained")
+        else:
+            atomic_bytes(path, content)
         updated = current.model_copy(deep=True)
         updated.references.append(ReferenceAsset(id=asset_id, name=Path(name).name, sha256=sha, file=f"assets/{sha}.step"))
         return self.apply(Command(expected_revision=expected_revision, actor="human", project=updated, summary=f"Import {Path(name).name}"))

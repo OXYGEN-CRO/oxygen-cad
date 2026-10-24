@@ -53,7 +53,7 @@ def _draft_id(value):
 
 def execute(store, project, operation, payload, cancel=None):
     payload = payload or {}
-    if cancel and cancel():
+    if cancel and (cancel.is_set() if hasattr(cancel, "is_set") else cancel()):
         raise ValueError("Platform operation cancelled")
     if operation == "status":
         return status(store)
@@ -95,13 +95,17 @@ def mount(app, store, jobs):
     catalog = ProjectCatalog(store.root.parent)
     cookie_name = "o3d_session_" + hashlib.sha256(str(store.root).encode()).hexdigest()[:12]
 
+    @app.exception_handler(PermissionError)
+    async def permission_denied(_, error):
+        return JSONResponse({"detail": str(error)}, status_code=403)
+
     @app.middleware("http")
     async def authenticate(request: Request, call_next):
         path = request.scope.get("path", request.url.path)
         root_path = request.scope.get("root_path", "")
         if root_path and path.startswith(root_path):
             path = path[len(root_path):]
-        if not path.startswith("/api/") or path in {"/api/platform/session", "/api/platform/identity/enable"} or not identity.enabled:
+        if not path.startswith("/api/") or path in {"/api/platform/session", "/api/platform/identity/enable", "/api/platform/health"} or not identity.enabled:
             return await call_next(request)
         token = request.headers.get("authorization", "")
         token = token[7:] if token.lower().startswith("bearer ") else request.cookies.get(cookie_name, "")
@@ -124,6 +128,10 @@ def mount(app, store, jobs):
         response = JSONResponse(result)
         response.set_cookie(cookie_name, result["token"], httponly=True, samesite="strict", max_age=12 * 3600)
         return response
+
+    @app.get("/api/platform/health")
+    def health():
+        return {"service": "oxygen-cad", "api_version": 1}
 
     @app.get("/api/platform/status")
     def inspect_platform():

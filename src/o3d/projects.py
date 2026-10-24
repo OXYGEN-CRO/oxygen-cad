@@ -41,7 +41,7 @@ def safe_name(value: str) -> str:
 
 def contained(root: Path, relative: str, *, exists=True) -> Path:
     path = PurePosixPath(relative)
-    if path.is_absolute() or not path.parts or any(part in {"..", "."} for part in path.parts) or "\\" in relative:
+    if path.is_absolute() or not path.parts or any(part in {"..", ".", ""} for part in relative.split("/")) or "\\" in relative or ":" in relative:
         raise ValueError("Unsafe project path")
     result = root.joinpath(*path.parts)
     cursor = root
@@ -71,10 +71,12 @@ def project_metadata(store):
     return value
 
 
-def portable_archive(store, destination: Path | None = None, *, include_results=True):
+def portable_archive(store, destination: Path | None = None, *, include_results=True, expected_project=None):
     """Capture source, all retained history and immutable dependencies, never credentials."""
     with store.lock():
         project = store._load()
+        if expected_project is not None and project != expected_project:
+            raise ValueError("Project changed during export; retry export from the current revision")
         files = {"o3d.json": store.root / "o3d.json"}
         for relative in (".o3d/history.jsonl", ".o3d/undo.json", ".o3d/project.json", ".o3d/collaboration.json"):
             path = store.root / relative
@@ -148,6 +150,20 @@ def restore_archive(source: Path | bytes, destination: Path):
                 contained(temporary, entry.filename, exists=False)
                 if stat.S_ISLNK(entry.external_attr >> 16) or entry.is_dir():
                     raise ValueError("Archive must contain regular files only")
+            if "release-manifest.json" in names:
+                release = json.loads(archive.read("release-manifest.json"))
+                expected_release = release.get("files", {})
+                if release.get("format") != "oxygen-cad-release" or release.get("schema_version") != 1 or set(names) != set(expected_release) | {"release-manifest.json"}:
+                    raise ValueError("Unsupported or incomplete release archive")
+                for name, metadata in expected_release.items():
+                    content = archive.read(name)
+                    if len(content) != metadata["bytes"] or hashlib.sha256(content).hexdigest() != metadata["sha256"]:
+                        raise ValueError(f"Release checksum mismatch: {name}")
+                nested = release.get("project_archive")
+                if nested != "project.oxygen.zip" or nested not in expected_release:
+                    raise ValueError("Release lacks a portable project")
+                # Restore the verified saved project; manufacturing outputs remain in the release.
+                return restore_archive(archive.read(nested), destination)
             manifest = json.loads(archive.read("manifest.json"))
             if manifest.get("format") != "oxygen-cad-project" or manifest.get("schema_version") != ARCHIVE_VERSION:
                 raise ValueError("Unsupported portable project format")

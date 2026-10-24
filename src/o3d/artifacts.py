@@ -84,8 +84,27 @@ def export_bundle(store, project):
         writer.writerow([project.name, "make", 1, project.material.name if project.material else "Unspecified", "part.step"])
         for ref in project.references:
             writer.writerow([ref.name, "reference", 1, "", ref.sha256])
-    with zipfile.ZipFile(folder / "release.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(folder.iterdir()):
-            if path.name != "release.zip":
-                archive.write(path, path.name)
+    from .projects import portable_archive
+    from .recovery import sync_directory
+    import hashlib
+    import os
+    portable = portable_archive(store, folder / "project.oxygen.zip", expected_project=project)
+    names = ["part.step", "part.stl", "o3d.json", "report.json", "report.html", "bom.csv", "project.oxygen.zip"]
+    names += [name for name in ("part.solidcraft", "engine-script.json") if (folder / name).is_file()]
+    manifest = {"format": "oxygen-cad-release", "schema_version": 1, "revision": project.revision,
+                "project_archive": "project.oxygen.zip", "scope": portable["manifest"]["scope"],
+                "files": {name: {"sha256": hashlib.sha256((folder / name).read_bytes()).hexdigest(),
+                                 "bytes": (folder / name).stat().st_size} for name in sorted(names)}}
+    write_json(folder / "release-manifest.json", manifest)
+    temporary = folder / ".release.zip"
+    try:
+        with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name in sorted(names + ["release-manifest.json"]):
+                archive.write(folder / name, name)
+        with temporary.open("rb") as source:
+            os.fsync(source.fileno())
+        os.replace(temporary, folder / "release.zip")
+        sync_directory(folder)
+    finally:
+        temporary.unlink(missing_ok=True)
     return {"revision": project.revision, "artifact": f"exports/{project.revision}/release.zip", "report": f"exports/{project.revision}/report.html"}

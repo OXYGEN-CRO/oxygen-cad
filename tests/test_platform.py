@@ -273,3 +273,146 @@ def test_server_draft_survives_restart(store):
     draft = execute(reopened, reopened.load(), "draft_load", {"id": "window-1"})
     assert draft["project"]["name"] == "Unsaved offline work"
     assert reopened.load().revision == 1
+
+
+def test_corrupt_snapshot_repaired_from_verified_current_copy(store):
+    p = store.load().model_copy(update={"name": "Latest"})
+    store.apply(Command(expected_revision=1, actor="human", project=p))
+    snapshot = store.cache / "history/00000002.json"
+    snapshot.write_text("corrupt snapshot")
+    result = store.recover()
+    assert result["revision"] == 2
+    assert json.loads(snapshot.read_text())["name"] == "Latest"
+    assert any(event.get("repaired_snapshot") for event in result["events"])
+    assert store.apply(Command(expected_revision=2, actor="human", action="undo")).revision == 3
+
+
+def test_corrupt_latest_copies_are_quarantined_and_editing_can_continue(store):
+    store.apply(Command(expected_revision=1, actor="human", project=store.load().model_copy(update={"name": "Damaged"})))
+    (store.root / "o3d.json").write_text("broken source")
+    (store.cache / "history/00000002.json").write_text("broken snapshot")
+    result = store.recover()
+    assert result["revision"] == 1
+    assert [entry["revision"] for entry in store.history()] == [1]
+    assert (store.root / result["evidence_directory"] / "00000002.json").read_text() == "broken snapshot"
+    assert store.apply(Command(expected_revision=1, actor="human", project=store.load().model_copy(update={"name": "Recovered edit"}))).revision == 2
+
+
+def test_recursive_native_parameter_bindings_and_lock_flags_are_user_owned():
+    from types import SimpleNamespace
+    from copy import deepcopy
+    from o3d.store import enforce_agent_guards
+    before = SimpleNamespace(parameters={}, features=[], requirements=[], domains={"modeling": {"parameter_locks": {"width": True}}}, native_document={"params": [{"name": "width", "expr": "40", "unit": "mm"}], "features": [{"id": "one", "nested": {"sizes": ["width * 2", "height"]}}]})
+    changed = deepcopy(before)
+    changed.native_document["features"][0]["nested"]["sizes"][0] = "80"
+    with pytest.raises(Conflict, match="binding"):
+        enforce_agent_guards(before, changed)
+    changed = deepcopy(before)
+    changed.domains["modeling"]["parameter_locks"]["width"] = False
+    with pytest.raises(Conflict, match="user-owned"):
+        enforce_agent_guards(before, changed)
+    changed = deepcopy(before)
+    changed.native_document["params"][0]["expr"] = "50"
+    with pytest.raises(Conflict, match="locked"):
+        enforce_agent_guards(before, changed)
+    # An unrelated identifier containing the same letters is not a locked reference.
+    changed = deepcopy(before)
+    changed.native_document["features"][0]["nested"]["sizes"][1] = "height + 1"
+    enforce_agent_guards(before, changed)
+
+
+def _kill_save(root, boundary):
+    import os
+    store = Store(root)
+    store._fault = lambda step: os._exit(73) if step == boundary else None
+    store.apply(Command(expected_revision=1, actor="human", project=store.load().model_copy(update={"name": "After hard termination"})))
+
+
+@pytest.mark.parametrize("boundary", ["journal", "snapshot", "source", "history", "undo"])
+def test_real_process_death_during_save_reopens_complete_revision(store, boundary):
+    ctx = multiprocessing.get_context("fork")
+    child = ctx.Process(target=_kill_save, args=(store.root, boundary))
+    child.start(); child.join(10)
+    assert child.exitcode == 73
+    reopened = Store(store.root)
+    assert reopened.load().name == "After hard termination"
+    assert reopened.load().revision == 2
+    assert len(reopened.history()) == 2
+    assert json.loads((reopened.cache / "undo.json").read_text())["undo"] == [1]
+
+
+def test_readonly_save_reports_failure_without_losing_saved_source(store):
+    import os
+    if os.geteuid() == 0:
+        pytest.skip("Root bypasses directory permissions")
+    before = (store.root / "o3d.json").read_bytes()
+    store.cache.chmod(0o555)
+    try:
+        with pytest.raises(PermissionError):
+            store.apply(Command(expected_revision=1, project=store.load().model_copy(update={"name": "Blocked"})))
+    finally:
+        store.cache.chmod(0o755)
+    assert (store.root / "o3d.json").read_bytes() == before
+    assert store.load().revision == 1
+
+
+def test_complete_manufacturing_release_reopens_as_editable_project(store, tmp_path):
+    from o3d.geometry import build
+    from o3d.artifacts import export_bundle
+    build(store, store.load())
+    release = export_bundle(store, store.load())
+    restored = restore_archive(store.artifact(release["artifact"]), tmp_path / "new-runtime" / "project")
+    other = Store(restored["path"])
+    assert other.load() == store.load()
+    assert other.history() == store.history()
+    assert other.apply(Command(expected_revision=1, actor="human", project=other.load().model_copy(update={"name": "Editable after transfer"}))).revision == 2
+
+
+def test_store_revalidates_revocation_at_mutation_boundary(store):
+    from o3d.identity import Identity, principal_context
+    identity = Identity(store)
+    owner = identity.enable("owner")
+    administrator = identity.authenticate(owner["token"])
+    credential = identity.issue(administrator, "editor", "editor")
+    cached_principal = identity.authenticate(credential["token"])
+    identity.revoke(administrator, cached_principal.id)
+    context = principal_context.set(cached_principal)
+    try:
+        with pytest.raises(PermissionError, match="revoked"):
+            store.apply(Command(expected_revision=1, actor="human", project=store.load().model_copy(update={"name": "unauthorized"})))
+    finally:
+        principal_context.reset(context)
+    assert store.load().revision == 1
+
+
+def test_domain_transition_guards_receive_removed_data_and_effective_actor(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from o3d.store import validate_domain_transitions
+    seen = []
+    module = SimpleNamespace(validate_transition=lambda before, after, actor: seen.append((before, after, actor)))
+    monkeypatch.setitem(sys.modules, "o3d.domains.electronics", module)
+    current = SimpleNamespace(domains={"electronics": {"schema_version": 1, "locked": True}, "future-domain": {"unknown": 1}})
+    updated = SimpleNamespace(domains={})
+    validate_domain_transitions(current, updated, "agent")
+    assert seen == [({"schema_version": 1, "locked": True}, {}, "agent")]
+
+
+def test_release_rejects_source_advanced_during_export(store):
+    from o3d.geometry import build
+    from o3d.artifacts import export_bundle
+    original = store.load()
+    build(store, original)
+    store.apply(Command(expected_revision=1, actor="human", project=original.model_copy(update={"name": "Advanced"})))
+    with pytest.raises(ValueError, match="changed during export"):
+        export_bundle(store, original)
+    assert not (store.cache / "exports/1/release.zip").exists()
+
+
+def test_authenticated_project_health_does_not_expose_saved_data(store):
+    from fastapi.testclient import TestClient
+    from o3d.identity import Identity
+    Identity(store).enable("owner")
+    client = TestClient(_platform_app(store))
+    assert client.get("/api/project").status_code == 401
+    assert client.get("/api/platform/health").json() == {"service": "oxygen-cad", "api_version": 1}
