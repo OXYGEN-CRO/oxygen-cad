@@ -76,6 +76,7 @@ export default function InteropPanel(props: DomainPanelProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<JsonObject | null>(null);
   const [units, setUnits] = useState("file");
+  const [importPlane, setImportPlane] = useState("XY");
   const [assetId, setAssetId] = useState("");
   const [format, setFormat] = useState("step");
   const [sketch, setSketch] = useState("");
@@ -109,7 +110,7 @@ export default function InteropPanel(props: DomainPanelProps) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-    await run("import", { name: file.name, content_base64: btoa(binary), units });
+    await run("import", { name: file.name, content_base64: btoa(binary), units, plane: importPlane });
   };
   const tools = tab === "construction" ? constructionTools : surfaceTools;
   const selectedTool = tools[selected] ?? tools[0];
@@ -126,6 +127,8 @@ export default function InteropPanel(props: DomainPanelProps) {
       <label>Source units<SelectControl aria-label="Source units" value={units} onChange={e => setUnits(e.target.value)}>
         <option value="file">Declared file units (STEP / DXF / SVG)</option><option value="mm">Millimetres</option><option value="cm">Centimetres</option><option value="m">Metres</option><option value="in">Inches</option><option value="ft">Feet</option>
       </SelectControl></label>
+      <label>Sketch import plane<Input aria-label="Sketch import plane" value={importPlane} onChange={e => setImportPlane(e.target.value)} placeholder="XY or a construction plane name" /></label>
+      <p>DXF and SVG use this plane. Choose an origin plane or a named construction reference.</p>
       <label>Import file<Input aria-label="Import exchange file" type="file" accept=".step,.stp,.stl,.obj,.dxf,.svg" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} /></label>
       <h3>Export current native document</h3>
       <label>Format<SelectControl aria-label="Export format" value={format} onChange={e => setFormat(e.target.value)}>
