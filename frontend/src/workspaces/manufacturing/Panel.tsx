@@ -1,4 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useId,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { Button, Input, SelectControl } from "../../components/ui";
 import { artifact } from "../../api";
 import type { DomainPanelProps, JsonObject } from "../contracts";
@@ -43,11 +51,16 @@ function parsePoints(text: string): number[][] {
     });
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
+  const controlId = useId();
   return (
-    <label className="manufacturing-field">
-      <span>{label}</span>
-      {children}
-    </label>
+    <div className="manufacturing-field">
+      <label htmlFor={controlId}>{label}</label>
+      {isValidElement(children)
+        ? cloneElement(children as ReactElement<{ id?: string }>, {
+            id: controlId,
+          })
+        : children}
+    </div>
   );
 }
 function NumberField({
