@@ -12,25 +12,27 @@
   "architecture": "SolidCraft native_document is canonical for definitions, geometry, occurrences, origins, joints, links, contact, study keys and configuration tables. Host domain data contains review settings, named coordinate poses, constraint-set membership, lock restoration, procurement exclusions, tolerance inputs and report provenance. Domain workers return complete proposals for the Jobs owner to apply once through Store.",
   "evidence": {
     "backend": {
-      "command": "PYTHONPATH=src O3D_ENGINE_BINARY=<source-built oxygen bridge> .venv/bin/python -m pytest -q tests/test_assemblies.py",
+      "command": "PYTHONPATH=<integrated checkout>/src O3D_ENGINE_BINARY=<source-built oxygen bridge> .venv/bin/python -m pytest -q tests/test_assemblies.py",
       "passed": 21,
       "file": "tests/test_assemblies.py",
-      "engine_sha256": "26dd81814b16cc6ff49f97533cc9068a5789255bb7283013ca8a76825136abc8"
+      "engine_sha256": "7ca0d8ce1178b82db06dba1caa6da7138750c3076beebd352d3cc2802f922a9f",
+      "result": "21 passed in 15.42s against integrated application source; linked-source revisions use the actual validated interop import adapter."
     },
     "frontend_build": {
       "command": "cd frontend && npm run build",
       "result": "passed; existing bundle size advisory"
     },
     "browser": {
-      "command": "O3D_BROWSER_URL=http://127.0.0.1:5191 npx playwright test tests/assemblies.spec.ts --reporter=line",
-      "passed": 1,
-      "result": "Real integrated shell, disposable native slider project. Swept stop between clear endpoints, named home persistence after browser reload, native metadata edit, BOM reconciliation and CSV download, light/dark themes, no page errors.",
+      "command": "O3D_ENGINE_BINARY=<source-built oxygen bridge> O3D_BROWSER_URL=<disposable integrated app> npx playwright test tests/assemblies.spec.ts --reporter=line",
+      "passed": 2,
+      "result": "2 passed in 36.9s. Real integrated shell and revision-safe domain jobs on a disposable slider project: swept stop between clear endpoints, named home persistence after browser reload, metadata edit, BOM reconciliation/CSV download, both themes, no page errors. A second flow uploads a real native ZIP, inserts two shared linked occurrences, uploads a revised native JSON source through the actual interop adapter, applies its immutable native snapshot, measures both instance widths as 20 mm and verifies unchanged occurrence identities/transforms after reload.",
       "scope": "Desktop Chromium on Linux; no cross-platform or physical-fit inference.",
       "screenshots": [
         "frontend/test-results/assemblies-light.png",
         "frontend/test-results/assemblies-dark.png"
       ],
-      "screenshots_committed": false
+      "screenshots_committed": false,
+      "test": "frontend/tests/assemblies.spec.ts"
     }
   },
   "rows": [
@@ -57,7 +59,7 @@
     {
       "id": "A03",
       "status": "partial",
-      "workflow": "Content-addressed .solidcraft source insertion and controlled source revision through relink preserve occurrences and transforms; embedded exact bodies reopen without reading source geometry.",
+      "workflow": "Native file chooser uploads immutable ZIP or JSON source bytes through the validated interop import adapter. JSON sources retain their original bytes and derive a native container for actual relink compatibility. The source revision selector supports linked insertion, repeated shared occurrences, controlled update and break-link; source revision tests preserve occurrences/transforms and measure all updated instance geometry.",
       "acceptance": {
         "file": "tests/test_assemblies.py",
         "test": "test_raw_design_import_integrated_edit_and_linked_source_revision"
@@ -230,5 +232,10 @@
     "Rows describe executed workflows and explicit gaps, not a claimed percentage of Fusion parity.",
     "Source-link imports with unresolved external dependencies are rejected. Filesystem paths are not accepted as untrusted assembly command parameters.",
     "Long operations are child-process jobs; engine failures and budget exhaustion remain errors/unresolved rather than passed motion or fit."
+  ],
+  "dependencies": [
+    "Native canonical document, project-asset resolver and origin-aware stable-reference guard.",
+    "Interop native design import with register_only and native_source_snapshot support.",
+    "Parent generic domain Jobs finalization applies complete proposals through Store once."
   ]
 }

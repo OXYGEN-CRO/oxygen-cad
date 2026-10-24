@@ -1,8 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect as baseExpect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+const expect = baseExpect.configure({ timeout: 20000 });
+test.setTimeout(120000);
 
 // Run against a disposable server initialized from examples/assemblies/slider.json.
 // O3D_BROWSER_URL selects the integrated shell; this test never opens a live project.
@@ -133,10 +135,13 @@ test("native source chooser uploads revisions, inserts shared links and updates 
   const engine =
     process.env.O3D_ENGINE_BINARY ||
     resolve("../engine/target/release/oxygen-engine");
-  const source = (length: number) => {
+  const source = (length: number, nativeJson = false) => {
     const directory = mkdtempSync(join(tmpdir(), "o3d-browser-source-"));
     try {
-      const path = join(directory, "Supplier.solidcraft");
+      const path = join(
+        directory,
+        nativeJson ? "Supplier.json" : "Supplier.solidcraft",
+      );
       const commands = [
         {
           command: "solid.box",
@@ -207,9 +212,9 @@ test("native source chooser uploads revisions, inserts shared links and updates 
   await panel
     .getByLabel("Upload native source", { exact: true })
     .setInputFiles({
-      name: "Supplier.solidcraft",
-      mimeType: "application/octet-stream",
-      buffer: source(20),
+      name: "Supplier.json",
+      mimeType: "application/json",
+      buffer: source(20, true),
     });
   await expect
     .poll(

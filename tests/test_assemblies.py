@@ -4,7 +4,7 @@ The tests deliberately compare matrices/intervals/volumes against independent nu
 and reopen each committed edit through a new process instead of retaining a raw session.
 """
 import csv
-import hashlib
+import base64
 import io
 import json
 import math
@@ -406,15 +406,14 @@ def test_raw_design_import_integrated_edit_and_linked_source_revision(assembly_s
 
     linked_store = Store(tmp_path / "linked")
     linked_store.init(Project(name="Linked product"))
-    def register(content):
-        digest = hashlib.sha256(content).hexdigest()
-        path = linked_store.root / "assets" / f"{digest}.solidcraft"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
+    def register(content, filename="Supplier.solidcraft"):
+        from o3d.domains import interop
         current = linked_store.load()
-        current.domains.setdefault("interop", {"schema_version": 1}).setdefault("assets", []).append({"id": digest, "sha256": digest, "file": f"assets/{digest}.solidcraft", "media_type": "application/x-solidcraft"})
-        linked_store.apply(Command(expected_revision=current.revision, actor="human", project=current, summary="Import linked source revision"))
-        return digest
+        uploaded = interop.execute(linked_store, current, "import", {"name": filename, "content_base64": base64.b64encode(content).decode(), "units": "file", "register_only": True})
+        proposal = Project.model_validate(uploaded["project"])
+        linked_store.apply(Command(expected_revision=current.revision, actor="human", project=proposal, summary="Import linked source revision"))
+        interop.validate(linked_store.load().domains["interop"])
+        return uploaded["result"]["asset"]["id"]
     first_asset = register(raw_native.read_bytes())
     inserted = edit(linked_store, "component.insert_design", asset_id=first_asset, name="Supplier")
     copied = edit(linked_store, "occurrence.copy", component=inserted["component"], translate=[30, 0, 0])
@@ -423,7 +422,8 @@ def test_raw_design_import_integrated_edit_and_linked_source_revision(assembly_s
         source.execute("doc.open", {"path": str(raw_native)})
         source.execute("parameters.change", {"name": "Length", "expression": "20 mm"})
         source.execute("file.save", {"path": str(raw_native)})
-    second_asset = register(raw_native.read_bytes())
+        source.execute("file.save", {"path": str(raw)})
+    second_asset = register(raw.read_bytes(), "Supplier.json")
     edit(linked_store, "component.relink", component=inserted["component"], asset_id=second_asset)
     assert linked_store.load().native_document["occurrences"] == before_occurrences
     assert query(linked_store, "inspect.measure")["total"]["volume_mm3"] == pytest.approx(4000)

@@ -150,7 +150,7 @@ export default function AssembliesPanel(props: DomainPanelProps) {
       format: string;
       sha256: string;
     }[]
-  ).filter((asset) => ["solidcraft", "json"].includes(asset.format));
+  ).filter((asset) => asset.format === "solidcraft");
   const source = sources.find((asset) => asset.id === sourceId);
   const linked = summary.links?.links?.find(
     (link) => link.component === component?.id,
@@ -591,8 +591,6 @@ export default function AssembliesPanel(props: DomainPanelProps) {
                     {linked.found
                       ? "source available"
                       : "source missing; embedded geometry retained"}
-                    <br />
-                    {linked.path}
                   </p>
                 )}
                 <p className="assembly-subtle">

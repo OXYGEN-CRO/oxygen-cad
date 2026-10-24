@@ -10,5 +10,6 @@ In the Assembly workspace:
 4. Play Travel, export poses or produce the duration-scaled kinematics report. The report is retained with native state provenance; later native edits mark it stale.
 5. Show Service, then restore the assembled display. All-pairs fit reports use engineering placements rather than exploded display offsets.
 6. Reconcile the BOM, edit a definition's part number, export CSV and reopen the project.
+7. In Components, expand Linked source designs. Upload a `.solidcraft` or native `.json` source, select its immutable revision and insert it. Make shared occurrences with Instance; upload a changed source revision and choose Update selected linked definition. Native JSON originals are retained alongside a validated native container so source updates use the same supported path as ZIP designs.
 
 Motion units are millimeters and degrees. Studies solve positions and finite-difference kinematics; they do not simulate force, preload, friction, impact or material compliance. Tolerance stacks use explicitly entered dimensional intervals and acceptance limits. No standard fit class or thread strength is inferred.
