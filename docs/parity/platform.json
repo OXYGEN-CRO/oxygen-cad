@@ -10,26 +10,297 @@
     "desktop_policy": "rustc --edition 2024 --test desktop/src-tauri/src/lifecycle.rs: 3 passed",
     "resource_staging": "python3 scripts/stage_desktop.py: 1448 tracked public input files staged from Docker COPY closure",
     "desktop_build": "cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml: passed on Linux",
-    "existing_regressions": "tests/test_engineering.py concurrency/undo/export selection plus platform suite: 27 passed before final additional fault tests"
+    "existing_regressions": "tests/test_engineering.py concurrency/undo/export selection plus platform suite: 27 passed before final additional fault tests",
+    "platform_browser": "Integrated application on isolated127.0.0.1:9371; frontend/tests/platform-lifecycle.spec.ts:1 passed (13s). Real STEP reference, project lifecycle, persisted draft/reload/apply, checkpoint/reviewstaleness, download+restore+independent child window; no page errors; screenshots inspected."
   },
   "rows": [
-    {"id":"PLT-001","status":"partial","implementation":["src/o3d/projects.py:ProjectCatalog","src/o3d/domains/platform.py:mount","frontend/src/workspaces/platform/Panel.tsx"],"tests":["test_project_catalog_lifecycle","test_catalog_rejects_unsafe_paths"],"remaining":["Parent wires project-scoped /p/{directory}/ windows","No cloud hubs/folder administration or external dependency ownership UI"]},
-    {"id":"PLT-002","status":"partial","implementation":["src/o3d/projects.py:portable_archive","src/o3d/domains/platform.py:execute"],"tests":["test_portable_archive_restores_history_and_assets_without_credentials","test_server_draft_survives_restart"],"remaining":["Packaged runtime disconnected-network acceptance on actual desktop","No remote synchronization or resumed uploads"]},
-    {"id":"PLT-003","status":"partial","implementation":["src/o3d/store.py","src/o3d/collaboration.py:Collaboration"],"tests":["test_role_export_review_and_scoped_browser_session","test_complete_manufacturing_release_reopens_as_editable_project"],"remaining":["Dependency pinning and retention administration","Integrated CAD review task usability"]},
-    {"id":"PLT-004","status":"partial","implementation":["src/o3d/collaboration.py:merge","src/o3d/collaboration.py:Collaboration.reconcile"],"tests":["test_three_way_reconcile_preserves_both_edits_and_reports_conflicts"],"remaining":["Named branch lifecycle and branch graph UI","Merged geometry must be rebuilt and checked; schema merge alone is not geometric validity"]},
-    {"id":"PLT-005","status":"partial","implementation":["src/o3d/store.py:Store.apply","src/o3d/collaboration.py:Collaboration.reconcile"],"tests":["test_two_processes_never_overwrite_stale_revision","test_idempotent_retry_does_not_duplicate_edit"],"remaining":["Presence/reservations and simultaneous linked-design workflows","Idempotent request path is /api/platform/commands; parent may expose centrally"]},
-    {"id":"PLT-006","status":"partial","implementation":["src/o3d/collaboration.py","src/o3d/domains/platform.py:mount"],"tests":["test_role_export_review_and_scoped_browser_session"],"remaining":["Public share links, mentions/tasks and geometry markups beyond stable saved-revision anchors","Viewer role denies downloadable artifacts; browser geometry access cannot promise impossible prevention of copying rendered data"]},
-    {"id":"PLT-007","status":"partial","implementation":["src/o3d/identity.py","src/o3d/store.py:Store.apply","src/o3d/domains/platform.py:mount"],"tests":["test_authenticated_roles_revocation_and_agent_spoofing","test_store_revalidates_revocation_at_mutation_boundary","test_role_export_review_and_scoped_browser_session"],"remaining":["No hosted identity provider, TLS deployment, folder roles or organization membership","Filesystem/CLI owners remain trusted administrators","Parent must propagate authenticated identity through async domain jobs"]},
-    {"id":"PLT-008","status":"partial","implementation":["src/o3d/domains/platform.py:validate","src/o3d/domains/platform.py:execute"],"tests":["test_idempotent_retry_does_not_duplicate_edit","test_recursive_native_parameter_bindings_and_lock_flags_are_user_owned"],"remaining":["Parent CLI domain command integration and clean-machine external-agent corpus","No universal cancellation/engine completion claim"]},
-    {"id":"PLT-009","status":"not_implemented","implementation":[],"tests":[],"remaining":["MCP endpoint and trusted extension install/start/stop lifecycle; no upstream inheritance claim"]},
-    {"id":"PLT-010","status":"partial","implementation":["src/o3d/store.py:Store.import_step","src/o3d/projects.py:contained"],"tests":["test_archive_rejects_missing_dependency_and_tampering"],"remaining":["Broad format translation is owned by interop/core","No Fusion feature/history importer"]},
-    {"id":"PLT-011","status":"implemented_local_contract","implementation":["src/o3d/projects.py:portable_archive","src/o3d/projects.py:restore_archive","src/o3d/artifacts.py:export_bundle"],"tests":["test_portable_archive_restores_history_and_assets_without_credentials","test_complete_manufacturing_release_reopens_as_editable_project","test_release_rejects_source_advanced_during_export","test_archive_rejects_missing_dependency_and_tampering"],"remaining":["512 MiB uncompressed archive limit","Credentials, jobs, drafts and recursively derived releases are outside backup scope; all saved engineering artifact dependencies are always included","Cross-domain geometry equivalence requires integrated corpus testing"]},
-    {"id":"PLT-012","status":"partial","implementation":["src/o3d/projects.py:migrate_document"],"tests":["test_future_schema_is_rejected_without_rewrite"],"remaining":["Only existing v1 and omitted-version legacy v1 are supported","Future schemas fail without mutation; no speculative lossy migrations"]},
-    {"id":"PLT-013","status":"not_implemented","implementation":[],"tests":[],"remaining":["Pinned large-model/long-history p50/p95 and memory corpus","Incremental geometry, reference paging and viewport cost work"]},
-    {"id":"PLT-014","status":"partial","implementation":["desktop/src-tauri/src/main.rs","src/o3d/recovery.py"],"tests":["test_real_process_death_during_save_reopens_complete_revision"],"remaining":["Parent owns worker retry/cancel/reconciliation semantics","No claim that persistence fault tests cover solver process recovery"]},
-    {"id":"PLT-015","status":"implemented_local_contract","implementation":["src/o3d/recovery.py","src/o3d/store.py:Store.recover","frontend/src/workspaces/platform/Panel.tsx"],"tests":["test_real_process_death_during_save_reopens_complete_revision","test_failed_journal_write_retains_previous_revision","test_readonly_save_reports_failure_without_losing_saved_source","test_corrupt_latest_copies_are_quarantined_and_editing_can_continue","test_corrupt_snapshot_repaired_from_verified_current_copy"],"remaining":["Crash consistency assumes local atomic rename and working fsync","Browser draft/close-warning interaction needs integrated browser and physical Mac testing","No recovery guarantee for simultaneous corruption of every independent copy"]},
-    {"id":"PLT-016","status":"partial","implementation":["desktop/src-tauri/src/main.rs","desktop/src-tauri/src/lifecycle.rs","scripts/stage_desktop.py"],"tests":["desktop lifecycle Rust policy tests","test_staging_closure_tracks_new_source_without_local_data"],"remaining":["Actual Apple Silicon install/reopen/solve/export/cancel test","Runtime remains Linux AMD64 Docker; native ARM64 launcher is a separate architecture claim"]},
-    {"id":"PLT-017","status":"partial","implementation":["desktop/src-tauri/src/main.rs","desktop/src-tauri/src/lifecycle.rs","scripts/stage_desktop.py"],"tests":["desktop lifecycle Rust policy tests","test_missing_copy_input_retains_prior_runtime","test_staging_refuses_tracked_credentials_and_symlinks"],"remaining":["Physical Docker start/kill/retry/multiple-window acceptance","WKWebView downloads, shortcuts, trackpad, clipboard and native close warnings","Signing/notarization, update delivery and rollback distribution are not implemented"]},
-    {"id":"PLT-018","status":"partial","implementation":["frontend/src/workspaces/platform/Panel.tsx"],"tests":["TypeScript and production frontend build"],"remaining":["Parent integration and real browser acceptance","Uncoached manual/agent CAD user task completion across the complete product"]}
+    {
+      "id": "PLT-001",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/projects.py:ProjectCatalog",
+        "src/o3d/domains/platform.py:mount",
+        "frontend/src/workspaces/platform/Panel.tsx"
+      ],
+      "tests": [
+        "test_project_catalog_lifecycle",
+        "test_catalog_rejects_unsafe_paths",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "No cloud hubs/folder administration or external dependency ownership UI"
+      ]
+    },
+    {
+      "id": "PLT-002",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/projects.py:portable_archive",
+        "src/o3d/domains/platform.py:execute"
+      ],
+      "tests": [
+        "test_portable_archive_restores_history_and_assets_without_credentials",
+        "test_server_draft_survives_restart"
+      ],
+      "remaining": [
+        "Packaged runtime disconnected-network acceptance on actual desktop",
+        "No remote synchronization or resumed uploads"
+      ]
+    },
+    {
+      "id": "PLT-003",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/store.py",
+        "src/o3d/collaboration.py:Collaboration"
+      ],
+      "tests": [
+        "test_role_export_review_and_scoped_browser_session",
+        "test_complete_manufacturing_release_reopens_as_editable_project",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "Dependency pinning and retention administration",
+        "Integrated CAD review task usability"
+      ]
+    },
+    {
+      "id": "PLT-004",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/collaboration.py:merge",
+        "src/o3d/collaboration.py:Collaboration.reconcile"
+      ],
+      "tests": [
+        "test_three_way_reconcile_preserves_both_edits_and_reports_conflicts"
+      ],
+      "remaining": [
+        "Named branch lifecycle and branch graph UI",
+        "Merged geometry must be rebuilt and checked; schema merge alone is not geometric validity"
+      ]
+    },
+    {
+      "id": "PLT-005",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/store.py:Store.apply",
+        "src/o3d/collaboration.py:Collaboration.reconcile"
+      ],
+      "tests": [
+        "test_two_processes_never_overwrite_stale_revision",
+        "test_idempotent_retry_does_not_duplicate_edit",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "Presence/reservations and simultaneous linked-design workflows",
+        "Idempotent request path is /api/platform/commands; parent may expose centrally"
+      ]
+    },
+    {
+      "id": "PLT-006",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/collaboration.py",
+        "src/o3d/domains/platform.py:mount"
+      ],
+      "tests": [
+        "test_role_export_review_and_scoped_browser_session"
+      ],
+      "remaining": [
+        "Public share links, mentions/tasks and geometry markups beyond stable saved-revision anchors",
+        "Viewer role denies downloadable artifacts; browser geometry access cannot promise impossible prevention of copying rendered data"
+      ]
+    },
+    {
+      "id": "PLT-007",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/identity.py",
+        "src/o3d/store.py:Store.apply",
+        "src/o3d/domains/platform.py:mount"
+      ],
+      "tests": [
+        "test_authenticated_roles_revocation_and_agent_spoofing",
+        "test_store_revalidates_revocation_at_mutation_boundary",
+        "test_role_export_review_and_scoped_browser_session"
+      ],
+      "remaining": [
+        "No hosted identity provider, TLS deployment, folder roles or organization membership",
+        "Filesystem/CLI owners remain trusted administrators",
+        "Parent must propagate authenticated identity through async domain jobs"
+      ]
+    },
+    {
+      "id": "PLT-008",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/domains/platform.py:validate",
+        "src/o3d/domains/platform.py:execute"
+      ],
+      "tests": [
+        "test_idempotent_retry_does_not_duplicate_edit",
+        "test_recursive_native_parameter_bindings_and_lock_flags_are_user_owned"
+      ],
+      "remaining": [
+        "Parent CLI domain command integration and clean-machine external-agent corpus",
+        "No universal cancellation/engine completion claim"
+      ]
+    },
+    {
+      "id": "PLT-009",
+      "status": "not_implemented",
+      "implementation": [],
+      "tests": [],
+      "remaining": [
+        "MCP endpoint and trusted extension install/start/stop lifecycle; no upstream inheritance claim"
+      ]
+    },
+    {
+      "id": "PLT-010",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/store.py:Store.import_step",
+        "src/o3d/projects.py:contained"
+      ],
+      "tests": [
+        "test_archive_rejects_missing_dependency_and_tampering"
+      ],
+      "remaining": [
+        "Broad format translation is owned by interop/core",
+        "No Fusion feature/history importer"
+      ]
+    },
+    {
+      "id": "PLT-011",
+      "status": "implemented_local_contract",
+      "implementation": [
+        "src/o3d/projects.py:portable_archive",
+        "src/o3d/projects.py:restore_archive",
+        "src/o3d/artifacts.py:export_bundle"
+      ],
+      "tests": [
+        "test_portable_archive_restores_history_and_assets_without_credentials",
+        "test_complete_manufacturing_release_reopens_as_editable_project",
+        "test_release_rejects_source_advanced_during_export",
+        "test_archive_rejects_missing_dependency_and_tampering",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "512 MiB uncompressed archive limit",
+        "Credentials, jobs, drafts and recursively derived releases are outside backup scope; all saved engineering artifact dependencies are always included",
+        "Cross-domain geometry equivalence requires integrated corpus testing"
+      ]
+    },
+    {
+      "id": "PLT-012",
+      "status": "partial",
+      "implementation": [
+        "src/o3d/projects.py:migrate_document"
+      ],
+      "tests": [
+        "test_future_schema_is_rejected_without_rewrite"
+      ],
+      "remaining": [
+        "Only existing v1 and omitted-version legacy v1 are supported",
+        "Future schemas fail without mutation; no speculative lossy migrations"
+      ]
+    },
+    {
+      "id": "PLT-013",
+      "status": "not_implemented",
+      "implementation": [],
+      "tests": [],
+      "remaining": [
+        "Pinned large-model/long-history p50/p95 and memory corpus",
+        "Incremental geometry, reference paging and viewport cost work"
+      ]
+    },
+    {
+      "id": "PLT-014",
+      "status": "partial",
+      "implementation": [
+        "desktop/src-tauri/src/main.rs",
+        "src/o3d/recovery.py"
+      ],
+      "tests": [
+        "test_real_process_death_during_save_reopens_complete_revision"
+      ],
+      "remaining": [
+        "Parent owns worker retry/cancel/reconciliation semantics",
+        "No claim that persistence fault tests cover solver process recovery"
+      ]
+    },
+    {
+      "id": "PLT-015",
+      "status": "implemented_local_contract",
+      "implementation": [
+        "src/o3d/recovery.py",
+        "src/o3d/store.py:Store.recover",
+        "frontend/src/workspaces/platform/Panel.tsx"
+      ],
+      "tests": [
+        "test_real_process_death_during_save_reopens_complete_revision",
+        "test_failed_journal_write_retains_previous_revision",
+        "test_readonly_save_reports_failure_without_losing_saved_source",
+        "test_corrupt_latest_copies_are_quarantined_and_editing_can_continue",
+        "test_corrupt_snapshot_repaired_from_verified_current_copy",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "Crash consistency assumes local atomic rename and working fsync",
+        "Browser draft recovery passed in Chromium; physical Mac close-warning testing remains",
+        "No recovery guarantee for simultaneous corruption of every independent copy"
+      ]
+    },
+    {
+      "id": "PLT-016",
+      "status": "partial",
+      "implementation": [
+        "desktop/src-tauri/src/main.rs",
+        "desktop/src-tauri/src/lifecycle.rs",
+        "scripts/stage_desktop.py"
+      ],
+      "tests": [
+        "desktop lifecycle Rust policy tests",
+        "test_staging_closure_tracks_new_source_without_local_data"
+      ],
+      "remaining": [
+        "Actual Apple Silicon install/reopen/solve/export/cancel test",
+        "Runtime remains Linux AMD64 Docker; native ARM64 launcher is a separate architecture claim"
+      ]
+    },
+    {
+      "id": "PLT-017",
+      "status": "partial",
+      "implementation": [
+        "desktop/src-tauri/src/main.rs",
+        "desktop/src-tauri/src/lifecycle.rs",
+        "scripts/stage_desktop.py"
+      ],
+      "tests": [
+        "desktop lifecycle Rust policy tests",
+        "test_missing_copy_input_retains_prior_runtime",
+        "test_staging_refuses_tracked_credentials_and_symlinks"
+      ],
+      "remaining": [
+        "Physical Docker start/kill/retry/multiple-window acceptance",
+        "WKWebView downloads, shortcuts, trackpad, clipboard and native close warnings",
+        "Signing/notarization, update delivery and rollback distribution are not implemented"
+      ]
+    },
+    {
+      "id": "PLT-018",
+      "status": "partial",
+      "implementation": [
+        "frontend/src/workspaces/platform/Panel.tsx"
+      ],
+      "tests": [
+        "TypeScript and production frontend build",
+        "frontend/tests/platform-lifecycle.spec.ts"
+      ],
+      "remaining": [
+        "Uncoached manual/agent CAD user task completion across the complete product"
+      ]
+    }
   ]
 }
