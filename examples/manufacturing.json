@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "machines": [
+    {"id":"mill","name":"Reference 3-axis LinuxCNC envelope","process":"milling","post":"linuxcnc_mill_v1","travel_min":[-100,-100,-100],"travel_max":[300,300,200],"max_spindle_rpm":10000,"max_feed_mm_min":3000,"provenance":"Software reference envelope; user must qualify physical machine"},
+    {"id":"lathe","name":"Reference LinuxCNC radius-mode lathe","process":"turning","post":"linuxcnc_lathe_v1","travel_min":[0,-1,-200],"travel_max":[100,1,100],"provenance":"Reference-point OD test, no physical machine qualification"},
+    {"id":"laser","name":"Reference GRBL laser","process":"cutting","post":"grbl_laser_v1","travel_min":[0,0,-10],"travel_max":[310,210,100],"provenance":"Software GRBL $30=1000, $32=1 reference"},
+    {"id":"printer","name":"200 mm FFF build volume","process":"fff","post":"cura_fff_v1","travel_min":[0,0,0],"travel_max":[200,200,200],"provenance":"CuraEngine base definitions; reference geometry test"}
+  ],
+  "tools": [
+    {"id":"endmill","name":"6 mm center-cutting end mill","number":1,"kind":"flat_endmill","diameter":6,"flute_length":20,"gauge_length":40,"holder_diameter":16,"spindle_rpm":5000,"feed_mm_min":300,"plunge_mm_min":100,"provenance":"Geometric test tool; feeds require material qualification"},
+    {"id":"drill","name":"4 mm drill","number":2,"kind":"drill","diameter":4,"provenance":"Geometric test tool"},
+    {"id":"insert","name":"Zero nose reference-point OD insert","number":3,"kind":"turning_insert","diameter":2,"spindle_rpm":1000,"feed_mm_min":60,"plunge_mm_min":20,"provenance":"Mathematical tool reference point, not a physical insert envelope"},
+    {"id":"beam","name":"Laser process tool","number":4,"kind":"laser","diameter":0.2,"feed_mm_min":600,"provenance":"Reference kerf geometry; power and material require qualification"},
+    {"id":"probe","name":"3 mm ball probe","number":5,"kind":"probe","diameter":3,"provenance":"Offline LinuxCNC G38.2 reference probe"}
+  ],
+  "setups": [
+    {"id":"top","name":"Planar milling","machine_id":"mill","stock":{"minimum":[0,0,-10],"maximum":[80,60,0],"material":"User-specified material"},"clearance_z":5,"tolerance_mm":0.05},
+    {"id":"od","name":"Spindle OD","machine_id":"lathe","stock":{"kind":"cylinder","minimum":[-20,-20,-80],"maximum":[20,20,0],"material":"User-specified bar"},"clearance_z":5},
+    {"id":"sheet","name":"Laser sheet","machine_id":"laser","stock":{"minimum":[0,0,-2],"maximum":[300,200,0],"material":"Steel","thickness":2},"clearance_z":5}
+  ],
+  "operations": [
+    {"id":"pocket","name":"Pocket with island","setup_id":"top","tool_id":"endmill","strategy":"pocket","boundary":[[10,10],[55,10],[55,45],[10,45]],"islands":[[[28,22],[37,22],[37,31],[28,31]]],"top_z":0,"bottom_z":-3,"stepdown":1,"stepover":0.4},
+    {"id":"holes","name":"Peck drill pair","setup_id":"top","tool_id":"drill","strategy":"drill","holes":[[65,15],[65,40]],"top_z":0,"bottom_z":-8,"peck_mm":2,"depends_on":["pocket"]},
+    {"id":"od_profile","name":"Reference OD taper","setup_id":"od","tool_id":"insert","strategy":"turn_profile","profile_zr":[[-2,12],[-25,12],[-40,17],[-65,17]],"stepdown":2,"top_z":0,"bottom_z":-2}
+  ],
+  "nesting": {"sheet_width_mm":300,"sheet_height_mm":200,"margin_mm":5,"gap_mm":2,"kerf_mm":0.2,"max_sheets":4,"material":"Steel","thickness_mm":2,"parts":[{"id":"panel","boundary":[[0,0],[80,0],[80,40],[0,40]],"holes":[[[10,10],[20,10],[20,20],[10,20]]],"quantity":4,"rotations_deg":[0,90],"material":"Steel","thickness_mm":2}]},
+  "printer": {"machine_id":"printer","layer_height_mm":0.2,"nozzle_diameter_mm":0.4,"filament_diameter_mm":1.75,"temperature_c":200,"bed_temperature_c":60,"infill_percent":20,"supports":false,"material":"PLA","profile_source":"Software reference settings; user must qualify printer/material"},
+  "plastics": {"material":"User-specified polymer","source":"Illustrative thresholds only; replace with material/supplier design guide","min_wall_mm":1,"max_wall_mm":4,"min_draft_deg":1,"pull_direction":[0,0,1]}
+}
