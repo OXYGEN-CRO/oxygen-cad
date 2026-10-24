@@ -137,7 +137,7 @@ def _guard_references(document, command, params):
     if command.startswith("timeline.") or command.startswith("solid.pattern"):
         for value in ([params["feature"]] if "feature" in params else params.get("features", [])):
             _guard_identity(document.get("features", []), value, "feature")
-    if command in {"joint.as_built", "joint.create"}:
+    if command == "joint.as_built":
         for key in ("a", "b"):
             if key in params:
                 _guard_identity(document.get("occurrences", []), params[key], "occurrence")
