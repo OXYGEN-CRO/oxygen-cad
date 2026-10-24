@@ -23,10 +23,13 @@ jobs:
           cache-to: type=gha,scope=oxygen-cad-runtime,mode=max
       - name: Geometry, editing and numerical tests
         run: |
-          docker run --rm oxygen-cad sh -eu -c '
+          docker run --rm \
+            -e O3D_CURA_ENGINE=/usr/bin/CuraEngine \
+            -e O3D_CAM_PYTHON=/usr/bin/python3 \
+            oxygen-cad sh -eu -c '
             python -m pip install --no-cache-dir -r tests/requirements-verification.lock
             python -c "import pypdf, gerbonara"
-            pytest -q
+            pytest -q -ra
           '
       - name: Package the local desktop runtime
         run: |
