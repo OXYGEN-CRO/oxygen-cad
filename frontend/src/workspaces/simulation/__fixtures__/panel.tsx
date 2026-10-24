@@ -22,6 +22,7 @@ const project = {
   geometry_engine: "occt",
   native_document: null,
   domains: {},
+  engineering_brief: null,
   revision: 1,
   name: "Form reference",
   units: "mm",

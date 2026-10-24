@@ -1,5 +1,407 @@
 {
   "$defs": {
+    "ActuatorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "manufacturer": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Manufacturer",
+          "type": "string"
+        },
+        "mpn": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Mpn",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Revision",
+          "type": "string"
+        },
+        "catalog_part_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F-]{36}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Part Id"
+        },
+        "scope": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Scope",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "supply_min": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "supply_max": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bus": {
+          "anyOf": [
+            {
+              "enum": [
+                "TTL",
+                "RS485",
+                "CAN"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bus"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "connector": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connector"
+        },
+        "pinout": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 30,
+          "title": "Pinout",
+          "type": "object"
+        },
+        "interface_source_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interface Source Id"
+        },
+        "mount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Mount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ratings": {
+          "items": {
+            "$ref": "#/$defs/Rating"
+          },
+          "maxItems": 100,
+          "title": "Ratings",
+          "type": "array"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "manufacturer",
+        "mpn",
+        "revision",
+        "scope",
+        "sources"
+      ],
+      "title": "ActuatorContract",
+      "type": "object"
+    },
+    "BriefEvidence": {
+      "additionalProperties": false,
+      "description": "Identity of native evidence, never a second copy of checks or solver results.",
+      "properties": {
+        "source": {
+          "enum": [
+            "checks",
+            "study"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "geometry_signature": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Geometry Signature",
+          "type": "string"
+        },
+        "material_signature": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Material Signature",
+          "type": "string"
+        },
+        "requirement_signature": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Requirement Signature",
+          "type": "string"
+        },
+        "input_signature": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Input Signature",
+          "type": "string"
+        },
+        "study_signature": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study Signature"
+        }
+      },
+      "required": [
+        "source",
+        "source_sha256",
+        "geometry_signature",
+        "material_signature",
+        "requirement_signature",
+        "input_signature"
+      ],
+      "title": "BriefEvidence",
+      "type": "object"
+    },
+    "BriefInput": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "payload",
+            "envelope",
+            "interface",
+            "budget",
+            "load",
+            "assumption",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
+        },
+        "parameter": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parameter"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "description"
+      ],
+      "title": "BriefInput",
+      "type": "object"
+    },
+    "BriefLink": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "requirement_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "parameter_refs": {
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Parameter Refs",
+          "type": "array"
+        },
+        "input_refs": {
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Input Refs",
+          "type": "array"
+        },
+        "study_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study Id"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BriefEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "requirement_id"
+      ],
+      "title": "BriefLink",
+      "type": "object"
+    },
     "EdgeTreatment": {
       "additionalProperties": false,
       "properties": {
@@ -49,6 +451,65 @@
         "type"
       ],
       "title": "EdgeTreatment",
+      "type": "object"
+    },
+    "EngineeringBrief": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "title": {
+          "default": "Engineering brief",
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Title",
+          "type": "string"
+        },
+        "task": {
+          "default": "",
+          "maxLength": 10000,
+          "title": "Task",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/BriefInput"
+          },
+          "maxItems": 200,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/BriefLink"
+          },
+          "maxItems": 200,
+          "title": "Links",
+          "type": "array"
+        },
+        "joint_requirements": {
+          "items": {
+            "$ref": "#/$defs/JointRequirement"
+          },
+          "maxItems": 50,
+          "title": "Joint Requirements",
+          "type": "array"
+        },
+        "components": {
+          "items": {
+            "$ref": "#/$defs/ActuatorContract"
+          },
+          "maxItems": 100,
+          "title": "Components",
+          "type": "array"
+        }
+      },
+      "title": "EngineeringBrief",
       "type": "object"
     },
     "Extrude": {
@@ -289,6 +750,288 @@
       "title": "Hole",
       "type": "object"
     },
+    "JointRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "statement": {
+          "maxLength": 3000,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "accepted"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "parameter_refs": {
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Parameter Refs",
+          "type": "array"
+        },
+        "bindings": {
+          "additionalProperties": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "payload_mass",
+              "payload_arm",
+              "link_mass",
+              "link_com"
+            ]
+          },
+          "title": "Bindings",
+          "type": "object"
+        },
+        "payload_mass": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "payload_arm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "link_mass": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "link_com": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hold_duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "supply_min": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "supply_max": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ambient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cooling": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cooling"
+        },
+        "duty_cycle": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duty Cycle"
+        },
+        "bus": {
+          "anyOf": [
+            {
+              "enum": [
+                "TTL",
+                "RS485",
+                "CAN"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bus"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "connector": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connector"
+        },
+        "pinout": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 30,
+          "title": "Pinout",
+          "type": "object"
+        },
+        "mount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Mount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "static_model_confirmed": {
+          "default": false,
+          "title": "Static Model Confirmed",
+          "type": "boolean"
+        },
+        "selected_component_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selected Component Id"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "provenance"
+      ],
+      "title": "JointRequirement",
+      "type": "object"
+    },
     "LoadPoint": {
       "additionalProperties": false,
       "properties": {
@@ -466,6 +1209,44 @@
         "source"
       ],
       "title": "Material",
+      "type": "object"
+    },
+    "Mount": {
+      "additionalProperties": false,
+      "description": "Aligned rectangular bolt grid only; no inferred rotation, thread engagement or fit.",
+      "properties": {
+        "pattern_x": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "pattern_y": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "thread": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Thread",
+          "type": "string"
+        },
+        "frame_convention": {
+          "const": "right_hand_z_out",
+          "default": "right_hand_z_out",
+          "title": "Frame Convention",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern_x",
+        "pattern_y",
+        "thread",
+        "source"
+      ],
+      "title": "Mount",
       "type": "object"
     },
     "NativeFeature": {
@@ -763,6 +1544,138 @@
       "title": "Profile",
       "type": "object"
     },
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "kg",
+            "g",
+            "m",
+            "mm",
+            "s",
+            "min",
+            "V",
+            "N*m",
+            "N*mm",
+            "degC",
+            "rad/s"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "Rating": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "stall",
+            "continuous",
+            "hold_test"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "torque": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "voltage": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "source_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ambient_min": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ambient_max": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cooling": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cooling"
+        },
+        "duty_cycle_max": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duty Cycle Max"
+        },
+        "basis": {
+          "const": "output",
+          "default": "output",
+          "title": "Basis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "torque",
+        "voltage",
+        "source_id"
+      ],
+      "title": "Rating",
+      "type": "object"
+    },
     "ReferenceAsset": {
       "additionalProperties": false,
       "properties": {
@@ -881,6 +1794,57 @@
         "value"
       ],
       "title": "Requirement",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 2000,
+          "pattern": "^https://[^\\s]+$",
+          "title": "Url",
+          "type": "string"
+        },
+        "locator": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "kind": {
+          "default": "vendor",
+          "enum": [
+            "vendor",
+            "measured",
+            "derived"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "locator",
+        "captured_at",
+        "sha256"
+      ],
+      "title": "Source",
       "type": "object"
     },
     "Study": {
@@ -1262,6 +2226,17 @@
       "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
       "title": "Active Study Id",
       "type": "string"
+    },
+    "engineering_brief": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EngineeringBrief"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "title": "Project",

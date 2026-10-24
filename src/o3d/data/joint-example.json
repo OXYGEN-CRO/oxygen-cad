@@ -1,0 +1,653 @@
+{
+  "joint_requirements": [
+    {
+      "id": "elbow_hold",
+      "statement": "Synthetic example: hold 1 kg at a horizontal 0.30 m moment arm for 60 s",
+      "provenance": "Illustrative software fixture; replace with your actual task and evidence",
+      "payload_mass": {
+        "value": 1,
+        "unit": "kg"
+      },
+      "payload_arm": {
+        "value": 300,
+        "unit": "mm"
+      },
+      "link_mass": {
+        "value": 400,
+        "unit": "g"
+      },
+      "link_com": {
+        "value": 150,
+        "unit": "mm"
+      },
+      "hold_duration": {
+        "value": 60,
+        "unit": "s"
+      },
+      "supply_min": {
+        "value": 12,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 12,
+        "unit": "V"
+      },
+      "ambient": {
+        "value": 25,
+        "unit": "degC"
+      },
+      "cooling": "natural-air-unqualified",
+      "duty_cycle": 1,
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "assumptions": [
+        "Horizontal planar payload plus one link; no acceleration, contact, other links or external loads",
+        "Synthetic inputs; not a customer specification or qualified physical robot"
+      ],
+      "static_model_confirmed": false,
+      "selected_component_id": "XM430-W350-T"
+    }
+  ],
+  "components": [
+    {
+      "id": "XM430-W350-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM430-W350-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "38038f5b32cbbb7e3c26570658855986be33589b06eb6d15e6259db338caafd3",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 4.1,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM430-W350-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM430-W350-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "38038f5b32cbbb7e3c26570658855986be33589b06eb6d15e6259db338caafd3",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 4.1,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM430-W210-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM430-W210-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm430-w210/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "78adf2f040510eff30cd898bc3bb45b7d0b92e1d41e4365c8b702f0ede496f89",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 3.0,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM430-W210-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM430-W210-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm430-w210/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "78adf2f040510eff30cd898bc3bb45b7d0b92e1d41e4365c8b702f0ede496f89",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 3.0,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM540-W270-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM540-W270-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm540-w270/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "175d7cf17e96735ee95fecf9833ec141a73fab74fe448d3fdc2739feacb512e2",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 10.6,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM540-W270-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM540-W270-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm540-w270/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "175d7cf17e96735ee95fecf9833ec141a73fab74fe448d3fdc2739feacb512e2",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 10.6,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM540-W150-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM540-W150-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm540-w150/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "8cc6aa7179fed1264a07783ffc5322b77f29cd17118192c6e5d2d3f5c43c2a93",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 7.3,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XM540-W150-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XM540-W150-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xm540-w150/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "8cc6aa7179fed1264a07783ffc5322b77f29cd17118192c6e5d2d3f5c43c2a93",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 7.3,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XH430-W350-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XH430-W350-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xh430-w350/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "99af748e4f4bcf45bdf2ea6fc98ebfb2738f0f794de85416189af02b89e360fc",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 3.4,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XH430-W350-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XH430-W350-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xh430-w350/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "99af748e4f4bcf45bdf2ea6fc98ebfb2738f0f794de85416189af02b89e360fc",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 3.4,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XH430-W210-T",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XH430-W210-T",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xh430-w210/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "5f34d07d2ab002c7bea69753970fa6b476bc5aef756908ed30f7125765536931",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "TTL",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-3",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 2.5,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    },
+    {
+      "id": "XH430-W210-R",
+      "manufacturer": "ROBOTIS",
+      "mpn": "XH430-W210-R",
+      "revision": "manual-2026-10-24-hardware-revision-unknown",
+      "scope": "Base actuator variant; mounting, optional horn/idler, fit, stock and current hardware revision not qualified",
+      "sources": [
+        {
+          "id": "manual",
+          "url": "https://emanual.robotis.com/docs/en/dxl/x/xh430-w210/",
+          "locator": "Specifications / Performance Graph / Connector Information / Communication Circuit",
+          "captured_at": "2026-10-24T00:00:00Z",
+          "sha256": "5f34d07d2ab002c7bea69753970fa6b476bc5aef756908ed30f7125765536931",
+          "kind": "vendor"
+        }
+      ],
+      "supply_min": {
+        "value": 10,
+        "unit": "V"
+      },
+      "supply_max": {
+        "value": 14.8,
+        "unit": "V"
+      },
+      "bus": "RS485",
+      "protocol": "DYNAMIXEL-2.0",
+      "connector": "JST-EH-4",
+      "pinout": {
+        "1": "GND",
+        "2": "VDD",
+        "3": "DATA+",
+        "4": "DATA-"
+      },
+      "interface_source_id": "manual",
+      "ratings": [
+        {
+          "kind": "stall",
+          "torque": {
+            "value": 2.5,
+            "unit": "N*m"
+          },
+          "voltage": {
+            "value": 12,
+            "unit": "V"
+          },
+          "source_id": "manual"
+        }
+      ],
+      "notes": "Snapshot of vendor specifications. Stall torque is not sustained capability. No interpolation, curve extraction, live stock or physical qualification."
+    }
+  ]
+}

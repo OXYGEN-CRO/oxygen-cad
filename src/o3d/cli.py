@@ -14,6 +14,8 @@ app = typer.Typer(no_args_is_help=True, help="Oxygen CAD: inspect, edit, build, 
 
 from .catalog.cli import app as parts_app
 app.add_typer(parts_app, name="parts")
+from .joint_cli import app as joint_app
+app.add_typer(joint_app, name="joint")
 
 
 def emit(value, machine=True):

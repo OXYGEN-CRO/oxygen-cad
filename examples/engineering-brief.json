@@ -1,0 +1,44 @@
+{
+  "name": "Engineering brief benchmark",
+  "parameters": {"length": {"value": 80, "unit": "mm"}},
+  "features": [
+    {"id": "beam_profile", "type": "profile", "plane": "YZ", "width": 10, "height": 4},
+    {"id": "beam", "type": "extrude", "profile": "beam_profile", "distance": "$length"}
+  ],
+  "material": {
+    "name": "Numerical benchmark material",
+    "youngs_modulus_mpa": 200000,
+    "poisson_ratio": 0.3,
+    "density_g_cm3": 7.85,
+    "source": "examples/cantilever.json analytical verification fixture; test inputs, not a production material certificate"
+  },
+  "study": {
+    "fixed_faces": ["part:xmin"],
+    "forces": [{"face": "part:xmax", "vector_n": [0, 0, -10]}],
+    "mesh_size_mm": 3,
+    "refinement_steps": 3,
+    "assumptions_confirmed": true,
+    "stress_probe_mm": [40, 0, 1.5]
+  },
+  "requirements": [
+    {"id": "length_limit", "kind": "max_dimension", "axis": "X", "value": 90},
+    {"id": "deflection", "kind": "max_displacement", "value": 0.2, "study_id": "default"}
+  ],
+  "engineering_brief": {
+    "schema_version": 1,
+    "title": "Benchmark intent and requirement traceability",
+    "task": "Evaluate the supplied cantilever benchmark against its envelope and deflection limits. Physical payload, interfaces and purchasing budget are not yet specified.",
+    "inputs": [
+      {"id": "beam_length", "kind": "envelope", "description": "Benchmark beam length", "value": 80, "unit": "mm", "provenance": "examples/cantilever.json numerical fixture", "parameter": "length"},
+      {"id": "load", "kind": "load", "description": "Benchmark force magnitude; native study specifies face and direction", "value": 10, "unit": "N", "provenance": "examples/cantilever.json numerical fixture"},
+      {"id": "payload", "kind": "payload", "description": "Real payload remains unspecified"},
+      {"id": "interface", "kind": "interface", "description": "Real attachment interfaces remain unspecified"},
+      {"id": "budget", "kind": "budget", "description": "Purchasing budget remains unspecified"},
+      {"id": "idealization", "kind": "assumption", "description": "Ideal fixed-end numerical cantilever benchmark; no physical validation", "provenance": "examples/cantilever.json analytical verification fixture"}
+    ],
+    "links": [
+      {"id": "fit", "description": "Stay within the benchmark X envelope", "requirement_id": "length_limit", "parameter_refs": ["length"], "input_refs": ["beam_length"]},
+      {"id": "response", "description": "Check deflection under the explicitly supplied benchmark load", "requirement_id": "deflection", "study_id": "default", "input_refs": ["load"]}
+    ]
+  }
+}

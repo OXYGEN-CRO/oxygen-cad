@@ -204,3 +204,7 @@ O3D_NATIVE=1 ./o3d engine describe solid.shell
 ```
 
 The raw `o3d engine stdio` command provides a persistent local engine session for trusted developer tooling. Saved project features use a restricted modelling command set and cannot open/export arbitrary files. See [engine architecture](docs/ENGINE.md) and [third-party notices](THIRD_PARTY.md).
+
+### Executable joint requirements and component contracts
+
+Project tools → **Joint selection** connects a saved static task to 12 sourced actuator variants, per-check explanations and revision-bound evidence. CLI/HTTP use the same project and Store; exact catalog contracts can be imported without a second database. Sustained capability and mounting qualification stay unknown when evidence is missing. See [the joint-selection guide](docs/JOINT-SELECTION.md).
