@@ -1789,6 +1789,34 @@
     },
     "Requirement": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "value": {
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "max_temperature"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "minimum": -273.15
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",

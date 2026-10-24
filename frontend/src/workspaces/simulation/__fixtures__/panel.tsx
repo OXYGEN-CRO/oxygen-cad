@@ -48,6 +48,10 @@ const project = {
     forces: [],
     temperatures: [],
     heat_sources: [],
+    convection: [],
+    radiation: [],
+    internal_heat_w: null,
+    internal_heat_source: null,
     reference_temperature_c: null,
     mode_count: 6,
     mesher: "netgen",
@@ -77,7 +81,10 @@ function Fixture() {
   const [revision, setRevision] = useState(1);
   const state = {
     studies: {},
-    simulation_capabilities: { studies: [], scope: "UI form fixture; numerical execution is separate" },
+    simulation_capabilities: {
+      studies: [],
+      scope: "UI form fixture; numerical execution is separate",
+    },
     project,
     build: null,
     last_build: null,

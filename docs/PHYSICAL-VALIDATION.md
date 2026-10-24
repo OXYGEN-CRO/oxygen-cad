@@ -47,6 +47,16 @@ measured/prescribed boundary temperatures; it does not validate fan-driven cooli
 Compare steady component/probe temperatures and total heat rejection. Airflow/CHT
 validation follows only when the corresponding adapter and boundary model exist.
 
+For prescribed convection/radiation, record surface finish/coating, emissivity
+source, fluid/environment temperatures, orientation, airflow condition and the
+film-coefficient source. Keep a calibrated coefficient tied to that operating
+envelope. One steady temperature/power point does not independently identify both
+film coefficient and emissivity; use independent parameter measurements or a
+sufficient calibration series. Reserve separate specimens/conditions for validation.
+Measure thermostat heat and electrical losses separately when they are present.
+The current gray/diffuse unit-view-factor boundary does not represent an enclosed
+cavity or a solved fan flow. Numerical heat balance alone is not this experiment.
+
 ## Future branch protocols
 
 Articulated payloads additionally need measured actuator constants, friction,

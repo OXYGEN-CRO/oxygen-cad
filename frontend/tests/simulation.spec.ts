@@ -259,6 +259,37 @@ test("sourced convection, radiation and internal heat save and solve without a t
         (await (await request.get("/api/state")).json()).analysis_state,
     )
     .toBe("stale");
+  await page.getByTitle("Remove convection", { exact: true }).click();
+  await page
+    .getByLabel("Surroundings temperature 1", { exact: true })
+    .fill("-50");
+  await page.getByLabel("Internal heat power", { exact: true }).fill("0.002");
+  await page
+    .getByLabel("Radiation source 1", { exact: true })
+    .fill("Synthetic cold-surroundings verification condition");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Run study", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Run study", exact: true }).click();
+  await expect(
+    page.getByText("Heat to surroundings", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  const cold = await (await request.get("/api/state")).json();
+  expect(cold.analysis.state).toBe("passed");
+  expect(cold.analysis.max_temperature_c).toBeLessThan(0);
+  expect(cold.analysis.min_temperature_c).toBeGreaterThan(-273.15);
+  await page
+    .getByRole("button", { name: "View temperature", exact: true })
+    .click();
+  await expect(page.locator(".webgl")).toHaveAttribute(
+    "data-field-ready",
+    "true",
+  );
+  await page.screenshot({
+    path: "test-results/study-cold-exchange.png",
+    fullPage: true,
+  });
 });
 
 test("named studies preserve independent loads, results and comparison", async ({

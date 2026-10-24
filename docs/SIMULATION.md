@@ -6,6 +6,13 @@ predictions. This ledger distinguishes working numerical workflows from remainin
 implementation and physical evidence. Passing the current tests does not establish
 full parity or real-world reliability.
 
+This ledger covers the quadratic CalculiX path in `project.study` and
+`named_studies`. The canonical engineering workspace in `project.domains.simulation`
+has separate analysis-model/material/case records and linear-tetrahedron adapters,
+including bounded contact/event/optimization subsets. Its implementation limits
+are recorded in [the domain ledger](parity/SIMULATION.md). Neither layer silently
+converts the other's inputs or establishes full assembly/physics parity.
+
 ## Current executable workflows
 
 `o3d studies --json` returns the versioned capability manifest and setup errors.
@@ -141,29 +148,33 @@ legitimate negative corner weights. No equal nodal split is used.
 
 The deck uses actual exterior-element face labels for `*FILM` and `*RADIATE`.
 Film coefficients convert by `1e-3` into N/(s mm K); the Stefan-Boltzmann value
-5.670374419e-8 W/(m² K⁴) converts to5.670374419e-11 in the deck's units.
-`*PHYSICAL CONSTANTS` sets Celsius absolute zero to-273.15. Radiation uses
+5.670374419e-8 W/(m² K⁴) converts to 5.670374419e-11 in the deck's units.
+`*PHYSICAL CONSTANTS` sets Celsius absolute zero to -273.15. Radiation uses
 adaptive nonlinear steady load increments; a derived initial-temperature guess
 does not replace any environmental input. The final temperature frame must be
-at completed load-step time1, with every prescribed temperature satisfied.
+at completed load-step time 1, with every prescribed temperature satisfied.
 
 Independent Gauss6/Gauss8 physical-surface integration evaluates signed heat to
 the surroundings from the actual temperature field. A boundary can supply heat
-when it is warmer than the solid. Integration sensitivity must be below1e-4
+when it is warmer than the solid. Integration sensitivity must be below 1e-4
 relative to absolute boundary exchange. Global heat balance is
 `applied power + external thermostat power - heat to surroundings = 0`.
 At prescribed-temperature nodes CalculiX RFL is conductive nodal flow; external
 thermostat power additionally subtracts applied nodal sources and adds surface
 exchange there. Raw flows and both corrections remain in `heat-balance.json`.
-Balance must be within1% and the exchange integration check must pass.
+Balance must be within 1% and the exchange integration check must pass.
 
 Thermal refinement compares fixed-probe, maximum and minimum temperature rises
 relative to the supplied temperature/environment reference. The changes are
-scaled by the actual thermal variation (with a1e-6 K numerical floor), never by
+scaled by the actual thermal variation (with a 1e-6 K numerical floor), never by
 absolute Kelvin temperature. Small heating errors cannot hide behind a large
 absolute temperature. Kelvin is used inside the fourth-power radiation law;
 negative Celsius results are valid. Source, coefficient, environment, generation
 and material edits invalidate the affected studies and their exports.
+`max_temperature` requirements may use negative Celsius values down to absolute
+zero. Other requirement limits remain positive. Pydantic and generated JSON
+Schema encode the same conditional limit rule; independent Draft2020-12 checks
+cover both sides of this boundary.
 
 The study panel edits these inputs, records provenance, renders temperature and
 reports input/rejected power. `ambient-thermal` is an explicit synthetic example;

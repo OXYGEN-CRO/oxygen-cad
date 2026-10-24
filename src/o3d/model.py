@@ -154,6 +154,11 @@ class Material(Model):
 
 
 class Requirement(Model):
+    model_config = ConfigDict(json_schema_extra={"allOf": [{
+        "if": {"properties": {"kind": {"const": "max_temperature"}}, "required": ["kind"]},
+        "then": {"properties": {"value": {"minimum": -273.15}}},
+        "else": {"properties": {"value": {"exclusiveMinimum": 0}}},
+    }]})
     id: Identifier
     kind: Literal["max_mass", "max_dimension", "min_clearance", "max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress"]
     value: float
