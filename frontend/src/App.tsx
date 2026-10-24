@@ -42,11 +42,14 @@ import {
   api,
   artifact,
   post,
+  projectPrefix,
   type Project,
   type Selection,
   type State,
 } from "./api";
 import { Viewport } from "./Viewport";
+import { isWorkspace, WorkspacePanel, workspaceNames } from "./workspaces/WorkspacePanel";
+import type { DomainId, JsonObject, NativeReply } from "./workspaces/contracts";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import {
   Button,
@@ -175,6 +178,22 @@ export default function App() {
     [rightOpen, setRightOpen] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const projectRef = useRef<Project | null>(null);
+  const mutations = useRef<Promise<unknown>>(Promise.resolve());
+  function queueMutation<T,>(operation: () => Promise<T>): Promise<T> {
+    const pending = mutations.current.then(operation, operation);
+    mutations.current = pending.catch(() => undefined);
+    return pending;
+  }
+  function acceptProject(project: Project) {
+    if (!projectRef.current || project.revision >= projectRef.current.revision) {
+      projectRef.current = project;
+      if (!dirtyRef.current) {
+        setDraft(project);
+        setSource(pretty(project));
+      }
+    }
+  }
   const upload = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
@@ -186,6 +205,8 @@ export default function App() {
   const refresh = useCallback(async () => {
     try {
       const result = await api("state");
+      if (projectRef.current && result.project.revision < projectRef.current.revision) return result;
+      projectRef.current = result.project;
       setState((previous) =>
         previous &&
         previous.project.revision === result.project.revision &&
@@ -209,6 +230,51 @@ export default function App() {
       setError(String(e));
     }
   }, []);
+  function native(command: string, params: JsonObject = {}): Promise<NativeReply> {
+    return queueMutation(async () => {
+      if (dirtyRef.current) throw new Error("Save your edits before editing the native model");
+      if (!projectRef.current) throw new Error("Project is opening");
+      const reply = await post("native/execute", {
+        expected_revision: projectRef.current.revision, actor: "human", command, params,
+      });
+      acceptProject(reply.project);
+      await refresh();
+      return reply;
+    });
+  }
+  async function saveDomain(domain: DomainId, data: JsonObject): Promise<void> {
+    return queueMutation(async () => {
+      if (dirtyRef.current) throw new Error("Save your edits before changing a workspace");
+      if (!projectRef.current) throw new Error("Project is opening");
+      const reply = await api(`domains/${domain}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expected_revision: projectRef.current.revision, actor: "human", data }),
+      });
+      acceptProject(reply.project);
+      await refresh();
+    });
+  }
+  async function runDomain(domain: DomainId, operation: string, input: JsonObject = {}): Promise<JsonObject> {
+    if (dirtyRef.current) throw new Error("Save your edits before running an operation");
+    if (!projectRef.current) throw new Error("Project is opening");
+    const submitted = await post(`domains/${domain}/run`, {
+      expected_revision: projectRef.current.revision, actor: "human", operation, input,
+    });
+    await refresh();
+    for (;;) {
+      const job = await api(`jobs/${submitted.id}`);
+      if (["failed", "cancelled"].includes(job.state)) {
+        await refresh();
+        throw new Error(job.message || `Operation ${job.state}`);
+      }
+      if (job.state === "succeeded") {
+        if (job.result?.project) acceptProject(job.result.project);
+        await refresh();
+        return job.result;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 1600);
@@ -375,7 +441,7 @@ export default function App() {
     setBusy(true);
     try {
       const response = await fetch(
-        `/api/import?expected_revision=${state.project.revision}`,
+        `${projectPrefix}/api/import?expected_revision=${state.project.revision}`,
         { method: "POST", headers: { "x-filename": file.name }, body: file },
       );
       if (!response.ok) throw new Error((await response.json()).detail);
@@ -408,7 +474,7 @@ export default function App() {
     }
   }
   const panelLabel =
-    tab === "verify"
+    isWorkspace(tab) ? workspaceNames[tab] : tab === "verify"
       ? "Study"
       : tab === "source"
         ? "Source"
@@ -482,6 +548,18 @@ export default function App() {
           </span>
         )}
         <div className="top-actions">
+          <SelectControl
+            aria-label="Workspace"
+            className="workspace-switcher"
+            value={isWorkspace(tab) ? tab : "design"}
+            onChange={(event) => {
+              if (event.target.value === "design") setTab("design");
+              else openPanel(event.target.value);
+            }}
+          >
+            <option value="design">Design</option>
+            {Object.entries(workspaceNames).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </SelectControl>
           <Button
             className="theme-toggle"
             size="icon"
@@ -902,11 +980,11 @@ export default function App() {
         {inspectorVisible && (
           <aside
             id="inspector-sidebar"
-            className={`right-panel ${tab === "source" ? "source-panel" : ""}`}
+            className={`right-panel ${tab === "source" ? "source-panel" : ""} ${isWorkspace(tab) ? "domain-panel" : ""}`}
           >
             <div className="panel-heading">
               <span>
-                {tab === "verify"
+                {isWorkspace(tab) ? workspaceNames[tab] : tab === "verify"
                   ? "ENGINEERING STUDY"
                   : tab === "history"
                     ? "REVISION HISTORY"
@@ -926,6 +1004,13 @@ export default function App() {
               </Button>
             </div>
             <div className="properties">
+              {isWorkspace(tab) && <WorkspacePanel
+                domain={tab} project={state.project} state={state} selection={selection}
+                domainData={state.project.domains?.[tab] ?? {}}
+                native={native} inspectNative={() => api("native/inspect")}
+                saveDomain={saveDomain} runDomain={runDomain}
+                refresh={async () => { await refresh(); }} setError={setError}
+              />}
               {tab === "design" && (
                 <>
                   {feature ? (
@@ -1865,7 +1950,7 @@ export default function App() {
                     <Check size={15} />
                     Apply source document
                   </Button>
-                  <a className="schema-link" href="/api/schema" target="_blank">
+                  <a className="schema-link" href={`${projectPrefix}/api/schema`} target="_blank">
                     View project JSON Schema ↗
                   </a>
                 </>

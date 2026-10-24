@@ -855,6 +855,27 @@
       "title": "Features",
       "type": "array"
     },
+    "native_document": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Native Document"
+    },
+    "domains": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Domains",
+      "type": "object"
+    },
     "references": {
       "items": {
         "$ref": "#/$defs/ReferenceAsset"

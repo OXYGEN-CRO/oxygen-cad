@@ -24,6 +24,54 @@ def main(ctx: typer.Context, project: Path = typer.Option(Path(os.environ.get("O
 
 engine_app = typer.Typer(help="Discover and use the vendored Rust modelling engine.")
 app.add_typer(engine_app, name="engine")
+native_app = typer.Typer(help="Inspect and edit the canonical native CAD document.")
+app.add_typer(native_app, name="native")
+domain_app = typer.Typer(help="Operate engineering workspaces through revision-checked commands.")
+app.add_typer(domain_app, name="workspace")
+
+
+@native_app.command("inspect")
+def native_inspect(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
+    from .native_document import inspect_native
+    emit(inspect_native(ctx.obj.load(), store=ctx.obj))
+
+
+@native_app.command("run")
+def native_run(ctx: typer.Context, command: str, params: str = "{}", expected_revision: int = typer.Option(...), actor: str = "agent", json_output: bool = typer.Option(False, "--json")):
+    from .native_document import execute_native
+    reply = execute_native(ctx.obj, expected_revision, actor, command, json.loads(params))
+    emit(reply | {"project": reply["project"].model_dump(mode="json")})
+
+
+@domain_app.command("list")
+def workspace_list(json_output: bool = typer.Option(False, "--json")):
+    from .domains import catalog
+    emit({"workspaces": catalog()})
+
+
+@domain_app.command("show")
+def workspace_show(ctx: typer.Context, domain: str, json_output: bool = typer.Option(False, "--json")):
+    from .domains import module_for
+    module_for(domain)
+    project = ctx.obj.load()
+    emit({"revision": project.revision, "data": project.domains.get(domain, {})})
+
+
+@domain_app.command("save")
+def workspace_save(ctx: typer.Context, domain: str, data: Path, expected_revision: int = typer.Option(...), actor: str = "agent", json_output: bool = typer.Option(False, "--json")):
+    from .domains import save_domain
+    emit(save_domain(ctx.obj, domain, json.loads(data.read_text()), expected_revision, actor).model_dump(mode="json"))
+
+
+@domain_app.command("run")
+def workspace_run(ctx: typer.Context, domain: str, operation: str, input: Path | None = None, expected_revision: int = typer.Option(...), actor: str = "agent", json_output: bool = typer.Option(False, "--json")):
+    from .domains import execute, finalize
+    from .store import Conflict
+    project = ctx.obj.load()
+    if project.revision != expected_revision:
+        raise Conflict("Project changed; inspect before running an operation")
+    result = execute(ctx.obj, project, domain, operation, json.loads(input.read_text()) if input else {})
+    emit(finalize(ctx.obj, project, domain, result, actor))
 
 
 @engine_app.command("commands")

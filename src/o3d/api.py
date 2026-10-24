@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+from pydantic import BaseModel, Field
+from typing import Literal
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .jobs import Jobs
@@ -17,7 +19,20 @@ from .model import Command, Project
 from .store import Conflict, Store, write_json
 
 
-def create_app(root=None):
+class DomainSave(BaseModel):
+    expected_revision: int = Field(ge=1)
+    actor: Literal["human", "agent"] = "agent"
+    data: dict
+
+
+class DomainRun(BaseModel):
+    expected_revision: int = Field(ge=1)
+    actor: Literal["human", "agent"] = "agent"
+    operation: str = Field(min_length=1, max_length=100)
+    input: dict = Field(default_factory=dict)
+
+
+def create_app(root=None, *, project_windows=True):
     store = Store(root or os.environ.get("O3D_PROJECT_DIR", "projects/demo"))
     jobs = Jobs(store)
 
@@ -25,16 +40,22 @@ def create_app(root=None):
     async def lifespan(_):
         yield
         jobs.close()
+        if windows:
+            windows.close()
 
     app = FastAPI(title="Oxygen CAD", version="0.1.0", lifespan=lifespan)
     app.state.store, app.state.jobs = store, jobs
+    windows = None
+    if project_windows:
+        from .project_windows import ProjectWindows
+        windows = ProjectWindows(store.root.parent)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):
         origin = request.headers.get("origin")
         allowed = {"http://localhost:8787", "http://127.0.0.1:8787", "http://localhost:5173", "http://127.0.0.1:5173"}
-        allowed.add(str(request.base_url).rstrip("/"))
+        allowed.add(f"{request.url.scheme}://{request.url.netloc}")
         if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in allowed:
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "Cross-origin writes are not allowed"}, status_code=403)
@@ -61,6 +82,21 @@ def create_app(root=None):
     @app.get("/api/schema")
     def schema():
         return Project.model_json_schema()
+
+    @app.get("/api/domains")
+    def domains():
+        from .domains import catalog
+        return {"workspaces": catalog()}
+
+    @app.put("/api/domains/{domain}")
+    def domain_save(domain: str, request: DomainSave):
+        from .domains import save_domain
+        updated = save_domain(store, domain, request.data, request.expected_revision, request.actor)
+        return {"project": updated.model_dump(mode="json")}
+
+    @app.post("/api/domains/{domain}/run")
+    def domain_run(domain: str, request: DomainRun):
+        return jobs.submit_domain(domain, request.operation, request.input, request.expected_revision, request.actor)
 
     @app.post("/api/commands")
     def commands(command: Command):
@@ -124,6 +160,18 @@ def create_app(root=None):
                 await asyncio.sleep(1)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
+    from .native_routes import mount_native_routes
+    mount_native_routes(app, store, jobs)
+    # Workspace-owned routes are registered before the static studio mount.
+    from .domains import catalog, module_for
+    for item in catalog():
+        if item["available"]:
+            mount = getattr(module_for(item["id"]), "mount", None)
+            if mount:
+                mount(app, store, jobs)
+
+    if windows:
+        app.mount("/p", windows)
     frontend = Path(os.environ.get("O3D_FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend/dist"))
     if frontend.exists():
         app.mount("/", StaticFiles(directory=frontend, html=True), name="studio")

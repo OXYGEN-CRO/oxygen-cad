@@ -1,6 +1,7 @@
 import type { Project as GeneratedProject } from "./generated";
+export const projectPrefix = window.location.pathname.match(/^\/p\/[a-zA-Z0-9_-]+(?=\/|$)/)?.[0] ?? "";
 export async function api(path: string, options: RequestInit = {}) {
-  const response = await fetch(`/api/${path}`, options);
+  const response = await fetch(`${projectPrefix}/api/${path}`, options);
   if (!response.ok) {
     const text = await response.text();
     let detail = text;
@@ -20,7 +21,7 @@ export const post = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 export const artifact = (path: string) =>
-  `/api/artifacts/${path.split("/").map(encodeURIComponent).join("/")}`;
+  `${projectPrefix}/api/artifacts/${path.split("/").map(encodeURIComponent).join("/")}`;
 export type Feature = {
   id: string;
   type: "profile" | "extrude" | "hole" | "fillet" | "chamfer" | "native";

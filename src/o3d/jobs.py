@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event, Lock
 
-from .model import Job
+from .model import Job, Project
+from .store import Conflict
 from .solver import Cancelled, run_process
 from .store import now, write_json
 
@@ -29,15 +30,27 @@ class Jobs:
             raise ValueError("Invalid job ID")
         return self.store.cache / "jobs" / job_id
 
-    def submit(self, kind):
+    def submit(self, kind, *, request=None, expected_revision=None):
         project = self.store.load()
+        if expected_revision is not None and project.revision != expected_revision:
+            raise Conflict("Project changed; inspect before submitting an operation")
         job = Job(id=uuid.uuid4().hex, kind=kind, revision=project.revision, created_at=now())
         path = self.path(job.id)
         write_json(path / "job.json", job.model_dump())
-        write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json")})
+        write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json"), "workspace": request})
         self.cancellations[job.id] = Event()
         self.pool.submit(self._execute, job)
         return job
+
+    def submit_domain(self, domain, operation, payload, expected_revision, actor="agent"):
+        from .domains import module_for
+        from .identity import effective_actor, principal_context
+        module_for(domain)
+        principal = principal_context.get()
+        return self.submit("domain", expected_revision=expected_revision,
+                           request={"domain": domain, "operation": operation,
+                                    "input": payload, "actor": effective_actor(actor),
+                                    "principal": principal.public() if principal else None})
 
     def get(self, job_id):
         return Job.model_validate_json((self.path(job_id) / "job.json").read_text())
@@ -47,8 +60,9 @@ class Jobs:
 
     def cancel(self, job_id):
         job = self.get(job_id)
-        if job.id in self.cancellations:
-            self.cancellations[job.id].set()
+        with self.mutex:
+            if job.id in self.cancellations:
+                self.cancellations[job.id].set()
         return job
 
     def _execute(self, job):
@@ -59,11 +73,20 @@ class Jobs:
                 raise Cancelled("Job cancelled before starting")
             job.state, job.started_at = "running", now()
             write_json(path / "job.json", job.model_dump())
-            run_process([sys.executable, "-m", "o3d.worker", path / "request.json", path / "result.json"], path, path / "worker.log", cancel, timeout=900 if job.kind == "simulate" else 180)
-            if cancel.is_set():
-                raise Cancelled("Job cancelled")
-            job.result = json.loads((path / "result.json").read_text())
-            job.state, job.message = "succeeded", "Completed"
+            run_process([sys.executable, "-m", "o3d.worker", path / "request.json", path / "result.json"], path, path / "worker.log", cancel, timeout=1800 if job.kind == "domain" else (900 if job.kind == "simulate" else 180))
+            with self.mutex:
+                if cancel.is_set():
+                    raise Cancelled("Job cancelled")
+                job.result = json.loads((path / "result.json").read_text())
+                if job.kind == "domain":
+                    from .domains import finalize
+                    request = json.loads((path / "request.json").read_text())
+                    workspace = request["workspace"]
+                    from .job_identity import job_identity
+                    with job_identity(self.store, workspace.get("principal")):
+                        job.result = finalize(self.store, Project.model_validate(request["project"]),
+                                              workspace["domain"], job.result, workspace["actor"])
+                job.state, job.message = "succeeded", "Completed"
         except Cancelled as error:
             job.state, job.message = "cancelled", str(error)
         except Exception as error:

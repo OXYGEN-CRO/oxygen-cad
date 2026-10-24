@@ -24,6 +24,11 @@ class Cancelled(RuntimeError):
 
 def run_process(command, directory: Path, log: Path, cancel: Event | None = None, timeout=180):
     environment = dict(os.environ)
+    # Workers change cwd into a job directory. Keep this checkout authoritative,
+    # including when development launched with a relative PYTHONPATH=src.
+    source = str(Path(__file__).resolve().parents[1])
+    paths = [str(Path(p).resolve()) for p in environment.get("PYTHONPATH", "").split(os.pathsep) if p]
+    environment["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([source, *paths]))
     tools = Path(__file__).resolve().parents[2] / ".tools/root/usr/lib/x86_64-linux-gnu"
     if tools.exists():
         environment["LD_LIBRARY_PATH"] = f"{tools}:{environment.get('LD_LIBRARY_PATH', '')}"

@@ -9,7 +9,15 @@ from .model import Project
 from .store import Store, write_json
 
 
-def dispatch(kind, store, project, cancel=None):
+def dispatch(kind, store, project, cancel=None, workspace=None):
+    if kind == "domain":
+        from .domains import execute
+        from .job_identity import job_identity
+        if not isinstance(workspace, dict):
+            raise ValueError("Workspace operation input is required")
+        with job_identity(store, workspace.get("principal")):
+            return execute(store, project, workspace["domain"], workspace["operation"],
+                           workspace.get("input", {}), cancel)
     if kind == "build":
         from .geometry import build
         return build(store, project)
@@ -32,5 +40,5 @@ if __name__ == "__main__":
     request = json.loads(Path(sys.argv[1]).read_text())
     cancel = Event()
     signal.signal(signal.SIGTERM, lambda *_: cancel.set())
-    result = dispatch(request["kind"], Store(request["root"]), Project.model_validate(request["project"]), cancel)
+    result = dispatch(request["kind"], Store(request["root"]), Project.model_validate(request["project"]), cancel, request.get("workspace"))
     write_json(Path(sys.argv[2]), result)

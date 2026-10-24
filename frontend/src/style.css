@@ -1542,3 +1542,12 @@ option {
   background: rgba(128, 128, 128, 0.2);
   color: var(--text);
 }
+
+.topbar .workspace-switcher { width: 136px; min-height: 30px; font-size: 12px; }
+.right-panel.domain-panel { width: clamp(300px, 40vw, 540px); }
+.domain-panel .properties { overflow: auto; }
+.domain-panel svg { max-width: 100%; }
+@media (max-width: 760px) {
+  .right-panel.domain-panel { width: min(94vw, 540px); }
+  .topbar .workspace-switcher { width: 110px; }
+}
