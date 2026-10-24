@@ -45,7 +45,7 @@ The default project is `projects/demo/`. No account, built-in chat, or hosted ba
 
 ## Bundled agent skills
 
-Oxygen CAD ships three focused skills: **oxygen-cad-setup**, **oxygen-cad-model** and **oxygen-cad-verify**. They teach the actual project, CLI, revision and engineering-result contracts. The same `skills/` directory is bundled by the Claude Code and Codex plugin manifests.
+Oxygen CAD ships **14 focused skills**: setup, modelling, verification, parts search, PDF drawings, planar DXF, additive/process manufacturing review, SendCutSend preflight, URDF/SRDF/SDF, slicing and Bambu app handoff. They teach the actual CLI and provide standalone helpers over current exports. External applications and consumer checks remain explicit dependencies. The same `skills/` directory is bundled by the Claude Code and Codex plugin manifests.
 
 For an agent workspace without the plugin, install the instructions with Python 3 on the host; Docker is not needed for this step:
 
@@ -56,6 +56,16 @@ For an agent workspace without the plugin, install the instructions with Python 
 ```
 
 Use `--agent claude` for `.claude/skills`, or `--agent portable` for `.agents/skills`. Omit `--workspace` to install in this checkout. Setup can be rerun to update managed copies; it refuses to overwrite existing unowned skills or local edits. If the plugin already supplies the skills, use that route alone. See [agent setup and plugin installation](docs/AGENT-SKILLS.md).
+
+## Discover off-the-shelf components
+
+The optional [parts catalog](docs/CATALOG.md) adds PostgreSQL/pgvector discovery,
+provider ingestion, sourced specifications, CAD assets and purchased/custom BOM
+planning. Agents can search through a JSON CLI or REST/OpenAPI and import a
+licensed STEP model through the CAD revision checks. Start it independently with
+`docker compose -f catalog.compose.yaml up -d --build --wait` after setting the
+catalog password as described in the guide. The initial real seed contains 17,325
+provider records; stock and physical compatibility remain explicit unknowns.
 
 ## Work with a coding agent
 
@@ -81,6 +91,12 @@ Use the revision returned by `inspect`; `1` is only the initial example. A stale
 
 Do not overwrite the live `o3d.json` directly. Apply proposal files through the CLI so revision checks, locks, and history remain effective.
 
+## External workflow helpers
+
+The bundle includes checksum-checked catalog downloads, a basic orthographic PDF sheet, planar DXF sections/inspection, sampled mesh and molding measurements, limited URDF/SRDF/SDF lint, Orca preset resolution/slicing plans and Bambu application handoff plans. These work on exported or external artifacts; they do not create native studio workspaces for every format. Process reviews cite current supplier rules and retain unmeasured checks. Robot lint does not establish simulator or physical correctness. Slicing and app handoff do not start a print.
+
+Use the CAD Python environment for geometry helpers. The optional `.[skills]` extra adds ReportLab; native bootstrap and the Docker runtime include it. Setup itself remains Python-standard-library only. See [the workflow catalog and limits](docs/AGENT-SKILLS.md).
+
 ## What works
 
 - **Native feature editing:** rectangle/circle/polygon profiles, construction planes, additive/subtractive extrusions, through/blind holes, rectangular hole arrays, fillets, chamfers, and placements.
@@ -88,7 +104,7 @@ Do not overwrite the live `o3d.json` directly. Apply proposal files through the 
 - **Reference geometry:** content-addressed STEP imports with editable placement and visibility.
 - **Review:** orbit/zoom, face selection, measurements between surface points, section view, exact dimensions, agent selection context, and PNG rendering.
 - **Verification:** solid validity, connectedness, dimensions, mass with supplied density, reference interference/clearance, and an independent exported-mesh audit.
-- **Structural studies:** real CalculiX linear-static analysis with isolated Netgen meshing, editable materials/forces/supports, mesh refinement, reaction-balance checks, and stress/displacement overlays.
+- **Simulation:** experimental real CalculiX static, modal, buckling, steady conduction and sequential thermal-stress studies; isolated Netgen/Gmsh meshing, explicit material/boundary inputs, refinement, balance checks, temperature/mode/stress/displacement fields and reproducible analysis artifacts. See [capabilities, evidence and parity ledger](docs/SIMULATION.md).
 - **Handoff:** STEP, STL, project source, BOM CSV, and HTML/JSON engineering report in a revision-linked ZIP.
 - **Local operation:** background jobs, cancellation, worker timeouts, recoverable job records, and explicit stale-result handling.
 

@@ -69,6 +69,21 @@ def export_bundle(store, project):
             shutil.copy2(store.artifact(state["build"]["artifacts"][kind]), folder / filename)
     write_json(folder / "o3d.json", project.model_dump(mode="json"))
     analysis = state["analysis"]
+    analysis_names = []
+    if analysis:
+        study_folder = folder / "analysis"
+        study_folder.mkdir(exist_ok=True)
+        write_json(study_folder / "result.json", analysis)
+        shutil.copy2(store.artifact(analysis["field_artifact"]), study_folder / "field.json")
+        analysis_names.extend(["analysis/result.json", "analysis/field.json"])
+        for name, relative in analysis.get("artifacts", {}).items():
+            target_name = {"study_package":"study-package.json", "region_map":"region-map.json"}.get(name, name)
+            target = (study_folder / target_name).resolve()
+            if not target.is_relative_to(study_folder.resolve()):
+                raise ValueError("Analysis artifact name escapes the release package")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(store.artifact(relative), target)
+            analysis_names.append(target.relative_to(folder).as_posix())
     report = {"project": project.name, "revision": project.revision, "geometry_key": geometry_key(project), "study_key": study_key(project),
               "geometry_engine": state["build"].get("engine"), "geometry_checks": checks, "analysis_state": state["analysis_state"], "analysis": analysis,
               "dimensions_mm": state["build"]["dimensions_mm"], "volume_mm3": state["build"]["volume_mm3"]}
@@ -91,6 +106,7 @@ def export_bundle(store, project):
     portable = portable_archive(store, folder / "project.oxygen.zip", expected_project=project)
     names = ["part.step", "part.stl", "o3d.json", "report.json", "report.html", "bom.csv", "project.oxygen.zip"]
     names += [name for name in ("part.solidcraft", "engine-script.json") if (folder / name).is_file()]
+    names = sorted(set(names + analysis_names))
     manifest = {"format": "oxygen-cad-release", "schema_version": 1, "revision": project.revision,
                 "project_archive": "project.oxygen.zip", "scope": portable["manifest"]["scope"],
                 "files": {name: {"sha256": hashlib.sha256((folder / name).read_bytes()).hexdigest(),

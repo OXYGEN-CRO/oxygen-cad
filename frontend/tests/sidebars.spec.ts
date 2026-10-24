@@ -67,12 +67,16 @@ test("breadcrumbs and panel toggles resize the workspace without losing edits", 
   await expect(
     page.getByText("Select planar faces in the viewport", { exact: false }),
   ).toHaveCount(0);
-  await expect(page.getByText("Static stress", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Static stress", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Collapse inspector sidebar", exact: true })
     .click();
   await breadcrumb.getByRole("button", { name: "Study", exact: true }).click();
-  await expect(page.getByText("Static stress", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Static stress", exact: true }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });
   expect(
     await page.evaluate(
@@ -85,7 +89,9 @@ test("breadcrumbs and panel toggles resize the workspace without losing edits", 
   await page
     .getByRole("button", { name: "Expand inspector sidebar", exact: true })
     .click();
-  await expect(page.getByText("Static stress", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Static stress", exact: true }),
+  ).toBeVisible();
   const after = await (await request.get("/api/project")).json();
   expect(after).toEqual(before);
   expect(errors).toEqual([]);

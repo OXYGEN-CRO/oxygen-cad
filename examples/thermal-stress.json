@@ -1,0 +1,57 @@
+{
+  "name": "Analytical thermal stress reference",
+  "features": [
+    {
+      "id": "beam_profile",
+      "type": "profile",
+      "plane": "YZ",
+      "width": 10,
+      "height": 4
+    },
+    {
+      "id": "beam",
+      "type": "extrude",
+      "profile": "beam_profile",
+      "distance": 80
+    }
+  ],
+  "material": {
+    "name": "Numerical benchmark material",
+    "youngs_modulus_mpa": 200000,
+    "poisson_ratio": 0.3,
+    "density_g_cm3": 7.85,
+    "source": "Analytical verification fixture; these values are test inputs, not a production material certificate",
+    "thermal_conductivity_w_m_k": 20,
+    "thermal_expansion_per_k": 1.2e-05
+  },
+  "study": {
+    "fixed_faces": [
+      "part:xmin"
+    ],
+    "forces": [],
+    "mesh_size_mm": 4,
+    "refinement_steps": 3,
+    "assumptions_confirmed": true,
+    "stress_probe_mm": null,
+    "type": "thermal_stress",
+    "temperatures": [
+      {
+        "face": "part:xmin",
+        "temperature_c": 0
+      }
+    ],
+    "heat_sources": [
+      {
+        "face": "part:xmax",
+        "power_w": 1
+      }
+    ],
+    "reference_temperature_c": 0,
+    "probe_point_mm": [
+      40,
+      0,
+      0
+    ]
+  },
+  "requirements": []
+}

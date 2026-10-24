@@ -46,7 +46,9 @@ import {
   type Project,
   type Selection,
   type State,
+  type DisplayField,
 } from "./api";
+import { StudyPanel } from "./components/StudyPanel";
 import { Viewport } from "./Viewport";
 import { isWorkspace, WorkspacePanel, workspaceNames } from "./workspaces/WorkspacePanel";
 import type { DomainId, JsonObject, NativeReply } from "./workspaces/contracts";
@@ -83,7 +85,11 @@ function Field({ label, value, onChange, type = "text", unit, step }: any) {
           value={value ?? ""}
           onChange={(e) =>
             onChange(
-              type === "number" ? Number(e.target.value) : e.target.value,
+              type === "number"
+                ? e.target.value === ""
+                  ? null
+                  : Number(e.target.value)
+                : e.target.value,
             )
           }
         />
@@ -168,7 +174,8 @@ export default function App() {
     [measureMode, setMeasureMode] = useState(false),
     [isolate, setIsolate] = useState(false),
     [measure, setMeasure] = useState<number[][]>([]),
-    [field, setField] = useState<"solid" | "stress" | "displacement">("solid"),
+    [field, setField] = useState<DisplayField>("solid"),
+    [modeIndex, setModeIndex] = useState(0),
     [deformation, setDeformation] = useState(0),
     [addOpen, setAddOpen] = useState(false),
     [checks, setChecks] = useState<any>(null),
@@ -197,6 +204,21 @@ export default function App() {
     }
   }
   const upload = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const analysis = state?.analysis;
+    const available =
+      field === "solid" ||
+      (analysis &&
+        (field === "stress"
+          ? analysis.max_stress_mpa != null
+          : field === "displacement"
+            ? analysis.max_displacement_mm != null
+            : field === "temperature"
+              ? analysis.max_temperature_c != null
+              : Boolean(analysis.frequencies_hz || analysis.buckling_factors)));
+    if (!available) setField("solid");
+    setModeIndex(0);
+  }, [state?.analysis?.key]);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setAddOpen(false);
@@ -901,12 +923,51 @@ export default function App() {
                   onChange={(e) => setField(e.target.value as any)}
                 >
                   <option value="solid">Solid model</option>
-                  <option value="stress" disabled={!state.analysis}>
+                  <option
+                    value="stress"
+                    disabled={state.analysis.max_stress_mpa == null}
+                  >
                     Stress field
                   </option>
-                  <option value="displacement" disabled={!state.analysis}>
+                  <option
+                    value="displacement"
+                    disabled={state.analysis.max_displacement_mm == null}
+                  >
                     Displacement
                   </option>
+                  <option
+                    value="temperature"
+                    disabled={state.analysis.max_temperature_c == null}
+                  >
+                    Temperature
+                  </option>
+                  <option
+                    value="mode"
+                    disabled={
+                      !state.analysis.frequencies_hz &&
+                      !state.analysis.buckling_factors
+                    }
+                  >
+                    Mode shape
+                  </option>
+                </SelectControl>
+              )}
+              {field === "mode" && state.analysis && (
+                <SelectControl
+                  aria-label="Mode number"
+                  value={modeIndex}
+                  onChange={(e) => setModeIndex(Number(e.target.value))}
+                >
+                  {(
+                    state.analysis.frequencies_hz ??
+                    state.analysis.buckling_factors ??
+                    []
+                  ).map((value: number, i: number) => (
+                    <option value={i} key={i}>
+                      Mode {i + 1} · {value.toPrecision(4)}{" "}
+                      {state.analysis.frequencies_hz ? "Hz" : "×"}
+                    </option>
+                  ))}
                 </SelectControl>
               )}
               <Button title="Fit model" onClick={() => setFit((v) => v + 1)}>
@@ -923,6 +984,7 @@ export default function App() {
             section={section}
             field={field}
             analysis={state.analysis}
+            modeIndex={modeIndex}
             fit={fit}
             deformation={deformation}
             measure={measure}
@@ -969,20 +1031,30 @@ export default function App() {
               <span>
                 {field === "stress"
                   ? "von Mises stress · MPa"
-                  : "Displacement · mm"}
+                  : field === "temperature"
+                    ? "Temperature · °C"
+                    : field === "mode"
+                      ? "Mode shape · relative amplitude"
+                      : "Displacement · mm"}
               </span>
               <div />
               <small>
-                0{" "}
+                {field === "temperature"
+                  ? state.analysis.min_temperature_c?.toPrecision(4)
+                  : 0}{" "}
                 <b>
                   {(field === "stress"
                     ? state.analysis.max_stress_mpa
-                    : state.analysis.max_displacement_mm
-                  ).toPrecision(4)}
+                    : field === "temperature"
+                      ? state.analysis.max_temperature_c
+                      : field === "mode"
+                        ? 1
+                        : state.analysis.max_displacement_mm
+                  )?.toPrecision(4)}
                 </b>
               </small>
               <label>
-                Deformation ×{deformation}
+                {field === "mode" ? "Mode scale" : "Deformation"} ×{deformation}
                 <Input
                   aria-label="Deformation scale"
                   type="range"
@@ -1583,6 +1655,10 @@ export default function App() {
                           "max_mass",
                           "min_clearance",
                           "max_displacement",
+                          "max_temperature",
+                          "min_frequency",
+                          "min_buckling_factor",
+                          "max_stress",
                         ]}
                         onChange={(v: string) =>
                           edit((p) => (p.requirements[i].kind = v))
@@ -1640,301 +1716,17 @@ export default function App() {
                 </>
               )}
               {tab === "verify" && (
-                <>
-                  <Button
-                    className="wide-button"
-                    disabled={busy || dirty || pending}
-                    onClick={() => run("check")}
-                  >
-                    <ShieldCheck size={15} />
-                    Check fit
-                  </Button>
-                  <div className="inspector-title">
-                    <div className="feature-glyph">
-                      <Activity size={18} />
-                    </div>
-                    <div>
-                      <h2>Static stress</h2>
-                    </div>
-                  </div>
-                  {selection?.kind === "face" &&
-                    selection.face.kind === "PLANE" &&
-                    state.geometry_state === "current" && (
-                      <div className="selection-card">
-                        <code>{selection.id}</code>
-                        <div>
-                          <Button onClick={() => fixed(selection.id)}>
-                            <Lock size={13} />
-                            Fix face
-                          </Button>
-                          <Button onClick={() => force(selection.id)}>
-                            <Plus size={13} />
-                            Apply force
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  <div className="section-heading">MATERIAL</div>
-                  {!current.material ? (
-                    <Button
-                      className="wide-button"
-                      onClick={() =>
-                        edit(
-                          (p) =>
-                            (p.material = {
-                              name: "User-defined material",
-                              youngs_modulus_mpa: 0,
-                              poisson_ratio: 0.3,
-                              density_g_cm3: 0,
-                              yield_strength_mpa: null,
-                              source: "",
-                            }),
-                        )
-                      }
-                    >
-                      <Plus size={14} />
-                      Define material
-                    </Button>
-                  ) : (
-                    <>
-                      <Field
-                        label="Material name"
-                        value={current.material.name}
-                        onChange={(v: string) =>
-                          edit((p) => (p.material.name = v))
-                        }
-                      />
-                      <Field
-                        label="Young’s modulus"
-                        type="number"
-                        value={current.material.youngs_modulus_mpa}
-                        unit="MPa"
-                        onChange={(v: number) =>
-                          edit((p) => (p.material.youngs_modulus_mpa = v))
-                        }
-                      />
-                      <Field
-                        label="Poisson ratio"
-                        type="number"
-                        value={current.material.poisson_ratio}
-                        onChange={(v: number) =>
-                          edit((p) => (p.material.poisson_ratio = v))
-                        }
-                      />
-                      <Field
-                        label="Density"
-                        type="number"
-                        value={current.material.density_g_cm3}
-                        unit="g/cm³"
-                        onChange={(v: number) =>
-                          edit((p) => (p.material.density_g_cm3 = v))
-                        }
-                      />
-                      <Field
-                        label="Material data source"
-                        value={current.material.source}
-                        onChange={(v: string) =>
-                          edit((p) => (p.material.source = v))
-                        }
-                      />
-                    </>
-                  )}
-                  <div className="section-heading">FIXED SUPPORTS</div>
-                  {current.study.fixed_faces.length === 0 && (
-                    <p className="empty-note">No fixed faces selected</p>
-                  )}
-                  {current.study.fixed_faces.map((face, i) => (
-                    <div className="region-chip" key={face}>
-                      <Lock size={13} />
-                      <code>{face}</code>
-                      <Button
-                        title="Remove support"
-                        onClick={() =>
-                          edit((p) => p.study.fixed_faces.splice(i, 1))
-                        }
-                      >
-                        <X size={13} />
-                      </Button>
-                    </div>
-                  ))}
-                  <div className="section-heading">DISTRIBUTED FORCES</div>
-                  {current.study.forces.length === 0 && (
-                    <p className="empty-note">No applied forces</p>
-                  )}
-                  {current.study.forces.map((load, i) => (
-                    <div className="load-card" key={load.face}>
-                      <div>
-                        <code>{load.face}</code>
-                        <Button
-                          title="Remove force"
-                          onClick={() =>
-                            edit((p) => p.study.forces.splice(i, 1))
-                          }
-                        >
-                          <X size={13} />
-                        </Button>
-                      </div>
-                      <VectorField
-                        label="Force"
-                        unit="N"
-                        value={load.vector_n}
-                        onChange={(v) =>
-                          edit((p) => (p.study.forces[i].vector_n = v))
-                        }
-                      />
-                    </div>
-                  ))}
-                  <div className="section-heading">NUMERICAL SETTINGS</div>
-                  <Field
-                    label="Initial mesh size"
-                    type="number"
-                    value={current.study.mesh_size_mm}
-                    unit="mm"
-                    onChange={(v: number) =>
-                      edit((p) => (p.study.mesh_size_mm = v))
-                    }
-                  />
-                  <Field
-                    label="Refinement steps"
-                    type="number"
-                    value={current.study.refinement_steps}
-                    onChange={(v: number) =>
-                      edit((p) => (p.study.refinement_steps = v))
-                    }
-                  />
-                  <Field
-                    label="Convergence tolerance"
-                    type="number"
-                    value={current.study.convergence_tolerance}
-                    onChange={(v: number) =>
-                      edit((p) => (p.study.convergence_tolerance = v))
-                    }
-                  />
-                  {current.study.stress_probe_mm ? (
-                    <>
-                      <VectorField
-                        label="Stress probe"
-                        value={current.study.stress_probe_mm}
-                        onChange={(v) =>
-                          edit((p) => (p.study.stress_probe_mm = v))
-                        }
-                      />
-                      <Button
-                        className="text-button"
-                        onClick={() =>
-                          edit((p) => (p.study.stress_probe_mm = null))
-                        }
-                      >
-                        Remove stress probe
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      className="wide-button"
-                      onClick={() =>
-                        edit(
-                          (p) =>
-                            (p.study.stress_probe_mm = selection?.point ?? [
-                              0, 0, 0,
-                            ]),
-                        )
-                      }
-                    >
-                      Add named stress probe
-                    </Button>
-                  )}
-                  <label className="assumptions">
-                    <Input
-                      type="checkbox"
-                      checked={current.study.assumptions_confirmed}
-                      onChange={(e) =>
-                        edit(
-                          (p) =>
-                            (p.study.assumptions_confirmed = e.target.checked),
-                        )
-                      }
-                    />
-                    <span>
-                      I have reviewed the supports, forces and material data.
-                      Small deformation, linear elasticity and negligible
-                      dynamic effects apply.
-                    </span>
-                  </label>
-                  <Button
-                    className="full-width"
-                    variant="primary"
-                    disabled={
-                      dirty ||
-                      busy ||
-                      pending ||
-                      !current.study.assumptions_confirmed
-                    }
-                    onClick={() => run("simulate")}
-                  >
-                    <Play size={15} />
-                    Run static study
-                  </Button>
-                  <div className="section-heading">
-                    RESULTS{" "}
-                    <span className="result-state">
-                      {state.analysis_state.replace("_", " ")}
-                    </span>
-                  </div>
-                  {state.analysis ? (
-                    <>
-                      <div className="result-metric">
-                        <span>Maximum displacement</span>
-                        <strong>
-                          {state.analysis.max_displacement_mm.toPrecision(4)}{" "}
-                          <small>mm</small>
-                        </strong>
-                      </div>
-                      <div className="result-metric">
-                        <span>Peak von Mises stress</span>
-                        <strong>
-                          {state.analysis.max_stress_mpa.toPrecision(4)}{" "}
-                          <small>MPa</small>
-                        </strong>
-                      </div>
-                      <div className="two-fields">
-                        <Button
-                          className="wide-button"
-                          onClick={() => setField("stress")}
-                        >
-                          View stress
-                        </Button>
-                        <Button
-                          className="wide-button"
-                          onClick={() => setField("displacement")}
-                        >
-                          View displacement
-                        </Button>
-                      </div>
-                      <p className="muted">
-                        Reaction balance error:{" "}
-                        {(state.analysis.force_balance_error * 100).toFixed(3)}%
-                      </p>
-                      {state.analysis.iterations.map((it: any, i: number) => (
-                        <div className="iteration-row" key={i}>
-                          <span>
-                            Mesh {i + 1} · {it.nodes} nodes
-                          </span>
-                          <strong>
-                            {it.max_displacement_mm.toPrecision(4)} mm
-                          </strong>
-                        </div>
-                      ))}
-                      {state.analysis.warnings.map((w: string) => (
-                        <p className="study-warning" key={w}>
-                          <AlertTriangle size={13} />
-                          {w}
-                        </p>
-                      ))}
-                    </>
-                  ) : (
-                    <p className="empty-note">No study results.</p>
-                  )}
-                </>
+                <StudyPanel
+                  current={current}
+                  state={state}
+                  selection={selection}
+                  blocked={Boolean(busy || dirty || pending)}
+                  edit={edit}
+                  run={run}
+                  onField={setField}
+                  Field={Field}
+                  VectorField={VectorField}
+                />
               )}
               {tab === "history" && (
                 <>

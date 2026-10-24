@@ -1,0 +1,8 @@
+{
+  "name": "Robot prototype discovery",
+  "items": [
+    {"label": "Joint actuator", "quantity": 2, "kind": "off_the_shelf", "requirements": [{"key": "torque", "unit": "N*m", "min": 3}]},
+    {"label": "Controller board", "quantity": 1, "kind": "off_the_shelf"},
+    {"label": "Motor mounting bracket", "quantity": 2, "kind": "custom", "notes": "Design after motor mounting geometry is sourced and verified"}
+  ]
+}

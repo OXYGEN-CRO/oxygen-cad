@@ -1,4 +1,9 @@
-import type { Project as GeneratedProject } from "./generated";
+import type {
+  Project as GeneratedProject,
+  Study as GeneratedStudy,
+} from "./generated";
+export type DisplayField =
+  "solid" | "stress" | "displacement" | "temperature" | "mode";
 export const projectPrefix = window.location.pathname.match(/^\/p\/[a-zA-Z0-9_-]+(?=\/|$)/)?.[0] ?? "";
 export async function api(path: string, options: RequestInit = {}) {
   const response = await fetch(`${projectPrefix}/api/${path}`, options);
@@ -38,14 +43,23 @@ export type Project = Omit<
   placement: { translation: number[]; rotation: number[] };
   material: any;
   requirements: any[];
-  study: {
-    type: "linear_static";
+  study: Omit<
+    GeneratedStudy,
+    | "forces"
+    | "stress_probe_mm"
+    | "probe_point_mm"
+    | "temperatures"
+    | "heat_sources"
+  > & {
     fixed_faces: string[];
     forces: { face: string; vector_n: number[] }[];
     mesh_size_mm: number;
     refinement_steps: number;
     convergence_tolerance: number;
     stress_probe_mm: number[] | null;
+    probe_point_mm: number[] | null;
+    temperatures: { face: string; temperature_c: number | null }[];
+    heat_sources: { face: string; power_w: number | null }[];
     assumptions_confirmed: boolean;
   };
 };
@@ -77,6 +91,10 @@ export type Selection = {
   reference?: string;
 };
 export type State = {
+  simulation_capabilities: {
+    studies: { type: string; label: string; status: string }[];
+    scope: string;
+  };
   project: Project;
   build: Geometry | null;
   last_build: Geometry | null;

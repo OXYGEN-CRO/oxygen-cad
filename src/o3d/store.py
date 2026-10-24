@@ -297,6 +297,7 @@ class Store:
         return path
 
     def state(self):
+        from .analysis import capabilities
         project = self.load()
         gkey, skey = geometry_key(project), study_key(project)
         build_path = self.cache / "builds" / gkey / "build.json"
@@ -315,7 +316,7 @@ class Store:
                 "build": build, "last_build": last_build, "analysis": analysis, "checks": checks,
                 "geometry_state": "current" if build else "stale" if last_build else "not_run",
                 "analysis_state": analysis.get("state") if analysis else "stale" if (self.cache / "last-study.json").exists() else "not_run",
-                "history": self.history(), "context": context}
+                "history": self.history(), "context": context, "simulation_capabilities": capabilities()}
 
     def _agent_files(self):
         write_json(self.root / "project.schema.json", Project.model_json_schema())

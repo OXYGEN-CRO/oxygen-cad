@@ -141,6 +141,25 @@
       "title": "Force",
       "type": "object"
     },
+    "HeatSource": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "title": "Face",
+          "type": "string"
+        },
+        "power_w": {
+          "title": "Power W",
+          "type": "number"
+        }
+      },
+      "required": [
+        "face",
+        "power_w"
+      ],
+      "title": "HeatSource",
+      "type": "object"
+    },
     "Hole": {
       "additionalProperties": false,
       "properties": {
@@ -279,15 +298,31 @@
           "type": "string"
         },
         "youngs_modulus_mpa": {
-          "exclusiveMinimum": 0,
-          "title": "Youngs Modulus Mpa",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Youngs Modulus Mpa"
         },
         "poisson_ratio": {
-          "exclusiveMaximum": 0.5,
-          "exclusiveMinimum": -1,
-          "title": "Poisson Ratio",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMaximum": 0.5,
+              "exclusiveMinimum": -1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Poisson Ratio"
         },
         "density_g_cm3": {
           "exclusiveMinimum": 0,
@@ -309,13 +344,81 @@
         },
         "source": {
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Source",
           "type": "string"
+        },
+        "thermal_conductivity_w_m_k": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thermal Conductivity W M K"
+        },
+        "specific_heat_j_kg_k": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Specific Heat J Kg K"
+        },
+        "thermal_expansion_per_k": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thermal Expansion Per K"
+        },
+        "process": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition"
+        },
+        "property_sources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Property Sources",
+          "type": "object"
         }
       },
       "required": [
-        "youngs_modulus_mpa",
-        "poisson_ratio",
         "density_g_cm3",
         "source"
       ],
@@ -653,7 +756,11 @@
             "max_mass",
             "max_dimension",
             "min_clearance",
-            "max_displacement"
+            "max_displacement",
+            "max_temperature",
+            "min_frequency",
+            "min_buckling_factor",
+            "max_stress"
           ],
           "title": "Kind",
           "type": "string"
@@ -702,10 +809,33 @@
     "Study": {
       "additionalProperties": false,
       "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
         "type": {
-          "const": "linear_static",
           "default": "linear_static",
+          "enum": [
+            "linear_static",
+            "modal",
+            "buckling",
+            "thermal",
+            "thermal_stress",
+            "nonlinear_static",
+            "quasistatic_event",
+            "dynamic_event",
+            "shape_optimization",
+            "electronics_cooling",
+            "injection_molding"
+          ],
           "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "default": "Engineering study",
+          "title": "Name",
           "type": "string"
         },
         "fixed_faces": {
@@ -722,11 +852,68 @@
           "title": "Forces",
           "type": "array"
         },
+        "temperatures": {
+          "items": {
+            "$ref": "#/$defs/TemperatureBoundary"
+          },
+          "title": "Temperatures",
+          "type": "array"
+        },
+        "heat_sources": {
+          "items": {
+            "$ref": "#/$defs/HeatSource"
+          },
+          "title": "Heat Sources",
+          "type": "array"
+        },
+        "reference_temperature_c": {
+          "anyOf": [
+            {
+              "minimum": -273.15,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Temperature C"
+        },
+        "mode_count": {
+          "default": 6,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Mode Count",
+          "type": "integer"
+        },
+        "mesher": {
+          "default": "netgen",
+          "enum": [
+            "netgen",
+            "gmsh"
+          ],
+          "title": "Mesher",
+          "type": "string"
+        },
         "mesh_size_mm": {
           "default": 4,
           "exclusiveMinimum": 0,
           "title": "Mesh Size Mm",
           "type": "number"
+        },
+        "max_nodes": {
+          "default": 200000,
+          "maximum": 200000,
+          "minimum": 100,
+          "title": "Max Nodes",
+          "type": "integer"
+        },
+        "solver_timeout_seconds": {
+          "default": 180,
+          "maximum": 600,
+          "minimum": 1,
+          "title": "Solver Timeout Seconds",
+          "type": "integer"
         },
         "refinement_steps": {
           "default": 3,
@@ -767,6 +954,31 @@
           "default": null,
           "title": "Stress Probe Mm"
         },
+        "probe_point_mm": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Probe Point Mm"
+        },
         "assumptions_confirmed": {
           "default": false,
           "title": "Assumptions Confirmed",
@@ -774,6 +986,26 @@
         }
       },
       "title": "Study",
+      "type": "object"
+    },
+    "TemperatureBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "face": {
+          "title": "Face",
+          "type": "string"
+        },
+        "temperature_c": {
+          "minimum": -273.15,
+          "title": "Temperature C",
+          "type": "number"
+        }
+      },
+      "required": [
+        "face",
+        "temperature_c"
+      ],
+      "title": "TemperatureBoundary",
       "type": "object"
     }
   },

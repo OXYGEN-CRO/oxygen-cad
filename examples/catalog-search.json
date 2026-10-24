@@ -1,0 +1,9 @@
+{
+  "q": "screw",
+  "category": "fastener",
+  "numeric": [{"key": "length", "unit": "mm", "min": 6, "max": 12}],
+  "attributes": {"thread": "M3"},
+  "cad_required": true,
+  "mode": "lexical",
+  "limit": 10
+}

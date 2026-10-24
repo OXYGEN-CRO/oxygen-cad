@@ -18,10 +18,13 @@ def files_at(directory: Path) -> dict[str, bytes]:
         raise ValueError(f"Refusing symlink skill directory: {directory}")
     result = {}
     for path in sorted(directory.rglob("*")):
+        relative = path.relative_to(directory)
+        if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo"):
+            continue
         if path.is_symlink():
             raise ValueError(f"Refusing symlink inside skill: {path}")
         if path.is_file() and path.name != RECEIPT:
-            result[path.relative_to(directory).as_posix()] = path.read_bytes()
+            result[relative.as_posix()] = path.read_bytes()
     return result
 
 

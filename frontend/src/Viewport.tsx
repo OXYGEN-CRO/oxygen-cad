@@ -7,6 +7,7 @@ import {
   type Selection,
   type Project,
   type Face,
+  type DisplayField,
 } from "./api";
 import {
   cameraEvent,
@@ -25,7 +26,8 @@ type Props = {
   selected: Selection | null;
   onSelect: (s: Selection) => void;
   section: boolean;
-  field: "solid" | "stress" | "displacement";
+  field: DisplayField;
+  modeIndex: number;
   analysis: any;
   fit: number;
   deformation: number;
@@ -579,27 +581,53 @@ export function Viewport(props: Props) {
           const positions: number[] = [],
             colors: number[] = [];
           const ids = Object.keys(field.nodes).map(Number);
+          const vectors =
+            props.field === "mode"
+              ? (field.modes?.[props.modeIndex]?.vectors ?? {})
+              : (field.displacements ?? {});
           const values = ids.map((id) =>
             props.field === "stress"
-              ? (field.stress_mpa[id] ?? 0)
-              : Math.hypot(...(field.displacements[id] ?? [0, 0, 0])),
+              ? (field.stress_mpa?.[id] ?? 0)
+              : props.field === "temperature"
+                ? field.temperature_c[id]
+                : Math.hypot(...(vectors[id] ?? [0, 0, 0])),
           );
-          const high = values.reduce((a, b) => Math.max(a, b), 1e-10);
+          const low =
+            props.field === "temperature"
+              ? values.reduce((a, b) => Math.min(a, b), Infinity)
+              : 0;
+          const high = values.reduce((a, b) => Math.max(a, b), -Infinity);
+          const span = Math.max(high - low, 1e-10);
+          const dimensions = geometry.bounds[1].map(
+            (value, axis) => value - geometry.bounds[0][axis],
+          );
+          const modeScale =
+            props.field === "mode"
+              ? (Math.max(...dimensions) * 0.1) /
+                Math.max(high, 1e-10)
+              : 1;
           const color = new THREE.Color();
           for (const tri of field.boundary_triangles)
             for (const id of tri) {
               const point = field.nodes[id];
-              const u = field.displacements[id] ?? [0, 0, 0];
+              const u = vectors[id] ?? [0, 0, 0];
               positions.push(
                 ...point.map(
-                  (v: number, i: number) => v + u[i] * props.deformation,
+                  (v: number, i: number) =>
+                    v + u[i] * props.deformation * modeScale,
                 ),
               );
               const value =
                 props.field === "stress"
-                  ? (field.stress_mpa[id] ?? 0)
-                  : Math.hypot(...u);
-              color.setHSL((1 - Math.min(value / high, 1)) * 0.65, 0.85, 0.52);
+                  ? (field.stress_mpa?.[id] ?? 0)
+                  : props.field === "temperature"
+                    ? field.temperature_c[id]
+                    : Math.hypot(...u);
+              color.setHSL(
+                (1 - Math.min(Math.max((value - low) / span, 0), 1)) * 0.65,
+                0.85,
+                0.52,
+              );
               colors.push(color.r, color.g, color.b);
             }
           const bg = new THREE.BufferGeometry();
@@ -699,6 +727,7 @@ export function Viewport(props: Props) {
     props.section,
     props.field,
     props.analysis,
+    props.modeIndex,
     props.deformation,
     props.measure,
     props.project.references,

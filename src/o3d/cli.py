@@ -12,6 +12,9 @@ from .store import Store
 
 app = typer.Typer(no_args_is_help=True, help="Oxygen CAD: inspect, edit, build, verify and export a local CAD project.")
 
+from .catalog.cli import app as parts_app
+app.add_typer(parts_app, name="parts")
+
 
 def emit(value, machine=True):
     typer.echo(json.dumps(value, indent=2, default=str, allow_nan=False))
@@ -101,7 +104,7 @@ def engine_stdio():
 @app.command()
 def init(ctx: typer.Context, template: Path | None = None, json_output: bool = typer.Option(False, "--json")):
     if template:
-        if str(template) in ("bracket", "cantilever"):
+        if str(template) in ("bracket", "cantilever", "modal", "buckling", "thermal", "thermal-stress"):
             template = Path(__file__).resolve().parents[2] / "examples" / f"{template}.json"
         project = Project.model_validate_json(template.read_text())
     else:
@@ -155,6 +158,15 @@ def check(ctx: typer.Context, json_output: bool = typer.Option(False, "--json"))
     emit(result)
     if result["state"] != "passed":
         raise typer.Exit(2)
+
+
+@app.command()
+def studies(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
+    """List study capabilities and validate the current study without solving."""
+    from .analysis import capabilities, validate_study
+    project = ctx.obj.load() if (ctx.obj.root / "o3d.json").exists() else None
+    emit({**capabilities(), "current_study": project.study.model_dump() if project else None,
+          "setup_errors": validate_study(project) if project else []})
 
 
 @app.command()

@@ -65,8 +65,11 @@ def execute(store, project, domain, operation, payload, cancel=None, actor="agen
         raise ValueError("A workspace operation is required")
     if not isinstance(payload, dict) or len(json.dumps(payload, allow_nan=False).encode()) > 10 * 1024 * 1024:
         raise ValueError("Workspace input must be an object of at most 10 MiB")
-    # Actor is supplied by the authenticated host command, never nested user data.
-    payload = deepcopy(payload) | {"actor": actor}
+    payload = deepcopy(payload)
+    # Electronics consumes the authenticated actor to enforce its edit locks.
+    # Other domains accept their own strict operation payloads unchanged.
+    if domain == "electronics":
+        payload["actor"] = actor
     result = module_for(domain).execute(store, project, operation, payload, cancel=cancel)
     if not isinstance(result, dict):
         raise ValueError("Workspace operation must return an object")

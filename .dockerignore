@@ -1,4 +1,7 @@
 .git
+.env
+.env.*
+catalog-data
 .venv
 .mesh-venv
 .tools

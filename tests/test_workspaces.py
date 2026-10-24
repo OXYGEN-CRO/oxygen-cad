@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from o3d.api import create_app
-from o3d.domains import finalize, save_domain
+from o3d.domains import execute, finalize, save_domain
 from o3d.identity import Identity, principal_context
 from o3d.jobs import Jobs
 from o3d.model import Command, Parameter
@@ -35,6 +35,28 @@ def test_domain_edit_undo_and_stale_worker_never_overwrites_new_edit(store):
     assert report["stale"] is True and report["source_revision"] == 1
     undone = store.apply(Command(expected_revision=2, actor="human", action="undo"))
     assert undone.revision == 3 and "drawings" not in undone.domains
+
+
+def test_domain_dispatch_preserves_strict_assembly_stack_input(store):
+    payload = {"name": "Engagement", "dimensions": [
+        {"name": "Bolt", "nominal": 30, "lower": -0.2, "upper": 0.2},
+        {"name": "Grip", "nominal": 24, "lower": -0.4, "upper": 0.4, "sign": -1},
+    ], "required_min": 5, "required_max": 7}
+    result = execute(store, store.load(), "assemblies", "fit_stack", payload, actor="agent")
+    assert [result["minimum"], result["maximum"]] == pytest.approx([5.4, 6.6])
+    assert result["status"] == "passed" and "actor" not in payload
+    assert store.load().revision == 1
+
+
+def test_electronics_dispatch_replaces_forged_actor_without_changing_input(store, monkeypatch):
+    from types import SimpleNamespace
+    seen = []
+    module = SimpleNamespace(execute=lambda *_args, **_kwargs: seen.append(_args[3]) or {})
+    monkeypatch.setattr("o3d.domains.module_for", lambda _domain: module)
+    payload = {"actor": "human", "data": {"locked": True}}
+    execute(store, store.load(), "electronics", "edit", payload, actor="agent")
+    assert seen == [{"actor": "agent", "data": {"locked": True}}]
+    assert payload["actor"] == "human"
 
 
 def test_workspace_api_and_project_windows_have_independent_stores(store):

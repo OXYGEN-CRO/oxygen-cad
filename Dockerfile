@@ -34,8 +34,8 @@ COPY --from=engine /build/engine/target/release/oxygen-engine /usr/local/bin/oxy
 COPY third_party/solidcraft/LICENSE-MIT third_party/solidcraft/LICENSE-APACHE third_party/solidcraft/NOTICE third_party/solidcraft/THIRD-PARTY-LICENSES.txt /usr/share/doc/oxygen-solidcraft/
 COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/oxygen-solidcraft/OFL.txt
 WORKDIR /app
-COPY requirements.lock mesh-requirements.lock pyproject.toml ./
-RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requirements.lock \
+COPY requirements.lock mesh-requirements.lock skill-requirements.lock pyproject.toml ./
+RUN python -m venv /opt/cad && /opt/cad/bin/pip install --no-cache-dir -r requirements.lock -r skill-requirements.lock \
  && python -m venv /opt/mesh && /opt/mesh/bin/pip install --no-cache-dir -r mesh-requirements.lock
 COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
