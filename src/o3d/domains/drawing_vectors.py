@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import html
 import io
+import json
 import math
 import os
 from pathlib import Path
@@ -58,7 +59,7 @@ def svg(page):
     font,*_=font_for([page])
     w,h=page["width_mm"],page["height_mm"]
     parts=[f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}">',
-           '<metadata>Oxygen exact-source engineering drawing; curves use 0.02 mm model deflection.</metadata>',
+           '<metadata>'+html.escape(json.dumps({"source_geometry_key":page["source_geometry_key"],"source_revision":page["source_revision"],"issued_revision":page["issued_revision"],"curve_deflection_mm":.02}))+ '</metadata>',
            '<defs><style>@font-face{font-family:OxygenDrawing;src:url(data:font/ttf;base64,'+base64.b64encode(font).decode()+') format("truetype")}</style></defs>',
            '<rect width="100%" height="100%" fill="white"/>']
     for path in page["paths"]:
@@ -82,6 +83,8 @@ def write_pdf(path,pages):
         compressed=zlib.compress(data)
         return obj(f"<< /Length {len(compressed)} /Filter /FlateDecode {extra} >>\nstream\n".encode()+compressed+b"\nendstream")
     catalog=obj("");pagetree=obj("")
+    subject="Oxygen drawing "+json.dumps([{k:page[k] for k in ("document","id","source_revision","issued_revision","source_geometry_key")} for page in pages],separators=(",",":"))
+    info=obj("<< /Producer (Oxygen vector drawing writer) /Subject <FEFF"+subject.encode("utf-16-be").hex()+"> >>")
     fontfile=stream(font,f"/Length1 {len(font)}")
     descriptor=obj(f"<< /Type /FontDescriptor /FontName /OxygenDrawing /Flags 32 /FontBBox [{' '.join(map(str,bbox))}] /ItalicAngle 0 /Ascent {ascent} /Descent {descent} /CapHeight {ascent} /StemV 80 /FontFile2 {fontfile} 0 R >>")
     cmap=bytearray((max(metrics,default=0)+1)*2)
@@ -126,7 +129,7 @@ def write_pdf(path,pages):
     xref=len(output)
     output+=f"xref\n0 {len(objects)+1}\n0000000000 65535 f \n".encode()
     output+="".join(f"{offset:010d} 00000 n \n" for offset in offsets[1:]).encode()
-    output+=f"trailer\n<< /Size {len(objects)+1} /Root {catalog} 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    output+=f"trailer\n<< /Size {len(objects)+1} /Root {catalog} 0 R /Info {info} 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
     path.write_bytes(output)
 
 
@@ -139,6 +142,7 @@ def write_dxf(path,page):
     pairs=[]
     def add(*items):
         pairs.extend(str(item) for item in items)
+    add(999,"OXYGEN "+json.dumps({k:page[k] for k in ("document","source_revision","issued_revision","source_geometry_key")},separators=(",",":")))
     add(0,"SECTION",2,"HEADER",9,"$ACADVER",1,"AC1024",9,"$INSUNITS",70,4,9,"$MEASUREMENT",70,1,0,"ENDSEC")
     add(0,"SECTION",2,"TABLES",0,"TABLE",2,"LTYPE",70,3)
     for name,pattern in [("CONTINUOUS",[]),("HIDDEN",[3,-1.5]),("CENTER",[6,-1,1,-1])]:

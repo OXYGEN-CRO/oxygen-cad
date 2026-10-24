@@ -32,6 +32,18 @@ def check_cancel(cancel):
         raise RuntimeError("Drawing operation cancelled")
 
 
+def verify_source(store, project, revision, key):
+    from ..model import Project, geometry_key
+    if key!=geometry_key(project):
+        raise ValueError("Drawing or 3D annotation is stale: source geometry changed; refresh associations before publication")
+    if revision>project.revision:
+        raise ValueError("Source revision is newer than the project")
+    if revision<project.revision:
+        snapshot=store.cache/"history"/f"{revision:08d}.json"
+        if not snapshot.is_file() or geometry_key(Project.model_validate_json(snapshot.read_text()))!=key:
+            raise ValueError("Source revision does not identify the declared geometry snapshot")
+
+
 def load_geometry(store, project):
     import build123d as bd
     from ..geometry import build
@@ -48,24 +60,32 @@ def load_geometry(store, project):
     scene_path = store.cache / "builds" / key / "native-scene.json"
     if not scene_path.exists():
         scene_path = store.cache / "builds" / key / "scene.json"
-    scene = json.loads(scene_path.read_text()) if scene_path.exists() else {}
+    scene = metadata.get("scene") or (json.loads(scene_path.read_text()) if scene_path.exists() else {})
     bodies = scene.get("bodies", [])
-    exact = list(shape.solids())
     if not bodies:
-        bodies = [{"id": "part", "name": project.name, "geometry_kind": "solid"}]
-    # Ordering is a transient per-build lookup, never a persisted topology reference.
-    if len(bodies) != len(exact):
-        if len(bodies) != 1:
-            raise ValueError("Native scene/BRep body count mismatch; body associations require repair")
-        exact = [shape]
-    return shape, metadata, {b["id"]: (b, s) for b, s in zip(bodies, exact)}
+        return shape, metadata, {"part": ({"id":"part","name":project.name,"geometry_kind":"solid"},shape)}
+    exact={}
+    for body in bodies:
+        if body.get("geometry_kind")=="mesh":
+            continue
+        artifact=body.get("artifacts",{}).get("step")
+        if not artifact:
+            raise ValueError(f"Exact artifact mapping missing for drawing body {body['id']}; topology association cannot use body order")
+        exact[body["id"]]=(body,bd.import_step(store.artifact(artifact)))
+    return shape, metadata, exact
 
 
-def resolve(reference, project, shape):
+def resolve(reference, project, shape, bodies=None):
     """No nearest-face or arbitrary index fallback is permitted."""
     import build123d as bd
     from ..geometry import resolve_face, select_edges, vector
     r = reference
+    if r.kind in ("hole","parameter") and getattr(project,"native_document",None):
+        raise ValueError(f"Legacy {r.kind} reference {r.target} is detached from the canonical native document; explicitly attach a current exact face or edge")
+    if r.body:
+        if bodies is None or r.body not in bodies:
+            raise ValueError(f"Missing exact body reference {r.body}")
+        shape=bodies[r.body][1]
     if r.kind == "point":
         return {"point": list(r.point), "association": "authored_point"}
     if r.kind == "parameter":
@@ -224,8 +244,12 @@ def dimension_text(value, annotation, units):
         limits=(value+t.lower_mm,value+t.upper_mm)
         text = fmt(limits[1])+" / "+fmt(limits[0]) if t.kind == "limits" else text+" +"+fmt(t.upper_mm)+" / "+fmt(t.lower_mm)
     elif t.kind == "fit":
-        lo,hi=fit_limits(value,t.fit)
-        limits=(value+lo,value+hi)
+        if t.fit=="H7/g6":
+            hlo,hhi=fit_limits(value,"H7");slo,shi=fit_limits(value,"g6")
+            limits={"hole":[value+hlo,value+hhi],"shaft":[value+slo,value+shi]}
+        else:
+            lo,hi=fit_limits(value,t.fit)
+            limits=(value+lo,value+hi)
         text += " "+t.fit
     if annotation.kind == "diameter": text="⌀"+text
     if annotation.kind == "radius": text="R"+text
@@ -256,21 +280,25 @@ def bom_rows(store, project, bodies):
 def layout(store, project, doc, shape, bodies, cancel=None):
     from ..model import geometry_key
     key=geometry_key(project)
-    if doc.source_geometry_key != key:
-        raise ValueError(f"Drawing {doc.id} is stale: source geometry changed; refresh associations before publication")
-    if doc.source_revision > project.revision:
-        raise ValueError("Drawing source revision is newer than the project")
+    verify_source(store,project,doc.source_revision,doc.source_geometry_key)
     datum_ids={a.datum for s in doc.sheets for a in s.annotations if a.kind=="datum"}
     pages=[]
     bom=bom_rows(store,project,bodies)
     for si,sheet in enumerate(doc.sheets):
         check_cancel(cancel)
         w,h=PAPER.get(sheet.size,(sheet.width_mm,sheet.height_mm))
-        page={"id":sheet.id,"width_mm":w,"height_mm":h,"paths":[],"texts":[],"circles":[],"measurements":[],"views":[],"bom":bom}
+        page={"id":sheet.id,"width_mm":w,"height_mm":h,"paths":[],"texts":[],"circles":[],"measurements":[],"views":[],"bom":bom,
+              "source_revision":doc.source_revision,"issued_revision":project.revision,"source_geometry_key":key,"document":doc.id}
         def line(points,style="visible"):
             page["paths"].append({"points":points,"style":style})
         def text(p,value,size=3):
-            page["texts"].append({"position":list(p),"text":str(value),"height":size})
+            for i,value in enumerate(str(value).splitlines()):
+                page["texts"].append({"position":[p[0],p[1]+i*size*1.3],"text":value,"height":size})
+        def arrow(tip,direction):
+            length=math.hypot(*direction)
+            if length<1e-10:return
+            dx,dy=direction[0]/length,direction[1]/length
+            line([[tip[0]+dx*2-dy*.7,tip[1]+dy*2+dx*.7],tip,[tip[0]+dx*2+dy*.7,tip[1]+dy*2-dx*.7]],"dimension")
         line([[8,8],[w-8,8],[w-8,h-8],[8,h-8],[8,8]])
         line([[w-168,h-38],[w-8,h-38]])
         line([[w-168,h-38],[w-168,h-8]])
@@ -278,6 +306,7 @@ def layout(store, project, doc, shape, bodies, cancel=None):
         text((w-164,h-25),f"{doc.number}  |  {doc.standard}  |  {doc.projection.upper()} ANGLE  |  {doc.units}")
         text((w-164,h-19),f"SOURCE r{doc.source_revision}  ISSUED r{project.revision}  SHEET {si+1}/{len(doc.sheets)}",2.5)
         text((w-164,h-13),"REV "+(doc.revisions[-1].code if doc.revisions else "—")+"  "+"  ".join(f"{k}: {v}" for k,v in doc.title_block.items()),2.5)
+        text((8,h-3),f"SOURCE {key}  |  SOURCE REVISION {doc.source_revision}  |  ISSUE REVISION {project.revision}",1.5)
         contexts={}
         for view in sheet.views:
             check_cancel(cancel)
@@ -292,8 +321,9 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                 if missing: raise ValueError(f"Missing drawing bodies: {sorted(missing)}")
                 source=bd.Compound(children=[bodies[k][1] for k in view.bodies])
             if view.kind in ("section","detail"):
-                orientation=parent["orientation"]
                 source=parent["shape"]
+            if view.kind=="detail":
+                orientation=parent["orientation"]
             if view.kind=="projected":
                 sign=1 if doc.projection=="third" else -1
                 if orientation in ("top","bottom"):
@@ -318,8 +348,8 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                             cut_bodies.append(cut);boundary+=edges
                     source=bd.Compound(children=cut_bodies)
                 else: source,boundary=section_shape(source,view.section_origin,view.section_normal)
-            paths=project_shape(source,orientation,view.hidden,view.tangent)
-            paths+=hatch(boundary,ORIENTATIONS[orientation])
+            paths=parent["paths"] if view.kind=="detail" else project_shape(source,orientation,view.hidden,view.tangent)+hatch(boundary,ORIENTATIONS[orientation])
+            source_paths=paths
             center=(0,0)
             if view.kind=="detail":
                 center=view.detail_center
@@ -327,7 +357,7 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                 page["circles"].append({"center":position,"radius":view.detail_radius*scale,"style":"visible"})
             convert=lambda p:[position[0]+p[0]*scale,position[1]-p[1]*scale]
             for path in paths: line([convert(p) for p in path["points"]],path["style"])
-            ctx={"orientation":orientation,"position":position,"scale":scale,"shape":source,"center":center}
+            ctx={"orientation":orientation,"position":position,"scale":scale,"shape":source,"center":center,"paths":source_paths}
             contexts[view.id]=ctx
             page["views"].append({"id":view.id,"orientation":orientation,"scale":scale,"position":position,"kind":view.kind,"parent":view.parent,"edge_paths":len(paths)})
             label=view.label or ("SECTION "+view.id if view.kind=="section" else "DETAIL "+view.id if view.kind=="detail" else orientation.upper())
@@ -335,14 +365,18 @@ def layout(store, project, doc, shape, bodies, cancel=None):
             if view.kind=="section":
                 pctx=parent
                 px,py,_=ORIENTATIONS[pctx["orientation"]]
-                plane=view.section_origin
-                anchor=[pctx["position"][0]+dot(plane,px)*pctx["scale"],pctx["position"][1]-dot(plane,py)*pctx["scale"]]
-                line([[anchor[0]-20,anchor[1]],[anchor[0]+20,anchor[1]]],"center")
-                text((anchor[0]-22,anchor[1]-2),view.label or view.id,2.5)
+                a,b=dot(view.section_normal,px),dot(view.section_normal,py)
+                norm=math.hypot(a,b)
+                if norm>1e-8:
+                    offset=dot(view.section_normal,view.section_origin)/(norm*norm)
+                    anchor=[pctx["position"][0]+a*offset*pctx["scale"],pctx["position"][1]-b*offset*pctx["scale"]]
+                    direction=[b/norm,a/norm]
+                    line([[anchor[i]-20*direction[i] for i in (0,1)],[anchor[i]+20*direction[i] for i in (0,1)]],"center")
+                    text((anchor[0]-22,anchor[1]-2),view.label or view.id,2.5)
         for a in sheet.annotations:
             ctx=contexts[a.view]
             x,y,_=ORIENTATIONS[ctx["orientation"]]
-            refs=[resolve(r,project,shape) for r in a.references]
+            refs=[resolve(r,project,shape,bodies) for r in a.references]
             def sheetpoint(r):
                 return [ctx["position"][0]+(dot(r["point"],x)-ctx["center"][0])*ctx["scale"],ctx["position"][1]-(dot(r["point"],y)-ctx["center"][1])*ctx["scale"]]
             points=[sheetpoint(r) for r in refs]
@@ -353,20 +387,39 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                 value=abs(p[0]-q[0]) if a.kind=="linear" and a.axis=="x" else abs(p[1]-q[1]) if a.kind=="linear" else math.dist(p,q)
                 if value<1e-9: raise ValueError(f"Dimension {a.id} has coincident projected references")
                 label,limits=dimension_text(value,a,doc.units)
-                for point in points[:2]: line([point,pos],"dimension")
-                line([points[0],points[1]],"dimension")
+                if a.kind=="linear":
+                    ends=[[point[0],pos[1]] if a.axis=="x" else [pos[0],point[1]] for point in points[:2]]
+                else:
+                    delta=[points[1][i]-points[0][i] for i in (0,1)]
+                    length=math.hypot(*delta);normal=[-delta[1]/length,delta[0]/length]
+                    offset=dot([pos[i]-(points[0][i]+points[1][i])/2 for i in (0,1)],normal)
+                    ends=[[point[i]+normal[i]*offset for i in (0,1)] for point in points[:2]]
+                for point,end in zip(points[:2],ends):line([point,end],"dimension")
+                line(ends,"dimension")
+                arrow(ends[0],[ends[1][i]-ends[0][i] for i in (0,1)])
+                arrow(ends[1],[ends[0][i]-ends[1][i] for i in (0,1)])
+                pos=[(ends[0][0]+ends[1][0])/2,(ends[0][1]+ends[1][1])/2-1]
             elif a.kind=="angular":
                 p,c,q=[(dot(r["point"],x),dot(r["point"],y)) for r in refs[:3]]
                 u,v=[p[i]-c[i] for i in (0,1)],[q[i]-c[i] for i in (0,1)]
                 if math.hypot(*u)*math.hypot(*v)<1e-12: raise ValueError("Angular references are coincident")
                 value=math.degrees(math.acos(max(-1,min(1,dot(u,v)/(math.hypot(*u)*math.hypot(*v))))))
                 label=f"{value:.{a.precision}f}°"
-                line([points[0],points[1],points[2]],"dimension")
+                center=points[1];radius=max(8,math.dist(pos,center))
+                start=math.atan2(points[0][1]-center[1],points[0][0]-center[0])
+                end=math.atan2(points[2][1]-center[1],points[2][0]-center[0])
+                sweep=(end-start+math.pi)%math.tau-math.pi
+                arc=[[center[0]+radius*math.cos(start+sweep*i/48),center[1]+radius*math.sin(start+sweep*i/48)] for i in range(49)]
+                line([center,arc[0]],"dimension");line([center,arc[-1]],"dimension");line(arc,"dimension")
+                arrow(arc[0],[arc[1][i]-arc[0][i] for i in (0,1)]);arrow(arc[-1],[arc[-2][i]-arc[-1][i] for i in (0,1)])
             elif a.kind in ("diameter","radius"):
                 if "radius_mm" not in refs[0]: raise ValueError(f"{a.id}: radial dimension requires a circular edge, cylindrical face or hole")
                 value=refs[0]["radius_mm"]*(2 if a.kind=="diameter" else 1)
                 label,limits=dimension_text(value,a,doc.units)
-                line([points[0],pos],"dimension")
+                center=points[0];distance=math.dist(center,pos)
+                if distance<1e-6:raise ValueError("Radial dimension text must be offset from the centre")
+                tip=[center[i]+(pos[i]-center[i])/distance*refs[0]["radius_mm"]*ctx["scale"] for i in (0,1)]
+                line([tip,pos],"dimension");arrow(tip,[pos[i]-tip[i] for i in (0,1)])
             elif a.kind=="center":
                 p=points[0]
                 line([[p[0]-4,p[1]],[p[0]+4,p[1]]],"center");line([[p[0],p[1]-4],[p[0],p[1]+4]],"center")
@@ -388,8 +441,19 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                 match=[(i+1,r) for i,r in enumerate(bom) if r["key"]==a.item]
                 if len(match)!=1:raise ValueError(f"Balloon {a.id} has missing or ambiguous BOM key {a.item}")
                 label=str(match[0][0]);page["circles"].append({"center":[pos[0]+1,pos[1]-1],"radius":3,"style":"dimension"})
-            elif a.kind=="surface": label="⌯ "+a.text
-            elif a.kind=="weld": label="△ "+a.text
+            elif a.kind=="surface":
+                # ISO-style surface texture base mark; process bar/circle carry intent.
+                line([[pos[0]-5,pos[1]-3],[pos[0]-3,pos[1]],[pos[0]+1,pos[1]-7]],"dimension")
+                if a.surface_process=="required":line([[pos[0]-5,pos[1]-7],[pos[0]+1,pos[1]-7]],"dimension")
+                if a.surface_process=="prohibited":page["circles"].append({"center":[pos[0]-2.5,pos[1]-4],"radius":1.1,"style":"dimension"})
+                label=(f"Ra {a.surface_roughness_um:g} μm " if a.surface_roughness_um else "")+a.text
+            elif a.kind=="weld":
+                line([[pos[0]-8,pos[1]],[pos[0]+15,pos[1]]],"dimension")
+                if a.weld_symbol=="fillet":line([[pos[0],pos[1]],[pos[0],pos[1]+4],[pos[0]+4,pos[1]],[pos[0],pos[1]]],"dimension")
+                elif a.weld_symbol=="square":
+                    line([[pos[0],pos[1]],[pos[0],pos[1]+4]],"dimension");line([[pos[0]+2,pos[1]],[pos[0]+2,pos[1]+4]],"dimension")
+                else:line([[pos[0],pos[1]+4],[pos[0]+2,pos[1]],[pos[0]+4,pos[1]+4]],"dimension")
+                label=(f"{a.weld_size_mm:g} " if a.weld_size_mm else "")+a.text
             elif a.kind=="edge": label="EDGE "+a.text
             else:label=a.text
             if points and a.kind not in ("linear","aligned","angular","diameter","radius"):
@@ -409,7 +473,7 @@ def layout(store, project, doc, shape, bodies, cancel=None):
                 x,y,_=ORIENTATIONS[contexts[table.view]["orientation"]]
                 rows=[]
                 for i,r in enumerate(table.references):
-                    resolved=resolve(r,project,shape)
+                    resolved=resolve(r,project,shape,bodies)
                     if "value_mm" not in resolved:raise ValueError("Hole table needs circular references")
                     d=25.4 if doc.units=="inch" else 1
                     rows.append([str(i+1),f"{dot(resolved['point'],x)/d:.3f}",f"{dot(resolved['point'],y)/d:.3f}",f"{resolved['value_mm']/d:.3f}"])
@@ -421,6 +485,16 @@ def layout(store, project, doc, shape, bodies, cancel=None):
         for path in page["paths"]:
             if any(not (-.1 <= p[0] <= w+.1 and -.1 <= p[1] <= h+.1) for p in path["points"]):
                 raise ValueError(f"Sheet {sheet.id} has geometry outside its paper boundary; reposition or rescale the view")
+        from .drawing_vectors import font_for
+        _,metrics,_,_,_=font_for([page])
+        for item in page["texts"]:
+            width=sum(metrics[ord(c)][1] for c in item["text"])*item["height"]/1000
+            x,y=item["position"]
+            if x<0 or x+width>w or y-item["height"]<0 or y+item["height"]*.3>h:
+                raise ValueError(f"Sheet {sheet.id} has text outside its paper boundary; shorten or reposition the annotation")
+        for item in page["circles"]:
+            x,y=item["center"];r=item["radius"]
+            if x-r<0 or x+r>w or y-r<0 or y+r>h:raise ValueError(f"Sheet {sheet.id} has a clipped circular annotation")
         pages.append(page)
     return pages
 
@@ -452,6 +526,34 @@ def execute(store, project, operation, payload, cancel=None):
     if operation=="reopen":
         # Client submits extracted document.json; paths are never read from payload.
         return {"data":Drawings.model_validate(payload.get("data",{})).model_dump(mode="json")}
+    if operation=="import_mbd":
+        from .drawings import PMI
+        imported=payload.get("data",{})
+        if imported.get("schema_version")!=1 or imported.get("format")!="Oxygen semantic MBD JSON":
+            raise ValueError("Unsupported semantic annotation interchange format")
+        proposal=data.model_copy(deep=True)
+        existing={p.id for p in proposal.pmi}
+        for record in imported.get("annotations",[]):
+            annotation=PMI.model_validate({k:v for k,v in record.items() if k in PMI.model_fields})
+            verify_source(store,project,annotation.source_revision,annotation.source_geometry_key)
+            if annotation.id in existing:raise ValueError(f"3D annotation ID already exists: {annotation.id}")
+            proposal.pmi.append(annotation);existing.add(annotation.id)
+        return {"data":proposal.model_dump(mode="json")}
+    if operation=="repair":
+        from .drawings import Reference
+        repaired=data.model_copy(deep=True)
+        doc=next((d for d in repaired.documents if d.id==payload.get("document")),None)
+        sheet=next((s for s in doc.sheets if s.id==payload.get("sheet")),None) if doc else None
+        annotation=next((a for a in sheet.annotations if a.id==payload.get("annotation")),None) if sheet else None
+        index=payload.get("reference_index")
+        if annotation is None or not isinstance(index,int) or not 0<=index<len(annotation.references):
+            raise ValueError("Repair must identify an existing annotation reference")
+        replacement=Reference.model_validate(payload.get("replacement",{}))
+        if replacement.kind=="point":raise ValueError("A detached geometry reference cannot be repaired with an unassociated point")
+        shape,_,bodies=load_geometry(store,project)
+        resolve(replacement,project,shape,bodies)
+        annotation.references[index]=replacement
+        return {"data":repaired.model_dump(mode="json"),"repair":{"annotation":annotation.id,"reference_index":index,"replacement":replacement.model_dump(mode="json")}}
     if operation not in ("inspect","refresh","preview","publish","export_mbd","inspect_pmi"):
         raise ValueError(f"Unknown drawing operation {operation}")
     check_cancel(cancel)
@@ -459,12 +561,18 @@ def execute(store, project, operation, payload, cancel=None):
     if operation in ("inspect_pmi","export_mbd"):
         records=[]
         for pmi in data.pmi:
-            if pmi.source_geometry_key!=key:raise ValueError(f"3D annotation {pmi.id} is stale")
-            resolved=resolve(pmi.reference,project,shape)
+            verify_source(store,project,pmi.source_revision,pmi.source_geometry_key)
+            resolved=resolve(pmi.reference,project,shape,bodies)
             record=pmi.model_dump(mode="json")|{"resolved":resolved}
             if pmi.kind=="size":
                 if "value_mm" not in resolved:raise ValueError("3D size tolerance requires a measured parameter/circle/hole")
-                record["inspection"]={"nominal_mm":resolved["value_mm"],"lower_mm":resolved["value_mm"]+pmi.tolerance.lower_mm,"upper_mm":resolved["value_mm"]+pmi.tolerance.upper_mm}
+                t=pmi.tolerance;nominal=resolved["value_mm"]
+                lower=-t.upper_mm if t.kind=="symmetric" else t.lower_mm
+                upper=t.upper_mm
+                if t.kind=="fit":
+                    if t.fit=="H7/g6":raise ValueError("Inspection of a single feature requires H7 or g6; H7/g6 describes a pair")
+                    lower,upper=fit_limits(nominal,t.fit)
+                record["inspection"]={"nominal_mm":nominal,"lower_mm":nominal+lower,"upper_mm":nominal+upper,"tolerance_kind":t.kind}
             records.append(record)
         result={"schema_version":1,"format":"Oxygen semantic MBD JSON","source_revision":project.revision,"source_geometry_key":key,"annotations":records,"omissions":["STEP AP242 semantic PMI export is unsupported."]}
         if operation=="export_mbd":
@@ -482,13 +590,20 @@ def execute(store, project, operation, payload, cancel=None):
             for sheet in doc.sheets:
                 for a in sheet.annotations:
                     for r in a.references:
-                        try:resolve(r,project,shape)
+                        try:resolve(r,project,shape,bodies)
                         except ValueError as e:failures.append({"annotation":a.id,"reference":r.model_dump(mode="json"),"message":str(e)})
+                for table in sheet.tables:
+                    for r in table.references:
+                        try:resolve(r,project,shape,bodies)
+                        except ValueError as e:failures.append({"table":table.id,"reference":r.model_dump(mode="json"),"message":str(e)})
+                for view in sheet.views:
+                    for body_id in set(view.bodies+view.exclude_bodies)-set(bodies):
+                        failures.append({"view":view.id,"message":"Missing exact body "+body_id})
             states.append({"document":doc.id,"state":"unresolved" if failures else "stale" if doc.source_geometry_key!=key else "current","source_revision":doc.source_revision,"source_geometry_key":doc.source_geometry_key,"issues":failures})
             if operation=="refresh" and not failures:
                 item=next(d for d in refreshed.documents if d.id==doc.id)
                 item.source_revision=project.revision;item.source_geometry_key=key
-        return {"documents":states,"source_revision":project.revision,"source_geometry_key":key,**({"data":refreshed.model_dump(mode="json")} if operation=="refresh" else {})}
+        return {"documents":states,"source_revision":project.revision,"source_geometry_key":key,"bom":bom_rows(store,project,bodies),**({"data":refreshed.model_dump(mode="json")} if operation=="refresh" else {})}
     from .drawing_vectors import svg, write_pdf, write_dxf
     outputs=[]
     for doc in docs:
@@ -496,6 +611,15 @@ def execute(store, project, operation, payload, cancel=None):
         identity=hashlib.sha256(json.dumps(doc.model_dump(mode="json"),sort_keys=True).encode()).hexdigest()[:20]
         base=f"drawings/{doc.id}/{project.revision}-{identity}"
         folder=store.cache/base;folder.mkdir(parents=True,exist_ok=True)
+        manifest=folder/"manifest.json"
+        if manifest.is_file():
+            retained=json.loads(manifest.read_text())
+            for name,sha in retained.get("file_hashes",{}).items():
+                file=folder/name
+                if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest()!=sha:
+                    raise ValueError("Previously issued drawing artifact failed its immutable hash check")
+            outputs.append(retained|{"artifact":f"{base}/drawing.zip","pages":pages})
+            continue
         artifacts=[]
         for page in pages:
             check_cancel(cancel)
@@ -508,7 +632,8 @@ def execute(store, project, operation, payload, cancel=None):
         if operation=="publish":
             write_pdf(folder/"drawing.pdf",pages)
             result["pdf"]=f"{base}/drawing.pdf"
-            write_json(folder/"manifest.json",{k:v for k,v in result.items() if k!="pages"})
+            result["file_hashes"]={file.name:hashlib.sha256(file.read_bytes()).hexdigest() for file in sorted(folder.iterdir()) if file.name not in ("drawing.zip","manifest.json")}
+            write_json(manifest,{k:v for k,v in result.items() if k!="pages"})
             with zipfile.ZipFile(folder/"drawing.zip","w",zipfile.ZIP_DEFLATED) as archive:
                 for file in sorted(folder.iterdir()):
                     if file.name!="drawing.zip":archive.write(file,file.name)

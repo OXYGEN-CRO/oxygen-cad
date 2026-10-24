@@ -120,7 +120,7 @@ def test_pmi_semantics_and_inventory(drawing):
     attach(p,data)
     result=execute(store,p,"export_mbd",{})
     record=result["annotations"][0]
-    assert record["inspection"]=={"nominal_mm":10,"lower_mm":10,"upper_mm":10.015}
+    assert record["inspection"]=={"nominal_mm":10,"lower_mm":10,"upper_mm":10.015,"tolerance_kind":"deviation"}
     assert json.loads(store.artifact(result["artifact"]).read_text())["annotations"][0]["plane_origin"]==[0,0,10]
     inventory=read_step_pmi("ISO-10303-21;DATA;#1=DATUM('A','',#2);#2=SHAPE_ASPECT('face','',#3,.T.);#3=PRODUCT_DEFINITION_SHAPE('','',#4);#4=PRODUCT('part','','',());#8=POSITION_TOLERANCE('p','',#9,#2);#9=LENGTH_MEASURE_WITH_UNIT(LENGTH_MEASURE(0.02),#10);#10=(LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.));ENDSEC;END-ISO-10303-21;")
     assert inventory["root_entities"]==["#1","#8"]
@@ -134,3 +134,28 @@ def test_invalid_associations_and_standard_fields():
     with pytest.raises(ValueError,match="Form tolerances"):
         from o3d.domains.drawings import Annotation
         Annotation(id="x",view="v",kind="gdt",characteristic="flatness",tolerance_mm=.02,datums=["A"],references=[{"kind":"point"}])
+
+
+def test_pdf_independent_reader_dimensions_and_unicode(drawing):
+    pypdf=pytest.importorskip("pypdf",reason="Install tests/requirements-drawings.txt for independent PDF validation")
+    store,p,_=drawing
+    result=execute(store,p,"publish",{})["documents"][0]
+    pdf=pypdf.PdfReader(store.artifact(result["pdf"]))
+    assert len(pdf.pages)==2
+    assert float(pdf.pages[0].mediabox.width)*25.4/72==pytest.approx(297,abs=1e-4)
+    assert float(pdf.pages[0].mediabox.height)*25.4/72==pytest.approx(210,abs=1e-4)
+    assert float(pdf.pages[1].mediabox.width)*25.4/72==pytest.approx(279.4,abs=1e-4)
+    text=pdf.pages[0].extract_text()
+    assert "⌀10.000 H7" in text
+    assert "⌖ | 0.02 Ⓜ | A" in text
+    assert "SOURCE r1  ISSUED r1  SHEET 1/2" in text
+    assert "20.00" in text
+    # A true 60 mm vector boundary survives PDF page units, independently read.
+    from pypdf.generic import ContentStream
+    stream=ContentStream(pdf.pages[0]["/Contents"],pdf)
+    previous=None;lengths=[]
+    for operands,operator in stream.operations:
+        if operator==b"m":previous=list(map(float,operands))
+        if operator==b"l" and previous:
+            current=list(map(float,operands));lengths.append(((current[0]-previous[0])**2+(current[1]-previous[1])**2)**.5*25.4/72);previous=current
+    assert any(abs(length-60)<1e-5 for length in lengths)

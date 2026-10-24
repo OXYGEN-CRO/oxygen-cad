@@ -27,6 +27,7 @@ Point3 = tuple[float, float, float]
 class Reference(Record):
     kind: Literal["point", "face", "edge", "hole", "parameter"] = "point"
     target: str = ""
+    body: str | None = None
     point: Point3 = (0, 0, 0)
     row: int = Field(default=0, ge=0)
     column: int = Field(default=0, ge=0)
@@ -91,6 +92,10 @@ class Annotation(Record):
     datums: list[str] = Field(default_factory=list, max_length=3)
     material_condition: Literal["RFS", "MMC", "LMC"] = "RFS"
     item: str | None = None
+    surface_roughness_um: float | None = Field(default=None, gt=0)
+    surface_process: Literal["any", "required", "prohibited"] = "any"
+    weld_symbol: Literal["fillet", "square", "vee"] = "fillet"
+    weld_size_mm: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def semantics(self):
@@ -113,6 +118,8 @@ class Annotation(Record):
             raise ValueError("Balloon requires a stable BOM item key")
         if self.kind == "thread_note" and not self.text:
             raise ValueError("Thread designation must be supplied explicitly; threads are never inferred")
+        if self.basic and self.tolerance.kind != "none":
+            raise ValueError("Basic dimensions cannot carry an explicit plus/minus tolerance")
         return self
 
 
@@ -203,7 +210,7 @@ class PMI(Record):
     text: str = Field(default="", max_length=2000)
     tolerance: Tolerance = Field(default_factory=Tolerance)
     datum: str | None = None
-    characteristic: str | None = None
+    characteristic: Literal["position", "flatness", "straightness", "perpendicularity", "parallelism", "circularity", "cylindricity", "profile", "runout"] | None = None
     tolerance_mm: float | None = Field(default=None, gt=0)
     datums: list[str] = Field(default_factory=list, max_length=3)
     source_geometry_key: str
@@ -266,18 +273,37 @@ def read_step_pmi(text: str) -> dict:
     """
     if len(text) > 64 * 1024 * 1024:
         raise ValueError("PMI inventory accepts STEP files up to 64 MiB")
-    entities = dict(re.findall(r"(#\d+)\s*=\s*(.*?);", text, re.S))
+    # STEP strings can contain semicolons and doubled apostrophes. A lexical
+    # scan preserves whole records instead of splitting valid source text.
+    statements=[];start=0;i=0;quoted=False;comment=False
+    while i<len(text):
+        c=text[i]
+        if comment:
+            if text[i:i+2]=="*/":comment=False;i+=2;continue
+        elif not quoted and text[i:i+2]=="/*":comment=True;i+=2;continue
+        elif c=="'":
+            if quoted and text[i:i+2]=="''":i+=2;continue
+            quoted=not quoted
+        elif c==";" and not quoted:
+            statements.append(text[start:i]);start=i+1
+        i+=1
+    entities={}
+    for statement in statements:
+        match=re.search(r"(#\d+)\s*=\s*(.*)$",statement,re.S)
+        if match:entities[match[1]]=match[2].strip()
+    def syntax(record):
+        return re.sub(r"'(?:[^']|'')*'|/\*.*?\*/", "",record,flags=re.S)
     names = ("GEOMETRIC_TOLERANCE", "POSITION_TOLERANCE", "FLATNESS_TOLERANCE", "DATUM", "DIMENSIONAL_SIZE",
              "DIMENSIONAL_LOCATION", "PLUS_MINUS_TOLERANCE", "TOLERANCE_VALUE", "DRAUGHTING_CALLOUT",
-             "ANNOTATION_TEXT", "GEOMETRIC_ITEM_SPECIFIC_USAGE")
-    roots = {key for key, value in entities.items() if any(re.search(r"\b"+n+r"\b", value) for n in names)}
+             "ANNOTATION_TEXT", "GEOMETRIC_ITEM_SPECIFIC_USAGE", "ANNOTATION_OCCURRENCE", "DRAUGHTING_MODEL_ITEM_ASSOCIATION")
+    roots = {key for key, value in entities.items() if any(re.search(r"\b"+n+r"\s*\(", syntax(value)) for n in names)}
     todo, found = list(roots), set()
     while todo:
         key = todo.pop()
         if key in found or key not in entities:
             continue
         found.add(key)
-        todo.extend(re.findall(r"#\d+", entities[key]))
+        todo.extend(re.findall(r"#\d+", syntax(entities[key])))
     return {"schema_version": 1, "format": "STEP AP242 entity inventory", "root_entities": sorted(roots),
             "entities": {k: entities[k].strip() for k in sorted(found)}, "semantic_mapping": "requires_explicit_attachment",
             "omissions": ["No automatic datum/tolerance-to-topology mapping or AP242 semantic export is claimed."]}

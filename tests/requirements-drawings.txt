@@ -1,0 +1,2 @@
+# Optional independent publication reader used by test_drawings.py.
+pypdf==6.4.0
