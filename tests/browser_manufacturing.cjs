@@ -8,7 +8,7 @@ const {beginOperation}=require('./browser_operations.cjs');
 let browser;
 (async()=>{
 browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
-const page=await browser.newPage({viewport:{width:1512,height:982}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const page=await browser.newPage({baseURL:url,viewport:{width:1512,height:982}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 async function workflow(label,action,ready,timeout=60000){
 const wait=await beginOperation(page,page.request,label,timeout,output);
 await action();return wait(ready);
