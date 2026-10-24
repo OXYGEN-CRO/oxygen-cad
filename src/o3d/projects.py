@@ -17,6 +17,36 @@ from .recovery import atomic_bytes, checksum, sync_directory, write_json
 SCHEMA_VERSION = 1
 ARCHIVE_VERSION = 1
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+RESULT_ROOTS = ("builds", "studies", "assemblies", "drawings", "manufacturing", "electronics", "visualization", "visualization-assets", "interop", "domains/simulation", "domains/drawings", "domains/manufacturing", "domains/electronics", "domains/visualization", "domains/assemblies", "domains/interop")
+
+
+def _result_path(root: Path, relative: str):
+    if not any(relative.startswith(prefix + "/") for prefix in RESULT_ROOTS):
+        raise ValueError(f"Saved artifact is outside portable result scope: {relative}")
+    return contained(root, ".o3d/" + relative)
+
+
+def declared_artifacts(document):
+    """Saved artifact pointers are dependencies even when bulk cached results are omitted."""
+    paths = set()
+    def visit(value, parent=""):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if isinstance(item, str) and (key == "artifact" or key.endswith("_artifact")):
+                    paths.add(item)
+                if key == "artifacts":
+                    if isinstance(item, dict):
+                        paths.update(path for path in item.values() if isinstance(path, str))
+                    elif isinstance(item, list):
+                        paths.update(entry["path"] for entry in item if isinstance(entry, dict) and isinstance(entry.get("path"), str))
+                if isinstance(value.get("sha256"), str) and key == "path" and isinstance(item, str):
+                    paths.add(item)
+                visit(item, key)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item, parent)
+    visit(document.get("domains", {}))
+    return paths
 
 
 def migrate_document(value: dict) -> tuple[dict, list[str]]:
@@ -55,11 +85,64 @@ def contained(root: Path, relative: str, *, exists=True) -> Path:
 
 
 def verify_assets(root: Path, documents: list[dict]):
+    """Check saved provenance, not just newly generated archive checksums."""
     for document in documents:
-        for reference in document.get("references", []):
-            path = contained(root, reference["file"])
-            if hashlib.sha256(path.read_bytes()).hexdigest() != reference["sha256"]:
-                raise ValueError(f"Project dependency hash mismatch: {reference['file']}")
+        domains = document.get("domains", {})
+        declarations = list(document.get("references", []))
+        registries = {}
+        for domain in ("interop", "visualization"):
+            registry = domains.get(domain, {}).get("assets", [])
+            if not isinstance(registry, (dict, list)):
+                raise ValueError(f"Invalid {domain} immutable asset registry")
+            registries[domain] = registry
+            declarations.extend(registry.values() if isinstance(registry, dict) else registry)
+        by_file, by_id = {}, {}
+        for reference in declarations:
+            if not isinstance(reference, dict):
+                raise ValueError("Invalid immutable asset declaration")
+            relative, digest = reference.get("file"), reference.get("sha256")
+            if not isinstance(relative, str) or not relative.startswith("assets/") or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError("Immutable assets require contained paths and SHA-256 provenance")
+            path = contained(root, relative)
+            if path.stem != digest or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise ValueError(f"Project dependency hash mismatch: {relative}")
+            if relative in by_file and by_file[relative] != digest:
+                raise ValueError("Conflicting immutable asset declarations")
+            by_file[relative] = digest
+            if reference.get("id"):
+                if reference["id"] in by_id and by_id[reference["id"]] != relative:
+                    raise ValueError("Ambiguous immutable asset identity")
+                by_id[reference["id"]] = relative
+        for reference in declarations:
+            if reference.get("source_asset") and reference["source_asset"] not in by_id:
+                raise ValueError(f"Derived asset source is missing: {reference['source_asset']}")
+        links = (document.get("native_document") or {}).get("links", {})
+        if not isinstance(links, dict):
+            raise ValueError("Invalid native linked-design registry")
+        for link in links.values():
+            relative = link.get("path") if isinstance(link, dict) else None
+            if not isinstance(relative, str) or relative not in by_file:
+                raise ValueError("Native linked source lacks a registered immutable dependency")
+            contained(root, relative)
+        artifact_paths = declared_artifacts(document)
+        for relative in artifact_paths:
+            _result_path(root, relative)
+        # Imported engineering sources can live in the evidence cache, e.g. KiCad originals.
+        def verify_evidence(value):
+            if isinstance(value, dict):
+                digest = value.get("sha256")
+                if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest):
+                    for key in ("original_artifact", "artifact", "path"):
+                        relative = value.get(key)
+                        if isinstance(relative, str) and relative in artifact_paths:
+                            if hashlib.sha256(_result_path(root, relative).read_bytes()).hexdigest() != digest:
+                                raise ValueError(f"Saved artifact provenance hash mismatch: {relative}")
+                for item in value.values():
+                    verify_evidence(item)
+            elif isinstance(value, list):
+                for item in value:
+                    verify_evidence(item)
+        verify_evidence(domains)
 
 
 def project_metadata(store):
@@ -84,7 +167,7 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
                 files[relative] = contained(store.root, relative)
         directories = ["assets", ".o3d/history"]
         if include_results:
-            directories.extend([".o3d/builds", ".o3d/studies"])
+            directories.extend(".o3d/" + prefix for prefix in RESULT_ROOTS)
         for directory in directories:
             base = store.root / directory
             if base.is_symlink():
@@ -101,6 +184,9 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
         for value in documents:
             Project.model_validate(migrate_document(value)[0])
         verify_assets(store.root, documents)
+        for document in documents:
+            for relative in declared_artifacts(document):
+                files[".o3d/" + relative] = _result_path(store.root, relative)
         for entry in store._history():
             name = f".o3d/history/{entry['revision']:08d}.json"
             if name not in files or (entry.get("sha256") and checksum(json.loads(files[name].read_text())) != entry["sha256"]):
@@ -109,7 +195,8 @@ def portable_archive(store, destination: Path | None = None, *, include_results=
         if size > MAX_ARCHIVE_BYTES:
             raise ValueError("Portable archive exceeds the 512 MiB uncompressed limit")
         manifest = {"format": "oxygen-cad-project", "schema_version": ARCHIVE_VERSION, "project_schema": project.schema_version,
-                    "revision": project.revision, "scope": {"history": "all retained revisions", "assets": "all local assets", "results": include_results,
+                    "revision": project.revision, "scope": {"history": "all retained revisions", "assets": "all registered and local immutable assets", "results": include_results,
+                    "result_roots": list(RESULT_ROOTS) if include_results else [], "saved_artifact_dependencies": "always included",
                     "excluded": ["credentials", "jobs", "unsaved drafts", "derived exports"]},
                     "files": {name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size} for name, path in sorted(files.items())}}
         destination = destination or store.cache / "exports" / str(project.revision) / "project.oxygen.zip"
@@ -170,7 +257,7 @@ def restore_archive(source: Path | bytes, destination: Path):
             expected = manifest.get("files", {})
             if set(names) != set(expected) | {"manifest.json"} or "o3d.json" not in expected:
                 raise ValueError("Archive manifest does not describe every file")
-            allowed = ("assets/", ".o3d/history/", ".o3d/builds/", ".o3d/studies/")
+            allowed = ("assets/", ".o3d/history/", *(".o3d/" + prefix + "/" for prefix in RESULT_ROOTS))
             exact = {"o3d.json", ".o3d/history.jsonl", ".o3d/undo.json", ".o3d/project.json", ".o3d/collaboration.json"}
             for name, metadata in expected.items():
                 if name not in exact and not name.startswith(allowed):

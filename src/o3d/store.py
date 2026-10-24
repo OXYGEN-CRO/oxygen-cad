@@ -85,16 +85,20 @@ def synchronize_parameter_locks(current, updated):
     locks = modeling.setdefault("parameter_locks", {})
     if not isinstance(locks, dict) or not all(isinstance(name, str) and isinstance(value, bool) for name, value in locks.items()):
         raise ValueError("Native parameter_locks must map names to booleans")
+    parameter_map = modeling.get("legacy_parameter_map", {})
+    if not isinstance(parameter_map, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in parameter_map.items()):
+        raise ValueError("Legacy parameter aliases must map names to native names")
     for name, parameter in result.parameters.items():
+        native_name = parameter_map.get(name, name)
         before = current.parameters.get(name)
-        if name in locks and locks.get(name) != old_locks.get(name):
-            parameter.locked = locks[name]
+        if native_name in locks and locks.get(native_name) != old_locks.get(native_name):
+            parameter.locked = locks[native_name]
         elif before is not None and before.locked != parameter.locked:
-            locks[name] = parameter.locked
-        elif name in locks:
-            parameter.locked = locks[name]
+            locks[native_name] = parameter.locked
+        elif native_name in locks:
+            parameter.locked = locks[native_name]
         else:
-            locks[name] = parameter.locked
+            locks[native_name] = parameter.locked
     return result
 
 
