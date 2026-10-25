@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .jobs import Jobs
+from .jobs import Jobs, JobSubmissionError
 from .model import Command, Project
 from .store import Conflict, Store, write_json
 
@@ -70,6 +70,11 @@ def create_app(root=None, *, project_windows=True):
     async def invalid(_, error):
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": str(error)}, status_code=422)
+
+    @app.exception_handler(JobSubmissionError)
+    async def unavailable_job_storage(_, error):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": str(error), "job_id": error.job_id}, status_code=error.status_code)
 
     @app.get("/api/state")
     def state():

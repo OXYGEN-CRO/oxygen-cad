@@ -4,6 +4,27 @@ Saved project commands remain the shared UI/agent transaction boundary. A durabl
 
 `Store.recover()` verifies snapshots against saved hashes, repairs either saved copy from its verified counterpart, and retains damaged bytes and prior audit metadata under `.o3d/recovery/`. If both copies of the latest revision are corrupt, it explicitly reports the fallback, quarantines damaged snapshots, and leaves continued editing possible. Future schema versions are rejected without rewriting them.
 
+Job detail is authoritative; the compact polling summary is a derived cache. If
+only summary publication fails, polling uses a compact memory copy and detail
+downloads retain the durably saved result. Missing or malformed summaries are
+rebuilt from detail once, rather than reading dense geometry on every poll.
+
+If a terminal job record cannot be saved, the running application reports a
+failed, memory-only status with no passing result; a cancelled worker remains
+cancelled. Cancellation bookkeeping is released even if the final write fails.
+Existing artifacts are not deleted, and a domain revision already committed by
+the guarded finalizer is not rolled back. Inspect the current project before
+retrying: a failed status publication does not prove that no edit was applied.
+
+Memory-only status cannot survive an application restart. On reopening, durable
+queued/running records become interrupted failures without rerunning workers,
+even if job status storage remains unavailable. When storage works again, a
+normal reopening can persist that failure. This is not a claim that a full disk
+can retain new durable evidence or survive power loss without a saved record.
+Submissions that cannot store their record/request fail with HTTP 507 for full
+disk/quota exhaustion, or 503 for other storage errors, and include a job ID for
+inspection. No automatic operation retry is performed.
+
 Portable `.oxygen.zip` archives contain the saved source, all retained revisions, every local immutable asset, undo state and saved review metadata. Available build, study, assembly, drawing, manufacturing, electronics, visualization, interop and domain simulation evidence is included by default. Saved artifact pointers are dependencies and remain included even when bulk cached results are omitted. Every current and historical asset registry is checked against its original declared hash; derived-asset ancestry and native linked-source registration must remain complete. The manifest names and hashes every member. Credentials, jobs, drafts and recursively generated exports are excluded. Limits are 512 MiB uncompressed and 100,000 files. Restore validates the complete archive and dependencies before atomically adopting a new directory; it never overwrites an existing project. A manufacturing release includes this portable project and can be restored directly. Export refuses a concurrent source change rather than mixing revisions.
 
 Project directory identifiers contain 1–64 ASCII letters, numbers, hyphens or underscores. Catalog and archive paths reject traversal and symbolic links. Duplicate makes a complete independent project with a new project identity. Archive preserves files and is reversible. The parent application opens each `/p/{directory}/` in an independent Store/Jobs scope; no mutable global project-directory switch is required.

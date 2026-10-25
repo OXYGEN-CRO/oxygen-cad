@@ -229,6 +229,16 @@ tests, not claims that a native solver accepted an unstable equilibrium.
 
 ## Canonical quadratic study integration
 
+Simulation jobs share the platform's guarded status publication. A polling-cache
+write failure can use the durable job detail. If the final detail cannot be
+saved, the API reports a failed memory-only status and exposes no passing job
+result; existing numerical artifacts remain available for explicit inspection.
+An already committed domain revision is preserved. Inspect it before retrying.
+Restart recovery does not rerun a solver, and cannot invent evidence that a full
+disk never stored. See [job persistence](parity/PLATFORM.md) for the recovery and
+HTTP submission contract. Job completion is separate from numerical verification
+and physical validation.
+
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
 versioned body/material/case records. Static, nonlinear-static, steady solid thermal, sequential thermal-stress, unloaded modal and linearized buckling studies default
 to quadratic meshing; the element-family selector also retains the C3D4 path.

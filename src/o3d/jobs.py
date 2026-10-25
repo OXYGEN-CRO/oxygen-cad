@@ -1,6 +1,8 @@
+import errno
 import json
 import sys
 import uuid
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event, Lock
@@ -11,12 +13,26 @@ from .solver import Cancelled, run_process
 from .store import now, write_json
 
 
+class JobSubmissionError(RuntimeError):
+    """No successful submission acknowledgment is available; inspect job status."""
+
+    def __init__(self, job_id, error):
+        self.job_id = job_id
+        self.status_code = 507 if error.errno in {errno.ENOSPC, errno.EDQUOT} else 503
+        super().__init__(f"Job could not be submitted because its storage is unavailable: {error}. "
+                         "Inspect the project and job status before retrying.")
+
+
 class Jobs:
     def __init__(self, store):
         self.store = store
         self.pool = ThreadPoolExecutor(max_workers=1)
         self.cancellations = {}
         self.mutex = Lock()
+        self.status_mutex = Lock()
+        # Only failed writes are retained here. Never duplicate dense results.
+        self.volatile_jobs = {}
+        self.volatile_summaries = {}
         for path in (store.cache / "jobs").glob("*/job.json"):
             job = Job.model_validate_json(path.read_text())
             if job.state in ("queued", "running"):
@@ -47,11 +63,40 @@ class Jobs:
         return value
 
     def _write_summary(self, job):
-        write_json(self.path(job.id) / "summary.json", self._summary(job))
+        summary = self._summary(job)
+        try:
+            write_json(self.path(job.id) / "summary.json", summary)
+        except OSError:
+            # The durable detail remains authoritative; a derived cache failure
+            # cannot turn a completed operation into endless running polling.
+            with self.status_mutex:
+                self.volatile_summaries[job.id] = summary
+        else:
+            with self.status_mutex:
+                self.volatile_summaries.pop(job.id, None)
 
     def _save(self, job):
         # Publish detail before advertising its completed state to polling clients.
-        write_json(self.path(job.id) / "job.json", job.model_dump())
+        try:
+            write_json(self.path(job.id) / "job.json", job.model_dump())
+        except OSError as error:
+            if job.state not in {"succeeded", "failed", "cancelled"}:
+                raise
+            # A result/status that could not be published is never a success.
+            # Artifacts and any project revision already committed are preserved.
+            job.state = "cancelled" if job.state == "cancelled" else "failed"
+            job.result = None
+            job.finished_at = job.finished_at or now()
+            prefix = f"{job.message}. " if job.message else ""
+            job.message = (f"{prefix}Job status could not be saved: {error}. "
+                           "This status is held in memory until restart. Any existing artifacts were preserved; "
+                           "inspect the project before retrying.")
+            with self.status_mutex:
+                self.volatile_jobs[job.id] = job.model_copy(deep=True)
+                self.volatile_summaries[job.id] = self._summary(job)
+            return
+        with self.status_mutex:
+            self.volatile_jobs.pop(job.id, None)
         self._write_summary(job)
 
     def path(self, job_id):
@@ -66,10 +111,21 @@ class Jobs:
         job = Job(id=uuid.uuid4().hex, kind=kind, revision=project.revision, created_at=now(),
                   study_id=project.active_study_id if kind == "simulate" else None)
         path = self.path(job.id)
-        self._save(job)
-        write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json"), "workspace": request})
-        self.cancellations[job.id] = Event()
-        self.pool.submit(self._execute, job)
+        try:
+            self._save(job)
+            write_json(path / "request.json", {"root": str(self.store.root), "kind": kind, "project": project.model_dump(mode="json"), "workspace": request})
+            self.cancellations[job.id] = Event()
+            self.pool.submit(self._execute, job)
+        except Exception as error:
+            job.state, job.message, job.finished_at = "failed", str(error), now()
+            try:
+                self._save(job)
+            finally:
+                with self.mutex:
+                    self.cancellations.pop(job.id, None)
+            if isinstance(error, OSError):
+                raise JobSubmissionError(job.id, error) from error
+            raise
         return job
 
     def submit_domain(self, domain, operation, payload, expected_revision, actor="agent"):
@@ -83,16 +139,32 @@ class Jobs:
                                     "principal": principal.public() if principal else None})
 
     def get(self, job_id):
-        return Job.model_validate_json((self.path(job_id) / "job.json").read_text())
+        path = self.path(job_id)
+        with self.status_mutex:
+            if job_id in self.volatile_jobs:
+                return self.volatile_jobs[job_id].model_copy(deep=True)
+        return Job.model_validate_json((path / "job.json").read_text())
 
     def list(self):
-        values = []
+        with self.status_mutex:
+            values = deepcopy(self.volatile_summaries)
         for path in (self.store.cache / "jobs").glob("*/job.json"):
+            if path.parent.name in values:
+                continue
             summary = path.with_name("summary.json")
-            # Missing during an initial write or for older cached jobs.
-            values.append(json.loads(summary.read_text()) if summary.exists()
-                          else self._summary(Job.model_validate_json(path.read_text())))
-        return sorted(values, key=lambda value: value["created_at"], reverse=True)[:30]
+            try:
+                record = Job.model_validate_json(summary.read_text())
+                if record.id != path.parent.name:
+                    raise ValueError("Polling summary has the wrong job identity")
+                value = record.model_dump()
+            except (OSError, ValueError):
+                # Repair a derived cache from detail once, retaining its compact
+                # form in memory when the disk still cannot accept the sidecar.
+                record = Job.model_validate_json(path.read_text())
+                self._write_summary(record)
+                value = self._summary(record)
+            values[path.parent.name] = value
+        return sorted(values.values(), key=lambda value: value["created_at"], reverse=True)[:30]
 
     def cancel(self, job_id):
         job = self.get(job_id)
@@ -129,10 +201,15 @@ class Jobs:
             job.state, job.message = "failed", str(error)
         finally:
             job.finished_at = now()
-            self._save(job)
-            self.cancellations.pop(job.id, None)
+            try:
+                self._save(job)
+            finally:
+                with self.mutex:
+                    self.cancellations.pop(job.id, None)
 
     def close(self):
-        for event in list(self.cancellations.values()):
+        with self.mutex:
+            events = list(self.cancellations.values())
+        for event in events:
             event.set()
         self.pool.shutdown(wait=True, cancel_futures=True)
