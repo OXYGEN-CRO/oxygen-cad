@@ -38,3 +38,12 @@ Actual large-model observations belong in the trial evidence rather than
 software guarantees. Polling improvements alone do not establish that a
 browser can render arbitrarily many independently drawn faces; viewport draw
 batching has its own acceptance gate.
+
+The browser may request `/api/native/scene?compact=true`. For imported mesh
+bodies with complete indexed triangle-to-face identities this DTO keeps exact
+positions, triangle order and `tri_face` values. It omits redundant face
+descriptors and display normals/edge arrays that the existing viewport does not
+consume (its shading/edge geometry is recomputed). Solid topology is unchanged;
+a mesh without its full picking identity map retains the full representation.
+The default scene endpoint remains the original complete result for other
+consumers. No vertex rounding, triangle removal or approximation occurs here.

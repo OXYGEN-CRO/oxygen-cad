@@ -134,3 +134,23 @@ def test_native_reference_overlay_retains_actual_reference_faces(tmp_path):
     assert state["build"]["references"] == full["references"]
     assert state["build"]["references"][0]["faces"][0]["vertices"]
     assert state["build"]["faces"] == full["faces"]
+
+
+def test_compact_scene_transport_keeps_exact_triangles_picking_and_full_default():
+    from o3d.native_routes import compact_native_scene
+    mesh = {"positions": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            "triangles": [[0, 1, 2]], "tri_face": [7], "normals": [[0, 0, 1]] * 3,
+            "faces": [{"id": "source:face:7", "vertices": [[0, 0, 0]], "triangles": [[0, 1, 2]]}]}
+    full = {"bodies": [{"id": "mesh", "geometry_kind": "mesh", "mesh": mesh},
+                       {"id": "solid", "geometry_kind": "solid", "mesh": mesh}]}
+    compact = compact_native_scene(full)
+    assert "faces" not in compact["bodies"][0]["mesh"]
+    assert "faces" in compact["bodies"][1]["mesh"]
+    for name in ("positions", "triangles", "tri_face"):
+        assert compact["bodies"][0]["mesh"][name] is mesh[name]
+    assert "faces" in full["bodies"][0]["mesh"]
+    assert "normals" in full["bodies"][0]["mesh"]
+    assert "normals" not in compact["bodies"][0]["mesh"]
+    unmapped = {"bodies": [{"id": "unknown", "geometry_kind": "mesh",
+                            "mesh": dict(mesh, tri_face=[])}]}
+    assert "faces" in compact_native_scene(unmapped)["bodies"][0]["mesh"]
