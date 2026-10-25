@@ -12,9 +12,11 @@ import {
 import {
   cameraEvent,
   nativeFaces,
+  nativeFace,
   previewEvent,
   type Asset,
   type NativeScene,
+  type NativeBody,
   type Scene,
   type CameraState,
 } from "./workspaces/visualization/scene";
@@ -150,7 +152,11 @@ export function Viewport(props: Props) {
         camera,
       );
       const hit = ray.intersectObjects(model.children, true).find((h) => {
-        if (!h.object.visible || !h.object.userData.face) return false;
+        if (
+          !h.object.visible ||
+          (!h.object.userData.face && !h.object.userData.pickFace)
+        )
+          return false;
         const material = (h.object as THREE.Mesh)
           .material as THREE.MeshStandardMaterial;
         return !(material.clippingPlanes ?? []).some(
@@ -159,11 +165,13 @@ export function Viewport(props: Props) {
       });
       if (hit) {
         const info = hit.object.userData;
+        const face = info.pickFace ? info.pickFace(hit.faceIndex) : info.face;
+        if (!face) return;
         latest.current.onSelect({
-          id: info.face.id,
+          id: face.id,
           kind: info.reference ? "reference" : "face",
           point: hit.point.toArray(),
-          face: info.face,
+          face,
           reference: info.reference,
         });
       }
@@ -176,6 +184,7 @@ export function Viewport(props: Props) {
       frame = requestAnimationFrame(animate);
       controls.update(clock.getDelta());
       renderer.render(scene, camera);
+      element.dataset.renderCalls = String(renderer.info.render.calls);
     }
     animate();
     runtime.current = {
@@ -431,7 +440,12 @@ export function Viewport(props: Props) {
               plane.offset_mm,
             ),
           );
-    function addFace(face: Face, reference?: string, bodyId?: string) {
+    function addFace(
+      face: Face,
+      reference?: string,
+      bodyId?: string,
+      pickFace?: (triangle: number) => Face | undefined,
+    ) {
       const visual = visualization?.scene;
       const target = bodyId ?? reference ?? "part";
       if (
@@ -503,6 +517,7 @@ export function Viewport(props: Props) {
           : reference
             ? r.palette.reference
             : (look?.color ?? r.palette.part),
+        flatShading: !!pickFace,
         metalness: look?.metallic ?? (reference ? 0.05 : 0.35),
         roughness: look?.roughness ?? 0.4,
         transparent: !!reference || (look?.opacity ?? 1) < 1 || !!texture,
@@ -532,7 +547,12 @@ export function Viewport(props: Props) {
           `decal-${mapping.repeat}-${mapping.opacity}`;
       }
       const mesh = new THREE.Mesh(bg, material);
-      mesh.userData = { face, reference, bodyId: target };
+      mesh.userData = {
+        face: pickFace ? undefined : face,
+        pickFace,
+        reference,
+        bodyId: target,
+      };
       if (visual?.transforms[target])
         mesh.position.fromArray(visual.transforms[target]);
       r.model.add(mesh);
@@ -566,13 +586,78 @@ export function Viewport(props: Props) {
     if (nativeBodies)
       nativeBodies
         .filter((b) => b.visible !== false)
-        .forEach((body) =>
-          nativeFaces(body).forEach((face) =>
-            addFace(face, undefined, body.id),
-          ),
-        );
+        .forEach((body) => {
+          const mesh = body.mesh;
+          // A native imported mesh can have one native face per triangle. Batch
+          // unchanged triangles instead of creating hundreds of thousands of
+          // Mesh/EdgesGeometry objects. Only selected/customized faces split out.
+          if (
+            body.geometry_kind === "mesh" &&
+            mesh?.positions &&
+            mesh.triangles &&
+            mesh.tri_face?.length === mesh.triangles.length
+          ) {
+            const visual = visualization?.scene;
+            const facePrefix = `${body.id}:face:`;
+            const exceptional = new Set<string>();
+            if (props.selected?.id.startsWith(facePrefix))
+              exceptional.add(props.selected.id);
+            for (const key of Object.keys(visual?.appearances ?? {}))
+              if (key.startsWith(facePrefix)) exceptional.add(key);
+            for (const key of [
+              ...(visual?.hidden ?? []),
+              ...(visual?.isolated ?? []),
+            ])
+              if (key.startsWith(facePrefix)) exceptional.add(key);
+            const regular: number[][] = [],
+              originalTriangles: number[] = [];
+            const exceptionTriangles = new Map<string, number>();
+            mesh.triangles.forEach((triangle, i) => {
+              const id = `${facePrefix}${mesh.tri_face![i]}`;
+              if (exceptional.has(id)) exceptionTriangles.set(id, i);
+              else {
+                regular.push(triangle);
+                originalTriangles.push(i);
+              }
+            });
+            if (regular.length) {
+              const batch: Face = {
+                id: `${body.id}:mesh`,
+                body_id: body.id,
+                signature: `${body.id}:mesh`,
+                kind: "native",
+                area_mm2: 0,
+                center: [0, 0, 0],
+                normal: null,
+                vertices: mesh.positions,
+                triangles: regular,
+              };
+              addFace(batch, undefined, body.id, (triangle) =>
+                nativeFace(body, originalTriangles[triangle]),
+              );
+            }
+            for (const index of exceptionTriangles.values()) {
+              const face = nativeFace(body, index);
+              if (face) addFace(face, undefined, body.id);
+            }
+          } else
+            nativeFaces(body).forEach((face) =>
+              addFace(face, undefined, body.id),
+            );
+        });
     else geometry.faces.forEach((face) => addFace(face));
     host.current!.dataset.visualBodies = String(nativeBodies?.length ?? 1);
+    host.current!.dataset.drawObjects = String(r.model.children.length);
+    host.current!.dataset.visualTriangles = String(
+      nativeBodies?.reduce(
+        (n, b) =>
+          n +
+          (b.mesh?.triangles?.length ??
+            b.mesh?.faces?.reduce((sum, f) => sum + f.triangles.length, 0) ??
+            0),
+        0,
+      ) ?? 0,
+    );
     const nativeObjects = r.model.children.filter(
       (object: THREE.Object3D) => !beforeNative.has(object),
     );
@@ -613,8 +698,7 @@ export function Viewport(props: Props) {
           );
           const modeScale =
             props.field === "mode"
-              ? (Math.max(...dimensions) * 0.1) /
-                Math.max(high, 1e-10)
+              ? (Math.max(...dimensions) * 0.1) / Math.max(high, 1e-10)
               : 1;
           const color = new THREE.Color();
           for (const tri of field.boundary_triangles)

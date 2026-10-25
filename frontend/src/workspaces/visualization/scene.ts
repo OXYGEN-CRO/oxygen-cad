@@ -97,6 +97,7 @@ export type NativeBody = {
   id: string;
   name: string;
   visible: boolean;
+  geometry_kind?: "solid" | "surface" | "mesh";
   mesh?: {
     positions?: number[][];
     triangles?: number[][];
@@ -207,6 +208,72 @@ export function sampleScene(
   return { scene: result, callout };
 }
 
+/** Resolve only the picked native face, retaining its actual triangle identities. */
+export function nativeFace(
+  body: NativeBody,
+  triangleIndex: number,
+): Face | undefined {
+  const mesh = body.mesh;
+  if (
+    !mesh?.positions ||
+    !mesh.triangles ||
+    !Number.isInteger(triangleIndex) ||
+    triangleIndex < 0 ||
+    triangleIndex >= mesh.triangles.length
+  )
+    return;
+  const id = mesh.tri_face?.[triangleIndex] ?? -1;
+  const key = `${body.id}:face:${id}`;
+  const saved = mesh.faces?.find((face) => face.id === key);
+  if (saved) return { ...saved, body_id: body.id };
+  const triangles = mesh.triangles.filter(
+    (_triangle, i) => (mesh.tri_face?.[i] ?? -1) === id,
+  );
+  return faceFromTriangles(body, id, triangles);
+}
+
+function faceFromTriangles(
+  body: NativeBody,
+  id: number,
+  triangles: number[][],
+): Face {
+  const mesh = body.mesh!;
+  const indices = Array.from(new Set(triangles.flat()));
+  const local = new Map(indices.map((n, i) => [n, i]));
+  const vertices = indices.map((index) => mesh.positions![index]);
+  let area = 0;
+  const weighted = [0, 0, 0],
+    normal = [0, 0, 0];
+  for (const triangle of triangles) {
+    const [a, b, c] = triangle.map((index) => mesh.positions![index]);
+    const ab = b.map((v, i) => v - a[i]),
+      ac = c.map((v, i) => v - a[i]);
+    const cross = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    const size = Math.hypot(...cross) / 2;
+    area += size;
+    for (let i = 0; i < 3; i++) {
+      weighted[i] += ((a[i] + b[i] + c[i]) / 3) * size;
+      normal[i] += cross[i];
+    }
+  }
+  const norm = Math.hypot(...normal);
+  return {
+    id: `${body.id}:face:${id}`,
+    body_id: body.id,
+    signature: `${body.id}:face:${id}`,
+    kind: "native",
+    area_mm2: area,
+    center: weighted.map((v) => v / Math.max(area, 1e-12)),
+    normal: norm > 1e-12 ? normal.map((v) => v / norm) : null,
+    vertices,
+    triangles: triangles.map((t) => t.map((i) => local.get(i)!)),
+  };
+}
+
 export function nativeFaces(body: NativeBody): Face[] {
   if (body.mesh?.faces)
     return body.mesh.faces.map((face) => ({ ...face, body_id: body.id }));
@@ -219,41 +286,7 @@ export function nativeFaces(body: NativeBody): Face[] {
     group.push(tri);
     groups.set(id, group);
   });
-  return Array.from(groups, ([id, triangles]) => {
-    const indices = Array.from(new Set(triangles.flat()));
-    const local = new Map(indices.map((n, i) => [n, i]));
-    const vertices = indices.map((index) => mesh.positions![index]);
-    let area = 0;
-    const weighted = [0, 0, 0],
-      normal = [0, 0, 0];
-    for (const triangle of triangles) {
-      const [a, b, c] = triangle.map((index) => mesh.positions![index]);
-      const ab = b.map((v, i) => v - a[i]),
-        ac = c.map((v, i) => v - a[i]);
-      const cross = [
-        ab[1] * ac[2] - ab[2] * ac[1],
-        ab[2] * ac[0] - ab[0] * ac[2],
-        ab[0] * ac[1] - ab[1] * ac[0],
-      ];
-      const size = Math.hypot(...cross) / 2;
-      area += size;
-      for (let i = 0; i < 3; i++) {
-        weighted[i] += ((a[i] + b[i] + c[i]) / 3) * size;
-        normal[i] += cross[i];
-      }
-    }
-    const center = weighted.map((v) => v / Math.max(area, 1e-12));
-    const norm = Math.hypot(...normal);
-    return {
-      id: `${body.id}:face:${id}`,
-      body_id: body.id,
-      signature: `${body.id}:face:${id}`,
-      kind: "native",
-      area_mm2: area,
-      center,
-      normal: norm > 1e-12 ? normal.map((v) => v / norm) : null,
-      vertices,
-      triangles: triangles.map((t) => t.map((i) => local.get(i)!)),
-    };
-  });
+  return Array.from(groups, ([id, triangles]) =>
+    faceFromTriangles(body, id, triangles),
+  );
 }

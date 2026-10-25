@@ -254,6 +254,7 @@ export default function App() {
     try {
       const result = await api("state");
       if (projectRef.current && result.project.revision < projectRef.current.revision) return result;
+      const sourceChanged = projectRef.current?.revision !== result.project.revision;
       projectRef.current = result.project;
       setState((previous) =>
         previous &&
@@ -283,7 +284,7 @@ export default function App() {
             ? previous
             : result.project,
         );
-        setSource(pretty(result.project));
+        if (sourceChanged) setSource(pretty(result.project));
       }
       return result;
     } catch (e) {
@@ -337,8 +338,16 @@ export default function App() {
     }
   }
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 1600);
+    // Polling a large editable source can take longer than the interval. Keep
+    // background polls single-flight; explicit post-mutation refreshes still run.
+    let pending = false;
+    const poll = async () => {
+      if (pending) return;
+      pending = true;
+      try { await refresh(); } finally { pending = false; }
+    };
+    void poll();
+    const interval = setInterval(poll, 1600);
     return () => clearInterval(interval);
   }, [refresh]);
   useEffect(() => {
@@ -351,7 +360,7 @@ export default function App() {
       return;
     }
     const revision = state.project.revision;
-    api("native/scene").then((reply) => {
+    api("native/scene?compact=true").then((reply) => {
       if (!disposed && reply.revision === revision) setNativeScene(reply.scene);
     }).catch((error) => { if (!disposed) setError(String(error)); });
     return () => { disposed = true; };
