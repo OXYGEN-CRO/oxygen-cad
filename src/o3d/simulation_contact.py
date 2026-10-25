@@ -2,8 +2,9 @@
 
 Surfaces retain their six-node owning volume faces. Geometry is never adjusted.
 The initial rigid-space test counts normal contact only: friction is not an
-invented mounting constraint. Contact output is experimental evidence, with
-active-set tangent stability and integrated frictional work still unqualified.
+invented mounting constraint. Contact output is experimental evidence. The pinned
+exporter supports separate friction-work and current-restraint audits; full
+active-set tangent stability remains unqualified.
 """
 from __future__ import annotations
 import re
@@ -48,6 +49,8 @@ class SurfaceContact:
                     if nodes&used_secondary:raise ValueError('Secondary contact nodes belong to multiple pairs; separate ambiguous contact output ownership')
                     used_secondary.update(nodes)
                 record.update({f'{role}_region_id':region.id,f'{role}_body_id':region.body_id,f'{role}_component':next(iter(components)),f'{role}_name':name,f'{role}_faces':faces})
+            if record['primary_component']==record['secondary_component']:
+                raise ValueError('Surface contact requires separate volume connectivity; self-contact and mixed connected load paths are not integrated')
             interaction=f'CONTACT_INTERACTION_{index}'
             self.deck.extend([f'*SURFACE INTERACTION,NAME={interaction}','*SURFACE BEHAVIOR,PRESSURE-OVERCLOSURE=LINEAR',calculix_number(interface.normal_penalty_n_mm3)])
             if interface.friction_coefficient:

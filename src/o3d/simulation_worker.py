@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-11"
+ADAPTER_VERSION="oxygen-canonical-12"
 
 
 def clean(value):
@@ -40,6 +40,7 @@ def numerical_checks(result,study):
     if checks.get('maximum_contact_penetration_limit_ratio',0)>1:failures.append('declared contact penetration limit exceeded')
     if checks.get('contact_penalty_change',0)>settings.convergence_tolerance:failures.append('contact penalty sensitivity')
     if checks.get('contact_active_set_stability_qualified') is False:failures.append('contact active-set tangent stability not qualified')
+    if checks.get('contact_current_rigid_mechanism') is True:failures.append('current frozen contact map has an unresolved rigid mechanism')
     if checks.get('frictional_work_qualified') is False:failures.append('integrated frictional work not qualified')
     if checks.get('contact_work_step_change',0)>settings.energy_tolerance:failures.append('frictional-work load-step sensitivity')
     if "prestress" in checks:

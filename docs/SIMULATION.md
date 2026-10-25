@@ -183,6 +183,50 @@ Primary solver definitions: [CalculiX official downloads](https://www.dhondt.de/
 [2.23 source](https://www.dhondt.de/ccx_2.23.src.tar.bz2). No new production solver
 or dependency is introduced by this contact adapter.
 
+### Current contact restraint diagnostics
+
+Adapter `oxygen-canonical-12` audits the accepted contact map at every loaded
+increment when the pinned full-precision exporter is available. It checks each
+closed point's force, nine friction state variables and local derivative against
+the Coulomb return map. Sliding retains the normal-to-shear coupling and its
+**nonsymmetric** derivative; symmetrizing it would change the law. An independent
+verification executable compiles unmodified upstream `springforc_f2f.f` and
+`springstiff_f2f.f`. Eight closed-point cases cover frictionless, stick, sliding
+and reversed slip in axis-aligned and rotated planes, comparing the application
+derivative with native stiffness and native-force finite differences. This checks
+the frozen local law, not contact generation or global stability.
+
+For small-strain isotropic elastic bulk, the audit checks every element's full
+ten-node, four-point strain operator: 24 nonrigid strain directions and six rigid
+directions. It then tests actual supports plus current contact rows in the six
+rigid motions of each connected solid. Closed normal contact supplies normal
+restraint; stick supplies two tangential directions; sliding supplies only the
+transverse tangential direction. Numerically zero pressure and stick/slip
+boundaries stay ambiguous. Guaranteed and maximum-possible ranks remain separate.
+A deficient maximum-possible rank with a checked linear bulk kernel is reported
+as a numerical rigid mechanism. Friction still cannot repair an unsupported
+initial mounting configuration. Self-contact through different body labels but
+shared volume connectivity now explicitly refuses.
+
+`contact-stability.json` retains all increment ranks, state counts, local
+force/state residuals, derivative asymmetry and the worst increment. Its companion
+`contact-restraint-operators.npz` retains normalized constraint operators, the
+supported rigid-space tangent and up to six mechanism witnesses. Witness amplitudes
+are arbitrary, not a predicted displacement. The studio displays the summary;
+`contact.json` includes its history and the handoff preserves both files for every
+trial. The audit is capped at 32 connected solids; exceeding it records an
+unperformed audit. Geometric/material nonlinearities do not inherit the linear
+bulk positivity check.
+
+These diagnostics do **not** qualify full contact stability. Deformable-mode
+conditioning and coupling, nonconservative sliding stability, changing
+projections/normals/areas, one-sided opening or stick/slip transitions and exported
+nonlinear bulk tangents remain outstanding. Full-rank rigid restraint is not a
+passing physical-stability result. All contact results remain inconclusive.
+Fault-injected loss-of-contact and radial-slip tests independently verify null
+witnesses against a separately assembled bulk stiffness; they are diagnostic
+tests, not claims that a native solver accepted an unstable equilibrium.
+
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its

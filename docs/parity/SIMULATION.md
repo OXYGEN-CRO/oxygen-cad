@@ -6,7 +6,7 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-11` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-12` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials retain their identity. Linear perfect mortar bonds and
@@ -14,6 +14,16 @@ experimental nonlinear face separation/friction are integrated with explicit
 limits; general assembly/contact qualification remains open. Quadratic steady thermal/prescribed-film electronics conduction also uses these records, without elastic-property prerequisites. Quadratic unloaded modal and linearized buckling studies also share these records.
 Remaining study families retain their separately bounded C3D4 adapters. Sequential linear thermal-stress transfer is connected with explicit expansion and stress-free temperature. The separate legacy
 quadratic study path is retained pending complete unification/migration.
+
+Accepted contact states now retain current rigid-space normal/stick/transverse-slip
+restraint ranks and local Coulomb derivatives, independently compared with native
+upstream Fortran force/stiffness and finite differences. Full quadratic linear
+bulk strain kernels are checked before interpreting a missing rigid restraint.
+Ambiguous zero-pressure/transition points are not counted as guaranteed mounts.
+This does not qualify deformable-mode or nonconservative stability, contact-map
+transitions, nonlinear bulk tangents or physical hardware. Every contact result
+remains inconclusive; see the current contact restraint diagnostics in
+[`../SIMULATION.md`](../SIMULATION.md).
 
 Quadratic thermal uses full ten-node conduction and volume heat, six-node
 consistent power/flux/film/radiation integration, Kelvin inputs and explicit

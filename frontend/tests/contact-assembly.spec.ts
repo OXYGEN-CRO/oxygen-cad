@@ -1,5 +1,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-async function complete(request: APIRequestContext, id: string) {
+async function complete(
+  request: APIRequestContext,
+  id: string,
+  timeout = 120000,
+) {
   let job: any;
   await expect
     .poll(
@@ -7,7 +11,7 @@ async function complete(request: APIRequestContext, id: string) {
         job = await (await request.get(`/api/jobs/${id}`)).json();
         return job.state;
       },
-      { timeout: 120000 },
+      { timeout },
     )
     .not.toMatch(/queued|running/);
   expect(job.state, job.message).toBe("succeeded");
@@ -18,7 +22,9 @@ test("native solids preserve explicit experimental contact and downloadable evid
   page,
   request,
 }) => {
-  test.setTimeout(360000);
+  // Two real multi-trial solves can exceed UI polling deadlines on CI runners.
+  // Follow their actual job states; a failed/cancelled job still fails immediately.
+  test.setTimeout(1320000);
   const original = await (await request.get("/api/project")).json();
   try {
     const reset = await request.post("/api/commands", {
@@ -204,14 +210,25 @@ test("native solids preserve explicit experimental contact and downloadable evid
     await expect(
       page.getByRole("button", { name: "Solve all cases", exact: true }),
     ).toBeEnabled();
+    const initialSubmission = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/domains/simulation/run") &&
+        response.request().method() === "POST" &&
+        response.request().postDataJSON()?.operation === "solve",
+    );
     await page
       .getByRole("button", { name: "Solve all cases", exact: true })
       .click();
+    await complete(
+      request,
+      (await (await initialSubmission).json()).id,
+      600000,
+    );
     await expect(
       page.getByText("Contact SI reference · inconclusive", {
         exact: true,
       }),
-    ).toBeVisible({ timeout: 120000 });
+    ).toBeVisible();
     const link = page.getByRole("link", {
       name: "Contact interface fields",
       exact: true,
@@ -229,6 +246,22 @@ test("native solids preserve explicit experimental contact and downloadable evid
     expect(evidence.work_audit.frictional_work_integrated).toBe(true);
     expect(evidence.work_audit.contact_tangent_stability_qualified).toBe(false);
     expect(evidence.work_audit.energy_balance_error).toBeLessThan(1e-5);
+    expect(evidence.current_state_audit.bulk_kernel.checked).toBe(true);
+    expect(evidence.current_state_audit.minimum_normal_restraint_rank).toBe(12);
+    expect(evidence.current_state_audit.minimum_constitutive_rank).toBe(12);
+    expect(evidence.current_state_audit.sliding_frames).toBe(0);
+    expect(evidence.current_state_audit.full_contact_stability_qualified).toBe(
+      false,
+    );
+    await page
+      .getByText("Contact restraint during loading", { exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "These restraint checks do not establish full contact stability.",
+        { exact: false },
+      ),
+    ).toBeVisible();
     expect(evidence.work_audit.raw_telemetry_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(evidence.work_history.at(-1).bulk_internal_energy_n_mm).toBeCloseTo(
       0.125,
@@ -378,9 +411,16 @@ test("native solids preserve explicit experimental contact and downloadable evid
         [3, -1],
         [4, 0],
       ]);
+    const cycleSubmission = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/domains/simulation/run") &&
+        response.request().method() === "POST" &&
+        response.request().postDataJSON()?.operation === "solve",
+    );
     await page
       .getByRole("button", { name: "Solve all cases", exact: true })
       .click();
+    await complete(request, (await (await cycleSubmission).json()).id, 600000);
     let cycleEvidence: any;
     await expect
       .poll(
@@ -395,11 +435,37 @@ test("native solids preserve explicit experimental contact and downloadable evid
           cycleEvidence = await (await request.get(href)).json();
           return cycleEvidence.work_history?.at(-1)?.time_s ?? 0;
         },
-        { timeout: 180000 },
+        { timeout: 10000 },
       )
       .toBe(4);
     expect(cycleEvidence.work_audit.energy_balance_error).toBeLessThan(0.02);
     expect(cycleEvidence.frictional_dissipation_n_mm).toBeCloseTo(0.17625, 3);
+    expect(cycleEvidence.current_state_audit.bulk_kernel.checked).toBe(true);
+    expect(
+      cycleEvidence.current_state_audit.minimum_normal_restraint_rank,
+    ).toBe(12);
+    expect(cycleEvidence.current_state_audit.minimum_constitutive_rank).toBe(
+      12,
+    );
+    expect(cycleEvidence.current_state_audit.sliding_frames).toBeGreaterThan(0);
+    expect(
+      cycleEvidence.current_state_audit.full_contact_stability_qualified,
+    ).toBe(false);
+    expect(
+      cycleEvidence.current_state_history.some(
+        (row: any) => row.maximum_local_tangent_asymmetry > 0.1,
+      ),
+    ).toBe(true);
+    const restraintSummary = page.getByText(
+      "Contact restraint during loading",
+      { exact: true },
+    );
+    const restraintDetails = restraintSummary.locator("..");
+    if (!(await restraintDetails.evaluate((node) => node.hasAttribute("open"))))
+      await restraintSummary.click();
+    await expect(restraintDetails).toContainText(
+      `Sliding increments: ${cycleEvidence.current_state_audit.sliding_frames}`,
+    );
     for (const [time, shear] of [
       [1, 0],
       [2, 30],

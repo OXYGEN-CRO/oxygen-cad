@@ -1512,6 +1512,52 @@ export default function SimulationPanel(props: DomainPanelProps) {
                       ))}
                     </ul>
                   )}
+                  {r.checks?.contact_current_state_audit && (
+                    <details>
+                      <summary>Contact restraint during loading</summary>
+                      {r.checks.contact_current_state_audit.performed ? (
+                        <p className="sim-help">
+                          Checked {r.checks.contact_current_state_audit.frames}{" "}
+                          accepted increments. Minimum normal restraint:{" "}
+                          {
+                            r.checks.contact_current_state_audit
+                              .minimum_normal_restraint_rank
+                          }
+                          /{r.checks.contact_current_state_audit.rigid_dofs};{" "}
+                          including sticking and transverse sliding restraint:{" "}
+                          {
+                            r.checks.contact_current_state_audit
+                              .minimum_constitutive_rank
+                          }
+                          /{r.checks.contact_current_state_audit.rigid_dofs}.{" "}
+                          Sliding increments:{" "}
+                          {r.checks.contact_current_state_audit.sliding_frames};{" "}
+                          transition increments:{" "}
+                          {r.checks.contact_current_state_audit.boundary_frames}
+                          .
+                          {r.checks.contact_current_state_audit
+                            .numerical_rigid_mechanism_detected
+                            ? " A rigid motion remains unrestrained in the current contact model."
+                            : " These restraint checks do not establish full contact stability."}
+                          {!r.checks.contact_current_state_audit.bulk_kernel
+                            .checked &&
+                            ` Bulk tangent check unavailable: ${r.checks.contact_current_state_audit.bulk_kernel.reason}`}
+                        </p>
+                      ) : (
+                        <p className="sim-help">
+                          {
+                            r.checks.contact_current_state_audit.bulk_kernel
+                              .reason
+                          }
+                        </p>
+                      )}
+                      <p className="sim-help">
+                        Download Contact interface fields for the increment
+                        history. Changing contact patches, deformable modes and
+                        physical stability require further qualification.
+                      </p>
+                    </details>
+                  )}
                   {r.findings?.map((f: Row) => (
                     <p key={f.id}>
                       {f.id}: {format(f.value)}{" "}

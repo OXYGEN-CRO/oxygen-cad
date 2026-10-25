@@ -82,6 +82,8 @@ def audit_contact(directory,contact,case,result,force):
     force_scale=max(load_path.force_scale_n,1e-300)
     work=0.;dissipation=0.;initial_energy=None;history=[];seen=set();maximum_errors={}
     elastic_scale=sum(system.assignments[b].youngs_modulus_mpa*v for b,v in system.body_volumes.items())
+    from .simulation_contact_stability import ContactStateAudit
+    stability=ContactStateAudit(system,case)
     for frame in frames(path):
         meta=frame['meta'];identity=(meta['step'],meta['increment']);time=meta['solver_total_time']-contact.initialization_period
         if set(frame['bulk'])!=set(elements) or meta['bulk_label_max']!=max(elements) or meta['node_label_max']!=max(system.ids):
@@ -95,6 +97,7 @@ def audit_contact(directory,contact,case,result,force):
                 raise ValueError('Contact telemetry reference geometry differs from the exact solver input')
         loaded=meta['step']>1
         if loaded:
+            stability.start(meta)
             if identity not in expected or not np.isclose(time,expected[identity]['total_time'],rtol=1e-6,atol=1e-9):
                 raise ValueError('Contact telemetry is not an accepted completed solver increment')
             seen.add(identity)
@@ -152,10 +155,13 @@ def audit_contact(directory,contact,case,result,force):
             expected_spring=spring_density*area;stated_spring=float(finite(point['spring_energy_n_mm']))
             spring_error+=abs(expected_spring-stated_spring);spring+=expected_spring
             expected_dissipation=0.
+            state=old=None
             if record['friction_coefficient']:
                 state=finite(point['state_plastic_relative_tangential'],(9,));old=finite(point['initial_state_plastic_relative_tangential'],(9,))
                 expected_dissipation=float(tau@(state[:3]-old[:3]))*area
                 state_error=max(state_error,float(np.linalg.norm(state[3:6]-(a@su-b@mu))))
+            if loaded:
+                stability.point(record,normal,area,float(values[0]),a@su-b@mu,pressure,tau,old,state,a@sx,b@mx)
             stated_dissipation=float(finite(point['friction_increment_n_mm']));slip_error+=abs(expected_dissipation-stated_dissipation);diss+=expected_dissipation
             traction=area*(pressure*normal-tau);force_by_pair[record['id']]+=traction
             secondary_moment[record['id']]+=np.cross(xs,traction);primary_moment[record['id']]+=np.cross(xm,-traction)
@@ -172,6 +178,7 @@ def audit_contact(directory,contact,case,result,force):
         for name,value in errors.items():maximum_errors[name]=max(maximum_errors.get(name,0.),float(value))
         if loaded:
             candidates=[value for key,value in printed.items() if np.isclose(float(key),time,rtol=1e-5,atol=1e-8)]
+            stability.finish(time)
             if len(candidates)!=1:raise ValueError('Contact telemetry has no unambiguous printed resultant frame')
             resultant_error=0.;moment_error=0.
             for record in records:
@@ -195,6 +202,7 @@ def audit_contact(directory,contact,case,result,force):
     if maximum_errors['area_relative_error']>1e-8 or maximum_errors['spring_energy_integration_relative_error']>1e-8 or maximum_errors['slip_work_integration_relative_error']>1e-8 or max(maximum_errors['gap_geometry_error_mm'],maximum_errors['relative_state_error_mm'])>extent*1e-8:
         raise ValueError('Independent contact geometry/state/work audit failed; no qualification inferred')
     final=history[-1]
+    stability_summary=stability.write(directory)
     summary={'schema':1,'binary_sha256':system._contact_build['binary_sha256'],'receipt_sha256':system._contact_build['receipt_sha256'],
         'raw_telemetry_sha256':file_hash(path),'raw_telemetry_bytes':path.stat().st_size,
         'loading_frames':len(history),'maximum_errors':maximum_errors,'energy_scale_n_mm':scale,
@@ -205,10 +213,12 @@ def audit_contact(directory,contact,case,result,force):
         'scope':'Independent full-quadratic geometry/traction/spring/plastic-slip integration and external-work balance; step/mesh convergence, tangent stability and physical validation remain distinct'}
     write_json(directory/'contact-work.json',{'summary':summary,'history':history})
     result['values'].update({k:final[k] for k in ('bulk_internal_energy_n_mm','contact_spring_energy_n_mm','frictional_dissipation_n_mm','external_work_n_mm')})
-    result['checks'].update({'contact_work_audit':summary,'energy_balance_error':summary['energy_balance_error'],'frictional_work_integrated':True})
+    result['checks'].update({'contact_work_audit':summary,'energy_balance_error':summary['energy_balance_error'],'frictional_work_integrated':True,
+        'contact_current_state_audit':stability_summary,'contact_current_rigid_mechanism':stability_summary['numerical_rigid_mechanism_detected']})
     result['contact_work_history']=history
     evidence=json.loads((directory/'contact.json').read_text());evidence.update({'work_audit':summary,'work_history':history,
-        'frictional_dissipation_n_mm':final['frictional_dissipation_n_mm']})
+        'frictional_dissipation_n_mm':final['frictional_dissipation_n_mm'],
+        'current_state_audit':stability_summary,'current_state_history':stability.history})
     write_json(directory/'contact.json',evidence)
     return summary
 

@@ -41,6 +41,9 @@ RUN set -eu; ccx_arch="$(dpkg --print-architecture)"; \
    --library "/usr/lib/$ccx_triplet/liblapack.so.3" \
    --library "/usr/lib/$ccx_triplet/libblas.so.3" --jobs 2
 
+COPY scripts/reference_contact_kernel.py scripts/contact_kernel_probe.f90 scripts/
+RUN python scripts/reference_contact_kernel.py --source-archive /opt/contact-solver/ccx_2.23.src.tar.bz2 --output /opt/contact-kernel
+
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libglu1-mesa libgl1 libxrender1 libxcursor1 libxfixes3 libxext6 libxft2 libxinerama1 libx11-6 libarpack2t64 libopenmpi40 liblapack3 libgfortran5 ngspice kicad fonts-freefont-ttf cura-engine python3-opencamlib \
@@ -58,7 +61,9 @@ ENV O3D_DRAWING_FONT=/usr/share/fonts/truetype/freefont/FreeSerif.ttf \
 COPY --from=contact-solver /opt/contact-solver /opt/contact-solver
 COPY --from=contact-solver /opt/solver/lib /opt/solver/lib
 COPY --from=contact-solver /opt/solver/usr/share/doc/libspooles2.2t64/copyright /usr/share/doc/oxygen-spooles/copyright
+COPY --from=contact-solver /opt/contact-kernel/result.json /usr/share/oxygen-cad-verification/contact-kernel.json
 ENV CCX_BINARY=/opt/contact-solver/ccx LD_LIBRARY_PATH=/opt/solver/lib
+ENV O3D_CONTACT_KERNEL_EVIDENCE=/usr/share/oxygen-cad-verification/contact-kernel.json
 COPY --from=engine /build/engine/target/release/oxygen-engine /usr/local/bin/oxygen-engine
 COPY third_party/solidcraft/LICENSE-MIT third_party/solidcraft/LICENSE-APACHE third_party/solidcraft/NOTICE third_party/solidcraft/THIRD-PARTY-LICENSES.txt /usr/share/doc/oxygen-solidcraft/
 COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/oxygen-solidcraft/OFL.txt
@@ -71,7 +76,7 @@ COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
 COPY o3d ./
-COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/
+COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/contact_kernel_probe.f90 scripts/
 COPY verification-requirements.lock ./
 COPY skills/ skills/
 COPY .claude-plugin/ .claude-plugin/

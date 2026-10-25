@@ -31,4 +31,11 @@ The MIT license in this repository applies to original Oxygen CAD code. It does 
 
 The Dockerfile builds CalculiX 2.23 from its verified upstream source archive. A read-only output patch exposes accepted contact quadrature/state and incremental friction work; the numerical routines remain unchanged. The complete upstream archive, exact patch/header, build recipe and GPL text are retained in `/opt/contact-solver/`. The build receipt records binary, source, compiler and numerical-library identities. SPOOLES packages use verified Debian checksums; their notice is retained in `/usr/share/doc/oxygen-spooles/`. Other installed dependencies retain their package notices.
 
+The build also compiles a separate verification executable from unmodified
+CalculiX contact kernels and `scripts/contact_kernel_probe.f90` (GPL-2.0-only).
+Only its JSON comparison evidence enters the runtime; the executable is not the
+application solver. The exact driver, verified upstream archive, member hashes
+and reproducible command in `scripts/reference_contact_kernel.py` are retained.
+This verification driver does not change the MIT licence of the application.
+
 No proprietary CAD kernel, private research wiki, or private component catalog is included. Imported user geometry remains in the user's project directory and is not covered by the application license.
