@@ -17,6 +17,15 @@ def vector(value):
     return [float(value.X), float(value.Y), float(value.Z)]
 
 
+def exact_bounds(shape):
+    """Geometric extrema, without render tessellation or control-hull padding."""
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    box = Bnd_Box()
+    BRepBndLib.AddOptimal_s(shape.wrapped, box, False, False)
+    return [[p.X(), p.Y(), p.Z()] for p in (box.CornerMin(), box.CornerMax())]
+
+
 def signature(shape):
     c = vector(shape.center())
     values = [shape.geom_type.name, *[round(x, 6) for x in c]]
@@ -314,8 +323,11 @@ def build(store: Store, project: Project):
     has_mesh = bool(scene and any(b["geometry_kind"] == "mesh" for b in scene["bodies"]))
     has_surface = bool(scene and any(b["geometry_kind"] == "surface" for b in scene["bodies"]))
     if scene and scene["bodies"]:
-        low = [min(b["bbox"]["min"][i] for b in scene["bodies"]) for i in range(3)]
-        high = [max(b["bbox"]["max"][i] for b in scene["bodies"]) for i in range(3)]
+        if shape is not None and not has_mesh and not has_surface:
+            low, high = exact_bounds(shape)
+        else:
+            low = [min(b["bbox"]["min"][i] for b in scene["bodies"]) for i in range(3)]
+            high = [max(b["bbox"]["max"][i] for b in scene["bodies"]) for i in range(3)]
         bounds, dimensions = [low, high], [high[i]-low[i] for i in range(3)]
         volume = sum(s.volume for s in shape.solids()) if shape is not None and not has_mesh and not has_surface else None
         center = vector(shape.center(bd.CenterOf.MASS)) if shape is not None and volume and not has_surface else None
