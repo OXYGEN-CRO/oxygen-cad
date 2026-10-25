@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-9"
+ADAPTER_VERSION="oxygen-canonical-10"
 
 
 def clean(value):
@@ -41,6 +41,7 @@ def numerical_checks(result,study):
     if checks.get('contact_penalty_change',0)>settings.convergence_tolerance:failures.append('contact penalty sensitivity')
     if checks.get('contact_active_set_stability_qualified') is False:failures.append('contact active-set tangent stability not qualified')
     if checks.get('frictional_work_qualified') is False:failures.append('integrated frictional work not qualified')
+    if checks.get('contact_work_step_change',0)>settings.energy_tolerance:failures.append('frictional-work load-step sensitivity')
     if "prestress" in checks:
         if checks["prestress"].get("residual",0)>settings.residual_tolerance:failures.append("prestress equation residual")
         if any(checks["prestress"].get(k,0)>settings.balance_tolerance for k in ("force_balance_error","moment_balance_error")):failures.append("prestress equilibrium")
@@ -78,7 +79,7 @@ def solve(request,directory,cancel=None):
     if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal","buckling"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
     materials={m.id:m for m in domain.materials}
     iterations=[];result=None;previous=None;converged=False
-    previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.;previous_eigen=None
+    previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.;previous_eigen=None;previous_contact_roundoff=0.
     for i,mesh in enumerate(meshes):
         validate_boundary(mesh)
         if family=="C3D10":
@@ -147,10 +148,16 @@ def solve(request,directory,cancel=None):
                 result=quadratic_buckling_solve(system,case,directory/f"mesh-{i}"/"buckling",cancel)
             else:result=buckling_solve(system,case,cancel)
         elif study.type=="nonlinear_static":
-            result=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-1",cancel)
+            coarse=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-1",cancel)
             refined=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-half",cancel,increment_scale=.5)
-            delta=abs(refined["values"]["max_displacement_mm"]-result["values"]["max_displacement_mm"])/max(abs(refined["values"]["max_displacement_mm"]),1e-12)
+            delta=abs(refined["values"]["max_displacement_mm"]-coarse["values"]["max_displacement_mm"])/max(abs(refined["values"]["max_displacement_mm"]),1e-12)
             result=refined;result["checks"]["load_step_change"]=delta
+            if 'contact_work_audit' in result['checks']:
+                from .simulation_contact_evidence import work_sensitivity
+                change=work_sensitivity(coarse,result)
+                if change is None:raise ValueError('Contact work trial lacks matching accepted-state evidence')
+                result['checks']['contact_work_step_change']=change
+                result['checks']['frictional_work_qualified']=change is not None and change<=study.settings.energy_tolerance and result['checks']['energy_balance_error']<=study.settings.energy_tolerance
             if any(interface.kind!='disabled' for interface in study.interfaces):
                 import copy
                 # A separate, retained numerical trial; the returned fields and
@@ -172,6 +179,12 @@ def solve(request,directory,cancel=None):
                 result['checks'].update({'contact_penalty_change':max(penalty_change,*trajectory_changes),
                     'contact_penalty_trial':{'normal_multiplier':2,'tangential_multiplier':2,'directory':f'mesh-{i}/penalty-double',
                     'scope':'maximum and displacement history against doubled normal/tangential penalties; nominal fields retained'}})
+                if 'contact_work_audit' in result['checks']:
+                    from .simulation_contact_evidence import work_sensitivity
+                    penalty_work=work_sensitivity(result,tested)
+                    if penalty_work is None:raise ValueError('Contact penalty trial lacks matching accepted-state evidence')
+                    result['checks']['contact_work_penalty_change']=penalty_work
+                    result['checks']['contact_penalty_change']=max(result['checks']['contact_penalty_change'],penalty_work)
         elif study.type in {"dynamic_event","quasi_static_event"}:
             coarse=event_solve(system,case,cancel)
             result=event_solve(system,case,cancel,step_scale=.5)
@@ -180,10 +193,17 @@ def solve(request,directory,cancel=None):
         elif study.type=="topology":result=optimize(system,case,cancel)
         elif study.type=="generative":result=generative(system,case,cancel)
         else:raise ValueError(f"{study.type}: no qualified integrated solver adapter is available")
-        quantities={k:v for k,v in result["values"].items() if k in {"max_displacement_mm","probe_displacement_mm","max_von_mises_mpa","max_temperature_k","min_temperature_k","temperature_rise_k","min_frequency_hz","min_buckling_factor"}}
+        quantities={k:v for k,v in result["values"].items() if k in {"max_displacement_mm","probe_displacement_mm","max_von_mises_mpa","max_temperature_k","min_temperature_k","temperature_rise_k","min_frequency_hz","min_buckling_factor","frictional_dissipation_n_mm","external_work_n_mm","bulk_internal_energy_n_mm","contact_spring_energy_n_mm"}}
         # Element stress maxima are screening fields, not a nonsingular stress-convergence probe.
         convergence_quantities={k:v for k,v in quantities.items() if k!="max_von_mises_mpa"}
         changes={k:abs(v-previous[k])/max(abs(v),1e-12) for k,v in convergence_quantities.items() if previous is not None and k in previous}
+        if 'contact_work_audit' in result['checks']:
+            audit=result['checks']['contact_work_audit'];roundoff=max(audit['energy_roundoff_bound_n_mm'],previous_contact_roundoff)
+            for quantity in {'frictional_dissipation_n_mm','external_work_n_mm','bulk_internal_energy_n_mm','contact_spring_energy_n_mm'}:
+                if previous is not None and quantity in previous and quantity in convergence_quantities:
+                    scale=max(abs(convergence_quantities[quantity]),abs(previous[quantity]),roundoff,1e-300)
+                    changes[quantity]=abs(convergence_quantities[quantity]-previous[quantity])/scale
+            previous_contact_roundoff=audit['energy_roundoff_bound_n_mm']
         if family=="C3D10" and study.type in {"steady_thermal","electronics_cooling","thermal_stress"}:
             scale=max(result["checks"]["temperature_convergence_scale_k"],previous_thermal_scale,1e-9)
             for quantity in {"max_temperature_k","min_temperature_k","temperature_rise_k"}:
@@ -232,7 +252,7 @@ def solve(request,directory,cancel=None):
         met=None if value is None else bool(value<=limit.value if limit.operator=="le" else value>=limit.value)
         strength_screening=limit.quantity=="max_von_mises_mpa"
         findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"operator":limit.operator,"satisfied":met,"source":limit.source,"evidence":"screening peak stress; no nonsingular stress probe convergence" if strength_screening else "specified numerical model","verified":not failures and not strength_screening and met is not None})
-    result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
+    result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2","energy":"N mm"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
     if study.type=="buckling":result["field_location"]["mode_shape"]="unit-amplitude reference shape; not physical displacement"
     if family=="C3D10":
         if study.type in {"linear_static","nonlinear_static","thermal_stress"}:result["field_location"]["stress"]="nodal_extrapolated"

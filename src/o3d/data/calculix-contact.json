@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "upstream_version": "2.23",
+  "source_sha256": "9c88385c10fb04f5dc6c4e98027a51bebdd8aee3920e05190d6c1dd08357d6e7",
+  "upstream_nonlingeo_sha256": "8684bb6d7fa7097c0a854db5a45eb9e2d11adfde574e688184ecbbbad56ff83f",
+  "telemetry_header_sha256": "384d217649ab4d2546883702dea20e64f8fbcee230806df622bfa91ab15db70f",
+  "patched_nonlingeo_sha256": "02938996f6d9e60b37d460fd8f6223a340b2ed8c9ae0f34ca94ca118ad7f34fd",
+  "instrumentation": "accepted-static-face-contact-v1",
+  "maximum_output_bytes": 536870912
+}

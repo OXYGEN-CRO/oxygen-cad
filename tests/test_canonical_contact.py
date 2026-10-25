@@ -47,7 +47,9 @@ def test_real_face_contact_matches_independent_SI_bar_and_penalty_compliance(tmp
     assert result['contact_initialization']['maximum_displacement_mm']<1e-10
     data=json.loads((tmp_path/'contact.json').read_text())
     assert data['history']['1.0']['spring_energy_n_mm']==pytest.approx(.5*100*penetration_mm,rel=1e-6)
-    assert data['frictional_dissipation_n_mm'] is None
+    if 'work_audit' in data:
+        assert abs(data['frictional_dissipation_n_mm'])<1e-12
+    else:assert data['frictional_dissipation_n_mm'] is None
     assert 'positive opening is clipped' in result['field']['contact_gap_convention']
     deck=(tmp_path/'analysis.inp').read_text()
     assert 'TYPE=SURFACE TO SURFACE' in deck and 'ADJUST' not in deck

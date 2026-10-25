@@ -6,7 +6,7 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-9` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-10` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials retain their identity. Linear perfect mortar bonds and
@@ -192,7 +192,9 @@ CELS is recoverable spring energy. Neither is a substitute for measured clearanc
 or integrated frictional dissipation.
 
 All surface-contact results remain inconclusive pending active-set tangent
-stability; friction additionally lacks qualified integrated work. General sliding,
+stability. The pinned source-built runtime independently integrates plastic-slip
+work and audits geometry, spring/internal energy and external work; step, mesh,
+penalty and energy checks remain distinct. Stock solver work remains unqualified. General sliding,
 mixed bond/contact, self-contact, connectors, thermal contact and physical
 interface/material correlation remain open. Independent SI compression/opening
 and guided shear references establish only the stated numerical fixtures.

@@ -189,7 +189,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Reproducible geometric examples and meas
 
 ## License
 
-Oxygen CAD's original code is [MIT licensed](LICENSE). CAD, meshing, solver, UI, and font dependencies retain their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md). The Dockerfile fetches unmodified solver packages from Debian with pinned checksums.
+Oxygen CAD's original application code is [MIT licensed](LICENSE). CAD, meshing, solver, UI, and font dependencies retain their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md). The separately invoked CalculiX solver and its read-only contact instrumentation use GPL version 2. Its pinned source archive, patch, build recipe and license accompany the runtime; SPOOLES packages retain verified Debian checksums and notices.
 
 ## Vendored Rust engine
 

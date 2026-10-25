@@ -49,7 +49,7 @@ def calculix_number(value):
     return token
 
 
-def run_process(command, directory: Path, log: Path, cancel: Event | None = None, timeout=180):
+def run_process(command, directory: Path, log: Path, cancel: Event | None = None, timeout=180, *, environment_overrides=None):
     environment = dict(os.environ)
     # Workers change cwd into a job directory. Keep this checkout authoritative,
     # including when development launched with a relative PYTHONPATH=src.
@@ -60,6 +60,7 @@ def run_process(command, directory: Path, log: Path, cancel: Event | None = None
     if tools.exists():
         environment["LD_LIBRARY_PATH"] = f"{tools}:{environment.get('LD_LIBRARY_PATH', '')}"
     environment["OMP_NUM_THREADS"] = "2"
+    if environment_overrides:environment.update(environment_overrides)
     with log.open("w") as output:
         process = subprocess.Popen([str(v) for v in command], cwd=directory, stdout=output, stderr=subprocess.STDOUT,
                                    env=environment, start_new_session=True)
@@ -85,10 +86,10 @@ def run_process(command, directory: Path, log: Path, cancel: Event | None = None
 def solver_binary():
     configured = os.environ.get("CCX_BINARY")
     local = Path(__file__).resolve().parents[2] / ".tools/root/usr/bin/ccx"
-    result = configured or shutil.which("ccx") or (str(local) if local.exists() else None)
+    result = (shutil.which(configured) or configured) if configured else (shutil.which("ccx") or (str(local) if local.exists() else None))
     if not result:
         raise RuntimeError("CalculiX is unavailable. Run doctor or use the packaged Docker runtime.")
-    return result
+    return str(Path(result).expanduser().resolve())
 
 
 def mesher_python():

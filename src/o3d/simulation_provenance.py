@@ -1,24 +1,17 @@
 """Lightweight exact solver/source fingerprints without importing numerical libraries."""
 from __future__ import annotations
-from functools import lru_cache
-import hashlib
 from importlib.metadata import version,distribution,PackageNotFoundError
 from pathlib import Path
 
 
-@lru_cache(maxsize=128)
-def _file_hash(path,modified_ns,size):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
 def fingerprint_file(path):
-    path=Path(path).resolve();stat=path.stat()
-    return _file_hash(str(path),stat.st_mtime_ns,stat.st_size)
+    from .simulation_solver_profile import file_hash
+    return file_hash(path)
 
 
 def software_fingerprint(study_type,element_family="C3D4"):
     root=Path(__file__).parent
-    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","simulation_thermoelastic.py","simulation_eigen.py","simulation_buckling.py","simulation_assembly.py","simulation_bonding.py","simulation_mortar.py","simulation_contact.py","simulation_mode_tracking.py","mode_tracking.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
+    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","simulation_thermoelastic.py","simulation_eigen.py","simulation_buckling.py","simulation_assembly.py","simulation_bonding.py","simulation_mortar.py","simulation_contact.py","simulation_contact_evidence.py","simulation_solver_profile.py","data/calculix-contact.json","simulation_mode_tracking.py","mode_tracking.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)
@@ -26,11 +19,22 @@ def software_fingerprint(study_type,element_family="C3D4"):
     result={"source_sha256":sources,"packages":packages,"element_family":element_family}
     if study_type=="nonlinear_static" or element_family=="C3D10":
         # Resolve a declared backend, never execute a project-controlled command.
-        import os,shutil
-        configured=os.environ.get("CCX_BINARY")
-        local=root.parents[1]/".tools/root/usr/bin/ccx"
-        binary=configured or shutil.which("ccx") or (str(local) if local.exists() else None)
+        import os
+        from .solver import solver_binary
+        try:binary=solver_binary()
+        except RuntimeError:binary=None
         result["calculix_binary_sha256"]=fingerprint_file(binary) if binary and Path(binary).is_file() else "unavailable"
+        if binary and Path(binary).is_file():
+            from .simulation_solver_profile import validated_build,loaded_libraries
+            build=validated_build(binary)
+            if build:
+                result['calculix_build_receipt_sha256']=build['receipt_sha256']
+                result['calculix_runtime_libraries_sha256']=build['runtime_libraries_sha256']
+            else:
+                tools=root.parents[1]/'.tools/root/usr/lib/x86_64-linux-gnu'
+                paths=[str(tools)] if tools.exists() else []
+                if os.environ.get('LD_LIBRARY_PATH'):paths.append(os.environ['LD_LIBRARY_PATH'])
+                result['calculix_runtime_libraries_sha256']=loaded_libraries(binary,os.pathsep.join(paths)) or 'unavailable'
     if element_family=="C3D10" and study_type in {"linear_static","nonlinear_static","modal","buckling"}:
         runtime={}
         patterns={"numpy":["numpy/_core/_umath_linalg*.so","numpy/_core/_multiarray_umath*.so","numpy.libs/*","numpy/.dylibs/*"],

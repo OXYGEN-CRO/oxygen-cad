@@ -226,6 +226,19 @@ test("native solids preserve explicit experimental contact and downloadable evid
       evidence.checks.at(-1).pairs[evidence.pairs[0].id].maximum_pressure_mpa,
     ).toBeCloseTo(25, 4);
     expect(evidence.checks.at(-1).force_balance_error).toBeLessThan(1e-5);
+    expect(evidence.work_audit.frictional_work_integrated).toBe(true);
+    expect(evidence.work_audit.contact_tangent_stability_qualified).toBe(false);
+    expect(evidence.work_audit.energy_balance_error).toBeLessThan(1e-5);
+    expect(evidence.work_audit.raw_telemetry_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(evidence.work_history.at(-1).bulk_internal_energy_n_mm).toBeCloseTo(
+      0.125,
+      5,
+    );
+    expect(evidence.work_history.at(-1).contact_spring_energy_n_mm).toBeCloseTo(
+      0.000125,
+      7,
+    );
+    expect(Math.abs(evidence.frictional_dissipation_n_mm)).toBeLessThan(1e-12);
     await expect(
       page.getByText("contact active-set tangent stability not qualified", {
         exact: false,

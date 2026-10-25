@@ -93,8 +93,8 @@ limits when contact carries rigid support. Gapped/partial contacts cannot repair
 an initially unsupported load path through this audit. Changing contact patches,
 sliding constraints and active-set tangent stability throughout loading remain
 unqualified. All surface-contact runs therefore remain **inconclusive**, even
-when their numerical checks pass. Friction runs additionally retain the gap
-that accumulated frictional work is not qualified.
+when their numerical checks pass. Stock CalculiX output cannot establish integrated
+frictional work; the pinned instrumented runtime adds the separate audit below.
 
 An unloaded first step completes CalculiX's first-step penetration-removal
 logic before the actual loading path. Without it, a series-bar probe had correct
@@ -119,6 +119,45 @@ Spring energy is recoverable penalty energy, **not** accumulated frictional
 heat/work. Integration-point coordinates/weights and frictional dissipation are
 not inferred from the printed output.
 
+The packaged runtime builds the hash-pinned upstream source with a read-only
+accepted-state exporter. Numerical routines remain unchanged. An opt-in child
+process flag writes `analysis.contact.jsonl` with 17-digit coordinates,
+increment-start/current displacement, complete quadratic face ownership,
+quadrature coordinates/weights, frozen normal/area, spring energy and plastic-slip
+state. Only accepted static contact output is recorded; incomplete transactions,
+nonfinite data, source/receipt mismatch or output above 512 MiB refuse. The
+application checks exported identities against the independently parsed accepted
+increment log. Stock external CalculiX remains usable, with work unqualified.
+
+`contact-work.json` independently reconstructs the full quadratic geometry,
+increment-start area/normal, current gap, relative state, traction resultants,
+spring energy and **traction dot incremental plastic slip times area**. It checks
+these against exported solver values and printed pair force/moment resultants.
+Bulk internal energy integrates the four solver energy-density points with
+reference-volume Jacobians. External work integrates the actual dead nodal forces
+and full-precision displacement path by the trapezoid rule. Frictional dissipation
+is accumulated from plastic slip, never assigned the leftover energy residual.
+The energy residual remains visible. Units are N mm. An unloaded initialization
+may not introduce finite energy.
+
+The worker compares complete cumulative-slip-work histories on both increment
+grids, checks energy balance against `energy_tolerance`, and adds work/energy to
+mesh and penalty sensitivity. Coarse proportional-normal/shear sliding can satisfy
+final displacement while failing work convergence. The independent simple-shear
+reference is 0.025125 N mm; refinement must approach it. Single solves do not earn
+work qualification. `contact.json`, downloadable in the studio, includes the work
+audit and history; the handoff preserves every raw state/trial. Active-set tangent
+stability remains unqualified even when these energy checks pass. Changing normal
+preload independently from shear, reversal/cyclic friction, large sliding,
+nonlinear constitutive energy and measured friction require further qualification.
+
+The binary, adjacent build receipt and actual loaded shared libraries are hashed
+in result provenance. Runtime library drift invalidates results or refuses an
+incompatible build. The external GPL-2-only solver bundle contains the exact
+upstream archive, read-only patch/header, build recipe and GPL text; original
+application code keeps its MIT licence. See
+[`third_party/calculix/README.md`](../third_party/calculix/README.md).
+
 The studio edits these sourced inputs and offers pressure, shear and negative
 penetration plots on secondary faces only. They are nodal recoveries, distinct
 from integration-point peaks. CalculiX COPEN clips positive opening to zero;
@@ -134,7 +173,7 @@ penalty compliance, open-interface zero tension, and guided simple-shear stick
 and Coulomb sliding limits. A native CAD → UI → mesh → solver → field download
 workflow is also exercised. These synthetic numerical cases do not calibrate a
 material/interface, establish general sliding convergence, or prove hardware
-reliability. Contact tangent qualification, integrated dissipation/energy,
+reliability. Contact tangent qualification, broader cyclic dissipation/energy,
 nontrivial sliding/unloading, general curved mapping and measured interface tests
 remain part of the full roadmap.
 
