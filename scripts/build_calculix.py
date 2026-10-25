@@ -31,6 +31,22 @@ HOOK='''
           ne0,*ne,*nintpoint,*nk,co,v,vini,clearini,mi,ipkon,kon,lakon,islavsurf,pslavsurf,
           pmastsurf,springarea,stx,ener,*nstate_,xstate,xstateini);
       }
+      if((*nmethod==1)&&(*ithermal<2)&&(*iexpl<=1)&&(*mortar<=1)){
+        oxygen_native_tangent_commit(jobnamec,*istep,iinc,*ttime+time,
+          *nk,mi,v);
+      }
+'''
+TANGENT_STAGE='''
+        if((*nmethod==1)&&(*ithermal<2)&&(*iexpl<=1)&&(*mortar<=1)){
+          oxygen_native_tangent_stage(jobnamec,*istep,iinc,iit,*ttime+time,
+            *nk,mi,nactdof,neq[0],nzs[0],nzs[2],nasym,jq,irow,ad,au,
+            vold,b,*nmpc,kscale);
+        }
+'''
+TANGENT_SOLVED='''
+        if((*nmethod==1)&&(*ithermal<2)&&(*iexpl<=1)&&(*mortar<=1)){
+          oxygen_native_tangent_solved(jobnamec,neq[0],b);
+        }
 '''
 
 
@@ -40,7 +56,14 @@ def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def patch_nonlingeo(original):
     if hashlib.sha256(original.encode()).hexdigest()!=NONLINGEO_SHA256:
         raise ValueError('Unexpected upstream nonlingeo.c; do not apply an approximate patch')
-    text=original.replace('#define max(a,b)','#include "oxygen_contact_telemetry.h"\n\n#define max(a,b)',1)
+    text=original.replace('#define max(a,b)','#include "oxygen_contact_telemetry.h"\n#include "oxygen_native_tangent.h"\n\n#define max(a,b)',1)
+    start=text.index('      /* implicit step (static or dynamic) */')
+    anchor='\tif(*isolver==0){'
+    location=text.index(anchor,start)
+    text=text[:location]+TANGENT_STAGE+text[location:]
+    anchor='\tif(*mortar<=1){\n\t  if(isensitivity){'
+    if text.count(anchor)!=1:raise ValueError('Native linear solve output hook is ambiguous')
+    text=text.replace(anchor,TANGENT_SOLVED+anchor)
     needle='&intscheme,physcon,dam,damn,iponoel);'
     start=text.index('    /* output */');end=text.index('  /*   end of the increment loop',start)
     part=text[start:end]
@@ -74,13 +97,20 @@ def build(args):
         original=(source/'nonlingeo.c').read_text();patched=patch_nonlingeo(original)
         assets=ROOT/'third_party/calculix'
         if not assets.is_dir():assets=Path(__file__).resolve().parent
-        header=assets/'oxygen_contact_telemetry.h'
+        # Freeze source inputs before compilation so concurrent edits cannot
+        # cause a receipt/source bundle to describe a different binary.
+        frozen=work/'inputs';frozen.mkdir()
+        for path in [assets/'oxygen_contact_telemetry.h',assets/'oxygen_native_tangent.h',assets/'COPYING',Path(__file__)]:
+            shutil.copyfile(path,frozen/path.name)
+        header=frozen/'oxygen_contact_telemetry.h'
+        tangent_header=frozen/'oxygen_native_tangent.h'
         (source/'nonlingeo.c').write_text(patched);shutil.copyfile(header,source/header.name)
+        shutil.copyfile(tangent_header,source/tangent_header.name)
         makefile=(source/'Makefile').read_text()
         target='ccx_2.23: $(OCCXMAIN) ccx_2.23.a  $(LIBS)'
         if makefile.count(target)!=1 or makefile.count('./date.pl; $(CC)')!=1:raise ValueError('Unexpected upstream build recipe')
         makefile=makefile.replace(target,'ccx_2.23: $(OCCXMAIN) ccx_2.23.a').replace('./date.pl; $(CC)','$(CC)')
-        makefile+='\nnonlingeo.o: oxygen_contact_telemetry.h\n'
+        makefile+='\nnonlingeo.o: oxygen_contact_telemetry.h oxygen_native_tangent.h\n'
         (source/'Makefile').write_text(makefile)
         cflags=f'-O2 -Wno-error=return-mismatch -I {quoted(args.spooles_include.resolve())} -DARCH="Linux" -DSPOOLES -DARPACK -DMATRIXSTORAGE -DNETWORKOUT'
         fflags='-O2 -cpp -fallow-argument-mismatch'
@@ -90,20 +120,22 @@ def build(args):
         staged=work/'release';staged.mkdir()
         shutil.copyfile(source/'ccx_2.23',staged/'ccx');(staged/'ccx').chmod(0o755)
         shutil.copyfile(archive,staged/archive.name);shutil.copyfile(header,staged/header.name)
-        shutil.copyfile(Path(__file__),staged/'build_calculix.py')
-        shutil.copyfile(assets/'COPYING',staged/'COPYING')
+        shutil.copyfile(tangent_header,staged/tangent_header.name)
+        shutil.copyfile(frozen/'build_calculix.py',staged/'build_calculix.py')
+        shutil.copyfile(frozen/'COPYING',staged/'COPYING')
         delta=''.join(difflib.unified_diff(original.splitlines(True),patched.splitlines(True),fromfile='a/nonlingeo.c',tofile='b/nonlingeo.c'))
         (staged/'nonlingeo.c.patch').write_text(delta)
         manifest={'schema':1,'telemetry_schema':1,'upstream_version':'2.23','source_url':UPSTREAM_URL,
             'source_sha256':UPSTREAM_SHA256,'upstream_nonlingeo_sha256':NONLINGEO_SHA256,
             'patched_nonlingeo_sha256':hashlib.sha256(patched.encode()).hexdigest(),
-            'telemetry_header_sha256':sha(header),'build_script_sha256':sha(__file__),
+            'telemetry_header_sha256':sha(header),'build_script_sha256':sha(frozen/'build_calculix.py'),
+            'native_tangent_header_sha256':sha(tangent_header),'native_tangent_schema':1,
             'binary':'ccx','binary_sha256':sha(staged/'ccx'),
             'c_compiler':subprocess.check_output([cc,'--version'],text=True).splitlines()[0],
             'fortran_compiler':subprocess.check_output([fc,'--version'],text=True).splitlines()[0],
             'cflags':cflags,'fflags':fflags,'libraries':{str(p.resolve()):sha(p.resolve()) for p in args.library},
-            'scope':'Read-only output of accepted static C3D10 face-penalty contact state; numerical routines unchanged; not contact or physical qualification',
-            'source_distribution':['ccx_2.23.src.tar.bz2','nonlingeo.c.patch','oxygen_contact_telemetry.h','build_calculix.py','COPYING']}
+            'scope':'Read-only accepted static contact state and state-tagged pre-solve native Newton matrices; numerical routines unchanged; linearization and accepted states are distinct; no stability or physical qualification',
+            'source_distribution':['ccx_2.23.src.tar.bz2','nonlingeo.c.patch','oxygen_contact_telemetry.h','oxygen_native_tangent.h','build_calculix.py','COPYING']}
         (staged/'build-manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
         # Publish only a complete binary/source/provenance bundle.
         pending=Path(tempfile.mkdtemp(prefix='.oxygen-ccx-release-',dir=out.parent))

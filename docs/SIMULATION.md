@@ -239,12 +239,45 @@ kernel comparisons check full operators and force derivatives separately.
 
 These diagnostics do **not** qualify full contact stability. Nonconservative
 sliding stability, changing
-projections/normals/areas, one-sided opening or stick/slip transitions and exported
-nonlinear bulk tangents remain outstanding. Full-rank rigid restraint is not a
+projections/normals/areas, one-sided opening or stick/slip transitions and exact
+accepted-state nonlinear tangent qualification remain outstanding. Full-rank rigid restraint is not a
 passing physical-stability result. All contact results remain inconclusive.
 Fault-injected loss-of-contact and radial-slip tests independently verify null
 witnesses against a separately assembled bulk stiffness; they are diagnostic
 tests, not claims that a native solver accepted an unstable equilibrium.
+
+### Actual native Newton systems
+
+Adapter `oxygen-canonical-14` also records the actual pre-solve native Newton
+matrix, equation map, assembly displacement, right-hand side and computed linear
+correction from the pinned external solver. Accepted displacements are saved
+separately. This works with plastic hardening and large deformation as well as
+linear-bulk contact; it does not replace nonlinear bulk with an elastic matrix.
+`native-newton-audit.json` binds every committed frame to accepted STA increments,
+checks the free-DOF map against declared supports, checks the final displacement
+against printed results, and verifies `K * correction = rhs` by normalized backward
+error. Binary/source/runtime-library and per-frame operator/file hashes accompany
+the evidence. Handoff includes the original binary-format matrices and audit.
+
+The format declares integer width and byte order. The reader rejects incomplete
+payloads, unsafe paths, invalid sparse entries, nonfinite values, repeated/missing
+frames, unsupported eliminated MPCs, and false solved corrections. The exporter
+is opt-in (`O3D_CCX_NATIVE_TANGENT=1`) and read-only; the application enables it only
+for a matching build receipt. Build inputs are frozen before compilation. Matrix
+limits are 30,000 equations, eight million stored off-diagonals, 100,000 native
+node labels and 512 MiB total committed binary output. Resource-limited frames
+explicitly report unavailable. Paths without an export report an unperformed
+audit; they do not acquire a substituted matrix.
+
+The last assembly may precede the accepted displacement and internal material or
+contact state. Even a roundoff displacement difference does not establish equal
+constitutive history. `accepted_state_tangent_qualified` and
+`full_contact_stability_qualified` therefore remain false. Controlled numerical
+tests cover nonsymmetric sliding, synthetic plastic loading/unloading and large
+geometry. An independent uniaxial check obtains plastic compliance
+`L/A * (1/E + 1/H)` and elastic unloading compliance `L/(A*E)` from the exported
+native matrices. These tests do not establish physical materials or general
+nonconservative stability.
 
 ## Canonical quadratic study integration
 

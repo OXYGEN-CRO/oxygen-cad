@@ -211,9 +211,9 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     binary=solver_binary()
     from .simulation_solver_profile import validated_build
     system._contact_build=validated_build(binary)
-    overrides={}
+    overrides={'environment_overrides':{'O3D_CCX_NATIVE_TANGENT':'1' if system._contact_build else '0'}}
     if contact is not None or system._contact_build:
-        overrides={'environment_overrides':{'O3D_CCX_CONTACT_TELEMETRY':'1' if system._contact_build else '0'}}
+        overrides['environment_overrides']['O3D_CCX_CONTACT_TELEMETRY']='1' if system._contact_build else '0'
         if system._contact_build:overrides['environment_overrides']['LD_LIBRARY_PATH']=system._contact_build['runtime_library_path']
         if contact is None:overrides['environment_overrides']['O3D_CCX_CONTACT_TELEMETRY']='0'
     run_process([binary,"analysis"],directory,directory/"solver.log",cancel,timeout=240,**overrides)
@@ -356,4 +356,7 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         if system._contact_build:
             from .simulation_contact_evidence import audit_contact
             audit_contact(directory,system._contact_definition,case,result,force)
+    if system._contact_build:
+        from .simulation_native_tangent import audit_native_newton
+        audit_native_newton(directory,system,case,result,increments)
     return result

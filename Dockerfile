@@ -41,8 +41,13 @@ RUN set -eu; ccx_arch="$(dpkg --print-architecture)"; \
    --library "/usr/lib/$ccx_triplet/liblapack.so.3" \
    --library "/usr/lib/$ccx_triplet/libblas.so.3" --jobs 2
 
-COPY scripts/reference_contact_kernel.py scripts/contact_kernel_probe.f90 scripts/
+COPY scripts/reference_contact_kernel.py scripts/contact_kernel_probe.f90 scripts/native_tangent_limits.c scripts/
 RUN python scripts/reference_contact_kernel.py --source-archive /opt/contact-solver/ccx_2.23.src.tar.bz2 --output /opt/contact-kernel
+RUN mkdir /opt/native-tangent-probe \
+ && gcc -O2 -I third_party/calculix scripts/native_tangent_limits.c -lm -o /opt/native-tangent-probe/probe \
+ && cp scripts/native_tangent_limits.c third_party/calculix/oxygen_contact_telemetry.h third_party/calculix/oxygen_native_tangent.h third_party/calculix/COPYING /opt/native-tangent-probe/ \
+ && cd /opt/native-tangent-probe \
+ && sha256sum probe native_tangent_limits.c oxygen_contact_telemetry.h oxygen_native_tangent.h COPYING > SHA256SUMS
 
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 O3D_MESH_PYTHON=/opt/mesh/bin/python O3D_FRONTEND_DIST=/app/frontend/dist
@@ -62,8 +67,10 @@ COPY --from=contact-solver /opt/contact-solver /opt/contact-solver
 COPY --from=contact-solver /opt/solver/lib /opt/solver/lib
 COPY --from=contact-solver /opt/solver/usr/share/doc/libspooles2.2t64/copyright /usr/share/doc/oxygen-spooles/copyright
 COPY --from=contact-solver /opt/contact-kernel /usr/share/oxygen-cad-verification/contact-kernel
+COPY --from=contact-solver /opt/native-tangent-probe /usr/share/oxygen-cad-verification/native-tangent
 ENV CCX_BINARY=/opt/contact-solver/ccx LD_LIBRARY_PATH=/opt/solver/lib
 ENV O3D_CONTACT_KERNEL_EVIDENCE=/usr/share/oxygen-cad-verification/contact-kernel/result.json
+ENV O3D_NATIVE_TANGENT_PROBE=/usr/share/oxygen-cad-verification/native-tangent/probe
 COPY --from=engine /build/engine/target/release/oxygen-engine /usr/local/bin/oxygen-engine
 COPY third_party/solidcraft/LICENSE-MIT third_party/solidcraft/LICENSE-APACHE third_party/solidcraft/NOTICE third_party/solidcraft/THIRD-PARTY-LICENSES.txt /usr/share/doc/oxygen-solidcraft/
 COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/oxygen-solidcraft/OFL.txt
@@ -76,7 +83,7 @@ COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
 COPY o3d ./
-COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/reference_contact_global.py scripts/contact_kernel_probe.f90 scripts/
+COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/reference_contact_global.py scripts/contact_kernel_probe.f90 scripts/native_tangent_limits.c scripts/
 COPY verification-requirements.lock ./
 COPY skills/ skills/
 COPY .claude-plugin/ .claude-plugin/

@@ -247,6 +247,10 @@ test("native solids preserve explicit experimental contact and downloadable evid
     expect(evidence.work_audit.frictional_work_integrated).toBe(true);
     expect(evidence.work_audit.contact_tangent_stability_qualified).toBe(false);
     expect(evidence.work_audit.energy_balance_error).toBeLessThan(1e-5);
+    expect(evidence.native_newton_audit.all_accepted_frames_verified).toBe(true);
+    expect(evidence.native_newton_audit.maximum_solve_backward_error).toBeLessThan(1e-12);
+    expect(evidence.native_newton_audit.accepted_state_tangent_qualified).toBe(false);
+    expect(evidence.native_newton_audit.full_contact_stability_qualified).toBe(false);
     expect(evidence.current_state_audit.bulk_kernel.checked).toBe(true);
     expect(evidence.current_state_audit.minimum_normal_restraint_rank).toBe(12);
     expect(evidence.current_state_audit.minimum_constitutive_rank).toBe(12);
