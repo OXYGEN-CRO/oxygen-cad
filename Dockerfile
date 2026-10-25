@@ -46,7 +46,7 @@ COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
 COPY o3d ./
-COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/
+COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/
 COPY verification-requirements.lock ./
 COPY skills/ skills/
 COPY .claude-plugin/ .claude-plugin/

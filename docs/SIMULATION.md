@@ -17,7 +17,7 @@ converts the other's inputs or establishes full assembly/physics parity.
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
-versioned body/material/case records. Static, nonlinear-static, steady solid thermal, sequential thermal-stress and unloaded modal studies default
+versioned body/material/case records. Static, nonlinear-static, steady solid thermal, sequential thermal-stress, unloaded modal and linearized buckling studies default
 to quadratic meshing; the element-family selector also retains the C3D4 path.
 Existing saved C3D4 models keep their declared family. This is the first shared
 quadratic transfer, not automatic migration of `project.study`/`named_studies`.
@@ -44,7 +44,7 @@ The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
 force/moment idealizations. Disconnected static bodies require separately adequate
 supports; modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Contact, bolts,
-inertial relief, bearing/hydrostatic loads and buckling transfer
+inertial relief and bearing/hydrostatic loads
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately
 listed. Full study/assembly unification remains required.
@@ -78,6 +78,27 @@ correlation/quality evidence; no executed CalculiX modal deck is claimed.
 Current resource budgets: 40 million element-matrix entries, 60,000 unconstrained
 DOFs per independent component, 12 million stored field components and one
 million correlation quadrature points. Larger-model qualification remains open.
+
+Canonical C3D10 buckling solves a complete linear elastic reference-load problem,
+then integrates the initial-stress geometric stiffness from all ten-node physical
+gradients. The generalized equation is `(K + factor * Kg) shape = 0`.
+Positive factors scale every declared dead reference load together; there is no
+independent preload or follower-load stiffness. Density is not required except
+when a gravity reference load needs it. Supports must remove rigid motion.
+The reciprocal symmetric problem uses positive elastic stiffness as its metric,
+never indefinite geometric stiffness as a mass matrix. Strict eigen residuals,
+elastic-stiffness orthogonality, reference force/moment/equation checks and
+quadrature sensitivity execute. Reference fields, full K/Kg, DOF order and four
+spectral guards are retained. Physical-volume body-preserving correlation,
+complete repeated families and real refinement are required for qualification.
+Displayed shapes have unit arbitrary amplitude. Supplied yield data screen
+stress scaled to the first critical load; missing yield remains unknown. A large
+reference deformation or declared yield exceeded makes the result inconclusive.
+This is ideal elastic instability, not imperfect collapse or postbuckling.
+Contact, independent preload, thermal/history/velocity/follower inputs refuse.
+The assembly/field/correlation budgets above apply; buckling additionally limits
+the whole constrained solve to 60,000 free DOFs. Numerical references include SI
+Euler columns and independently assembled scikit-fem straight/curved problems.
 
 Canonical C3D10 steady thermal and prescribed-film electronics thermal studies
 use sourced conductivity without requiring elasticity. They integrate all ten
@@ -450,7 +471,7 @@ The current fixtures agree below 0.00004% in displacement/temperature and below
 
 These are numerical cross-checks on the **same** material/geometry/BC idealization,
 not physical validation or independent approval of the setup. Stress averaging,
-nonlinear/contact/buckling and other study families are not independently
+nonlinear/contact and other study families are not independently
 qualified by those four cases. Two further unloaded-modal cases use independent
 stiffness and mass assembly plus a SciPy generalized eigensolve. Rectangle and
 square-section beams cover distinct and repeated bending modes through Netgen

@@ -23,7 +23,7 @@ CAPABILITIES=[
     ("SIM-05","Bolts/connectors","experimental","Axial elastic truss connector with sourced preload/stiffness; no thread/washer/bending/torque-derived preload"),
     ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 isotropic-hardening curves; full-path peaks/equilibrium, dead loads and axis supports; no translated contact/bolts"),
     ("SIM-07","Modal","experimental","C3D4 lumped and C3D10 consistent-mass eigenpairs, analytic rigid spaces, mass-weighted modal pairing/participation and residuals; no quadratic interfaces/preload transfer"),
-    ("SIM-08","Structural buckling","experimental","Initial-stress generalized eigenproblem with explicit sign/load-factor convention; no imperfect collapse/postbuckling"),
+    ("SIM-08","Structural buckling","experimental","C3D4 and full C3D10 reference-load stress/geometric stiffness, positive factors and physical mode correlation; no imperfect collapse/postbuckling"),
     ("SIM-09","Steady thermal","experimental","C3D4 solid conduction/thermal pair conductance and audited C3D10 conduction, consistent power/flux/body heat/film/radiation with heat balance; quadratic interfaces unavailable"),
     ("SIM-10","Thermal stress","experimental","C3D4 and audited C3D10 sequential same-mesh temperature/expansion transfer, explicit stress-free temperature, both-phase checks and integration-point elastic-range screening"),
     ("SIM-11","Quasi-static Event","experimental","Small-strain explicit transient subset; timestep sensitivity, energy and final kinetic/internal ratio; no large-motion event parity"),
@@ -72,7 +72,7 @@ def preflight(project,domain,study,model):
     for mesh in [model.mesh,*model.refinements]:
         if mesh and mesh.geometry_key!=current:errors.append(f"Mesh {mesh.id} belongs to stale geometry")
         if mesh and {e.body_id for e in mesh.elements}!=set(model.body_ids):errors.append("Mesh body identifiers do not match the analysis model")
-        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
+        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal","buckling"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
     if model.mesh and any(mesh.element_family!=model.mesh.element_family for mesh in model.refinements):errors.append("All refinement levels must use the same element family")
     if model.mesh and model.mesh.element_family=="C3D10":
         if study.interfaces or study.bolts or study.settings.inertial_relief:errors.append("Quadratic contact/connector/inertial-relief translation is not integrated; no condition will be discarded")
@@ -103,7 +103,7 @@ def _latest(store,project,domain,study):
 def _mesh(store,project,domain,study,model,payload,cancel):
     from ..geometry import build
     from ..solver import run_process,mesher_python
-    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal"} else "C3D4"))
+    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal","buckling"} else "C3D4"))
     if family not in {"C3D4","C3D10"}:raise ValueError("Choose C3D4 or C3D10 elements")
     gkey=geometry_key(project)
     built=build(store,project)
@@ -205,6 +205,12 @@ def _run(store,project,domain,study,model,payload,cancel):
         write_json(case_dir/"field.json",fields)
         result["field_artifact"]=str((case_dir/"field.json").relative_to(store.cache))
         result["input_artifact"]=str((destination/"inputs.json").relative_to(store.cache))
+        if "reference_load_evidence" in result:
+            record=result["reference_load_evidence"]
+            source=case_dir/record["path"];evidence=source.resolve()
+            if source.is_symlink() or not evidence.is_relative_to(case_dir.resolve()) or not evidence.is_file():raise ValueError("Invalid reference-load evidence path")
+            if evidence.stat().st_size!=record["bytes"] or hashlib.sha256(evidence.read_bytes()).hexdigest()!=record["sha256"]:raise ValueError("Reference-load evidence changed; results refused")
+            result["reference_load_artifact"]=str(evidence.relative_to(store.cache))
         result["completed_at"]=now()
         # Full normalized output and raw logs are retained, never only a completion badge.
         result["artifact"]=str((case_dir/"result.json").relative_to(store.cache))

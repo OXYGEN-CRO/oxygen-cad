@@ -16,6 +16,7 @@ export interface FieldData {
   modes?: {
     rigid_body?: boolean;
     frequency_hz?: number;
+    load_factor?: number;
     shape?: Record<string, number[]>;
     mass_normalized_displacement?: Record<string, number[]>;
   }[];

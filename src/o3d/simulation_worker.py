@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-6"
+ADAPTER_VERSION="oxygen-canonical-7"
 
 
 def clean(value):
@@ -29,7 +29,11 @@ def numerical_checks(result,study):
     if checks.get("energy_balance_error",0)>settings.energy_tolerance:failures.append("energy balance")
     if checks.get("mass_orthogonality_error",0)>settings.residual_tolerance:failures.append("modal mass orthogonality")
     if study.type=="quasi_static_event" and checks.get("max_kinetic_internal_ratio",1)>settings.quasi_static_energy_ratio:failures.append("quasi-static kinetic/internal energy ratio across significant strain-energy history")
+    if checks.get("stiffness_orthogonality_error",0)>settings.residual_tolerance:failures.append("buckling elastic-stiffness orthogonality")
+    if checks.get("reference_displacement_to_extent_ratio",0)>.05:failures.append("linear reference-load deformation screen exceeded")
+    if checks.get("geometric_integration",{}).get("maximum_sampled_strain_norm",0)>.05:failures.append("linear reference-load strain screen exceeded")
     if "prestress" in checks:
+        if checks["prestress"].get("residual",0)>settings.residual_tolerance:failures.append("prestress equation residual")
         if any(checks["prestress"].get(k,0)>settings.balance_tolerance for k in ("force_balance_error","moment_balance_error")):failures.append("prestress equilibrium")
     if study.type in {"topology","generative"}:failures.append("final editable CAD reconstruction/reanalysis pending")
     return failures
@@ -62,7 +66,7 @@ def solve(request,directory,cancel=None):
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
     if any(mesh.element_family!=family for mesh in meshes):raise ValueError("Refinement levels must use the same element family")
-    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
+    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal","buckling"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
     materials={m.id:m for m in domain.materials}
     iterations=[];result=None;previous=None;converged=False
     previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.;previous_eigen=None
@@ -73,9 +77,9 @@ def solve(request,directory,cancel=None):
             if study.type in {"steady_thermal","electronics_cooling"}:
                 from .simulation_quadratic_thermal import QuadraticThermalSystem
                 system=QuadraticThermalSystem(mesh,study,materials,cancel)
-            elif study.type=="modal":
-                from .simulation_eigen import QuadraticEigenSystem
-                system=QuadraticEigenSystem(mesh,study,materials,cancel)
+            elif study.type in {"modal","buckling"}:
+                from .simulation_eigen import QuadraticEigenSystem,QuadraticElasticSystem
+                system=(QuadraticEigenSystem if study.type=="modal" else QuadraticElasticSystem)(mesh,study,materials,cancel)
             else:system=QuadraticSystem(mesh,study,materials,cancel)
             system.qualify(directory/f"mesh-{i}"/"quality",cancel)
         else:
@@ -122,7 +126,11 @@ def solve(request,directory,cancel=None):
                 from .simulation_eigen import modal_solve as quadratic_modal_solve
                 result=quadratic_modal_solve(system,case,directory/f"mesh-{i}"/"modal",cancel)
             else:result=modal_solve(system,case,cancel)
-        elif study.type=="buckling":result=buckling_solve(system,case,cancel)
+        elif study.type=="buckling":
+            if family=="C3D10":
+                from .simulation_buckling import buckling_solve as quadratic_buckling_solve
+                result=quadratic_buckling_solve(system,case,directory/f"mesh-{i}"/"buckling",cancel)
+            else:result=buckling_solve(system,case,cancel)
         elif study.type=="nonlinear_static":
             result=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-1",cancel)
             refined=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-half",cancel,increment_scale=.5)
@@ -146,7 +154,7 @@ def solve(request,directory,cancel=None):
                 if previous is not None and quantity in previous and quantity in convergence_quantities:
                     changes[quantity]=abs(convergence_quantities[quantity]-previous[quantity])/scale
             previous_thermal_scale=result["checks"]["temperature_convergence_scale_k"]
-        if family=="C3D10" and study.type=="modal":
+        if family=="C3D10" and study.type in {"modal","buckling"}:
             bundle=result.pop("_mode_bundle")
             tracking={"passed":False,"reason":"A second genuinely finer mesh is required"}
             if previous_eigen is not None:
@@ -157,10 +165,10 @@ def solve(request,directory,cancel=None):
             result["mode_tracking"]=tracking
             result["checks"]["mode_tracking_passed"]=tracking["passed"]
             from .store import write_json
-            write_json(directory/f"mesh-{i}"/"modal"/"mode-tracking.json",tracking)
-            changes={f"elastic_mode_{j+1}_frequency_hz":v for j,v in enumerate(tracking.get("quantity_changes",[]))}
+            write_json(directory/f"mesh-{i}"/study.type/"mode-tracking.json",tracking)
+            changes={f"elastic_mode_{j+1}_frequency_hz" if study.type=="modal" else f"mode_{j+1}_load_factor":v for j,v in enumerate(tracking.get("quantity_changes",[]))}
         converged=bool(changes) and all(v<=study.settings.convergence_tolerance for v in changes.values())
-        if family=="C3D10" and study.type=="modal":converged=converged and result["checks"]["mode_tracking_passed"]
+        if family=="C3D10" and study.type in {"modal","buckling"}:converged=converged and result["checks"]["mode_tracking_passed"]
         iterations.append({"mesh_id":mesh.id,"nodes":len(mesh.nodes),"elements":len(mesh.elements),"element_family":family,"mesh_size_mm":mesh.mesh_size_mm,("minimum_mean_ratio_quality" if family=="C3D4" else "minimum_corner_determinant_edge_ratio"):system.quality,"values":quantities,"relative_changes":changes})
         previous=convergence_quantities
     from .simulation_mesh import display_triangles,exterior_triangles
@@ -171,7 +179,7 @@ def solve(request,directory,cancel=None):
     failures=numerical_checks(result,study)
     if family=="C3D10" and study.type in {"linear_static","nonlinear_static","thermal_stress"} and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
     if family=="C3D10" and study.type in {"linear_static","thermal_stress"} and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")
-    if family=="C3D10" and study.type=="modal" and not result["checks"].get("mode_tracking_passed",False):failures.append("physical mass-weighted elastic mode correlation not established")
+    if family=="C3D10" and study.type in {"modal","buckling"} and not result["checks"].get("mode_tracking_passed",False):failures.append("physical mode-shape correlation not established")
     if result["checks"].get("time_step_change",0)>study.settings.convergence_tolerance:failures.append("time-step sensitivity")
     if result["checks"].get("load_step_change",0)>study.settings.convergence_tolerance:failures.append("load-step sensitivity")
     result["checks"]["residual_tolerance_used"]=study.settings.residual_tolerance
@@ -185,6 +193,7 @@ def solve(request,directory,cancel=None):
         strength_screening=limit.quantity=="max_von_mises_mpa"
         findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"operator":limit.operator,"satisfied":met,"source":limit.source,"evidence":"screening peak stress; no nonsingular stress probe convergence" if strength_screening else "specified numerical model","verified":not failures and not strength_screening and met is not None})
     result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
+    if study.type=="buckling":result["field_location"]["mode_shape"]="unit-amplitude reference shape; not physical displacement"
     if family=="C3D10":
         if study.type in {"linear_static","nonlinear_static","thermal_stress"}:result["field_location"]["stress"]="nodal_extrapolated"
         if study.type=="thermal_stress":result["field_location"]["integration_point_stress"]="element_integration_point"

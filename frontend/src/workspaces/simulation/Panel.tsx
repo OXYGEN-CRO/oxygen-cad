@@ -73,6 +73,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
     "electronics_cooling",
     "thermal_stress",
     "modal",
+    "buckling",
   ].includes(study?.type);
   const physicalProbeSupported = [
     "linear_static",
@@ -457,6 +458,13 @@ export default function SimulationPanel(props: DomainPanelProps) {
             <p className="sim-help">
               Rigid motions are reported separately. Mode amplitudes do not
               predict a forced response.
+            </p>
+          )}
+          {study.type === "buckling" && (
+            <p className="sim-help">
+              Positive factors scale all declared reference loads together.
+              Shapes have arbitrary amplitude; imperfect collapse requires a
+              separate nonlinear study.
             </p>
           )}
           <div className="sim-toolbar">
@@ -1244,6 +1252,11 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     <a href={artifact(r.field_artifact)} download>
                       Field JSON
                     </a>
+                    {r.reference_load_artifact && (
+                      <a href={artifact(r.reference_load_artifact)} download>
+                        Reference-load fields
+                      </a>
+                    )}
                     <a href={artifact(r.input_artifact)} download>
                       Exact inputs
                     </a>
@@ -1335,6 +1348,14 @@ export default function SimulationPanel(props: DomainPanelProps) {
                       ? "Rigid-body mode"
                       : "Elastic mode"}{" "}
                     · {field.modes[mode].frequency_hz?.toPrecision(6)} Hz
+                  </p>
+                )}
+              {quantity === "mode" &&
+                field.modes?.[mode]?.load_factor !== undefined && (
+                  <p className="sim-help">
+                    Ideal buckling factor ·{" "}
+                    {field.modes[mode].load_factor?.toPrecision(6)} × reference
+                    load
                   </p>
                 )}
               <label>

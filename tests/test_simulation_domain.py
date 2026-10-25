@@ -218,7 +218,7 @@ def test_unit_source_changes_invalidate_previous_results(tmp_path,monkeypatch):
         return "0"*64 if Path(path).name=="simulation_units.py" else actual_hash(path)
     monkeypatch.setattr(provenance,"fingerprint_file",changed)
     assert input_key(project,domain,study)!=key
-    assert domain_adapter==worker_adapter=="oxygen-canonical-6"
+    assert domain_adapter==worker_adapter=="oxygen-canonical-7"
     request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":before}
     with pytest.raises(ValueError,match="software changed after snapshot"):
         solve(request,tmp_path)

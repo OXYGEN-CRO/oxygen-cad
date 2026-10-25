@@ -109,10 +109,12 @@ for (const [studyType, free] of [
   ["thermal_stress", false],
   ["modal", false],
   ["modal", true],
+  ["buckling", false],
 ] as const) {
   const thermal = studyType === "steady_thermal";
   const coupled = studyType === "thermal_stress";
   const modal = studyType === "modal";
+  const buckling = studyType === "buckling";
   test(`native body meshes and solves canonical quadratic ${studyType}${free ? " free body" : ""} and displays the actual field`, async ({
     page,
     request,
@@ -196,7 +198,7 @@ for (const [studyType, free] of [
               : {
                   youngs_modulus_mpa: 200000,
                   poisson_ratio: 0.3,
-                  density_g_cm3: 7.8,
+                  ...(buckling ? {} : { density_g_cm3: 7.8 }),
                   ...(coupled
                     ? { conductivity_w_mk: 20, expansion_per_k: 0.000012 }
                     : {}),
@@ -214,7 +216,7 @@ for (const [studyType, free] of [
             assumptions_confirmed: true,
             settings: thermal
               ? {}
-              : modal
+              : modal || buckling
                 ? { mode_count: 2 }
                 : { probe_point_mm: [10, 1, 1], probe_body_id: body.id },
             cases: thermal
@@ -242,12 +244,20 @@ for (const [studyType, free] of [
                 ]
               : [
                   {
-                    id: coupled ? "thermoelastic" : modal ? "modal" : "axial",
+                    id: coupled
+                      ? "thermoelastic"
+                      : modal
+                        ? "modal"
+                        : buckling
+                          ? "buckling"
+                          : "axial",
                     name: coupled
                       ? "Thermoelastic SI reference"
                       : modal
                         ? "Modal SI reference"
-                        : "Axial SI reference",
+                        : buckling
+                          ? "Buckling SI reference"
+                          : "Axial SI reference",
                     ...(coupled
                       ? {
                           thermal: [
@@ -261,30 +271,31 @@ for (const [studyType, free] of [
                           ],
                         }
                       : {}),
-                    supports: modal
-                      ? free
-                        ? []
-                        : [{ id: "clamp", region_id: "root", kind: "fixed" }]
-                      : [
-                          {
-                            id: "sx",
-                            region_id: "root",
-                            kind: "partial",
-                            components: [true, false, false],
-                          },
-                          {
-                            id: "sy",
-                            region_id: "y",
-                            kind: "partial",
-                            components: [false, true, false],
-                          },
-                          {
-                            id: "sz",
-                            region_id: "z",
-                            kind: "partial",
-                            components: [false, false, true],
-                          },
-                        ],
+                    supports:
+                      modal || buckling
+                        ? free
+                          ? []
+                          : [{ id: "clamp", region_id: "root", kind: "fixed" }]
+                        : [
+                            {
+                              id: "sx",
+                              region_id: "root",
+                              kind: "partial",
+                              components: [true, false, false],
+                            },
+                            {
+                              id: "sy",
+                              region_id: "y",
+                              kind: "partial",
+                              components: [false, true, false],
+                            },
+                            {
+                              id: "sz",
+                              region_id: "z",
+                              kind: "partial",
+                              components: [false, false, true],
+                            },
+                          ],
                     loads:
                       coupled || modal
                         ? []
@@ -293,7 +304,7 @@ for (const [studyType, free] of [
                               id: "force",
                               kind: "force",
                               region_id: "tip",
-                              vector: [100, 0, 0],
+                              vector: [buckling ? -100 : 100, 0, 0],
                               source: "Declared 100 N analytical force",
                             },
                           ],
@@ -313,7 +324,7 @@ for (const [studyType, free] of [
       await expect(
         page.getByLabel("Element family", { exact: true }),
       ).toHaveValue("C3D10");
-      if (!thermal && !modal)
+      if (!thermal && !modal && !buckling)
         await expect(
           page.getByLabel("Displacement probe (mm)", { exact: true }),
         ).toHaveValue("10, 1, 1");
@@ -321,9 +332,12 @@ for (const [studyType, free] of [
         await expect(
           page.getByLabel("Stress-free temperature (K)", { exact: true }),
         ).toHaveValue("300");
-      if (modal)
+      if (modal || buckling)
         await expect(
-          page.getByLabel("Requested elastic modes", { exact: true }),
+          page.getByLabel(
+            buckling ? "Requested modes" : "Requested elastic modes",
+            { exact: true },
+          ),
         ).toHaveValue("2");
       if (modal) {
         for (const count of [3, 2]) {
@@ -353,7 +367,7 @@ for (const [studyType, free] of [
       }
       await page
         .getByLabel("Initial size (mm)", { exact: true })
-        .fill(modal ? "1.0" : "1.5");
+        .fill(modal || buckling ? "1.0" : "1.5");
       await page.getByLabel("Mesh levels", { exact: true }).fill("2");
       await page
         .getByRole("button", { name: "Generate mesh", exact: true })
@@ -374,7 +388,7 @@ for (const [studyType, free] of [
         .click();
       await expect(
         page.getByText(
-          `${thermal ? "Thermal" : coupled ? "Thermoelastic" : modal ? "Modal" : "Axial"} SI reference · verified numerically`,
+          `${thermal ? "Thermal" : coupled ? "Thermoelastic" : modal ? "Modal" : buckling ? "Buckling" : "Axial"} SI reference · verified numerically`,
           {
             exact: true,
           },
@@ -398,6 +412,13 @@ for (const [studyType, free] of [
         for (const [n, value] of Object.entries(field.temperature_k)) {
           expect(value as number).toBeCloseTo(300 + 10 * field.nodes[n][0], 5);
         }
+      } else if (buckling) {
+        expect(field.modes.length).toBe(2);
+        expect(
+          field.modes.every((m: any) => m.load_factor > 0 && m.residual < 1e-7),
+        ).toBeTruthy();
+        const saved = await (await request.get("/api/project")).json();
+        expect(saved.domains.simulation.materials[0].density_g_cm3).toBeNull();
       } else if (modal) {
         expect(field.modes.length).toBe(free ? 8 : 2);
         expect(field.modes.filter((m: any) => m.rigid_body).length).toBe(
@@ -446,11 +467,28 @@ for (const [studyType, free] of [
         .click();
       await expect(
         page.getByLabel("Field quantity", { exact: true }),
-      ).toHaveValue(thermal ? "temperature" : modal ? "mode" : "displacement");
-      if (modal)
+      ).toHaveValue(
+        thermal ? "temperature" : modal || buckling ? "mode" : "displacement",
+      );
+      if (modal || buckling)
         await expect(page.getByLabel("Mode", { exact: true })).toHaveValue(
           free ? "7" : "1",
         );
+      if (buckling) {
+        await expect(page.getByText(/Ideal buckling factor/)).toBeVisible();
+        const referenceLink = page.getByRole("link", {
+          name: "Reference-load fields",
+          exact: true,
+        });
+        const response = await request.get(
+          (await referenceLink.getAttribute("href"))!,
+        );
+        expect(response.ok()).toBeTruthy();
+        const reference = await response.json();
+        expect(Object.keys(reference.integration_point_stress_mpa).length).toBe(
+          Object.keys(field.element_connectivity).length,
+        );
+      }
       const preview = page.getByLabel(
         "Numerical finite element field preview",
         {

@@ -11,8 +11,10 @@ def track_modes(previous,current,requested,cancel=None):
     old_index={n:i for i,n in enumerate(old_ids)};new_index={n:i for i,n in enumerate(new_ids)}
     if len(old_mesh["elements"])*(4**3+5**3)>MAX_SAMPLE_POINTS:
         raise ValueError(f"Canonical mode correlation exceeds {MAX_SAMPLE_POINTS} physical quadrature points")
-    density=previous["density_tonne_mm3"]
-    if density!=current["density_tonne_mm3"]:raise ValueError("Mode correlation requires unchanged body/material density assignments")
+    weighted_mass="density_tonne_mm3" in previous
+    weight_key="density_tonne_mm3" if weighted_mass else "volume_weights"
+    density=previous[weight_key]
+    if density!=current[weight_key]:raise ValueError("Mode correlation requires unchanged body/physical integration weights")
     if set(previous["element_bodies"])!=set(current["element_bodies"]) or set(density)!=set(previous["element_bodies"]):
         raise ValueError("Mode correlation body ownership changed")
     old=nodal_modes(old_mesh,previous["fields"]);new=nodal_modes(new_mesh,current["fields"])
@@ -43,13 +45,13 @@ def track_modes(previous,current,requested,cancel=None):
             old_samples.append(a);new_samples.append(b);weights.append(mass);body_masses[body]=float(mass.sum())
             evidence.update(body.encode()+points.tobytes()+mass.tobytes())
         audit=correlate_samples(np.concatenate(old_samples),np.concatenate(new_samples),np.concatenate(weights),previous["values"],current["values"],requested)
-        audit.update({"quadrature_order":order,"sample_count":sum(len(w) for w in weights),"body_mass_tonne":body_masses,"points_mass_sha256":evidence.hexdigest()})
+        audit.update({"quadrature_order":order,"sample_count":sum(len(w) for w in weights),("body_mass_tonne" if weighted_mass else "body_volume_mm3"):body_masses,"points_mass_sha256":evidence.hexdigest()})
         audits.append(audit)
     low,high=audits
     difference=np.abs(np.asarray(low["mac_matrix"])-np.asarray(high["mac_matrix"]))
     sensitivity=float(max(difference[:requested].max(),difference[:,:requested].max()))
-    return {"schema_version":1,"method":"body-preserving physical-mass C3D10 MAC and repeated-family principal angles",
-        "inner_product":"positive physical volume times each declared body density; no cross-body interpolation",
+    return {"schema_version":1,"method":"body-preserving physical C3D10 MAC and repeated-family principal angles",
+        "inner_product":("positive physical volume times each declared body density; no cross-body interpolation" if weighted_mass else "positive physical volume; no artificial mass or cross-body interpolation"),
         "minimum_correlation":MIN_CORRELATION,"relative_cluster_gap":CLUSTER_GAP,
         "quadrature_tolerance":QUADRATURE_TOLERANCE,"quadrature_sensitivity":sensitivity,"quadrature_checks":audits,
         "matching":high["matching"],"groups":high["groups"],"quantity_changes":high["quantity_changes"],

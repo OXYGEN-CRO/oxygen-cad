@@ -24,12 +24,13 @@ def check_cancel(cancel):
     if cancel is not None and cancel.is_set():raise Cancelled("Simulation cancelled")
 
 
-class QuadraticEigenSystem(QuadraticSystem):
-    def __init__(self,mesh,study,materials,cancel=None):
+class QuadraticElasticSystem(QuadraticSystem):
+    def __init__(self,mesh,study,materials,cancel=None,*,mass_required=False):
         super().__init__(mesh,study,materials,cancel)
         if study.interfaces or study.bolts or study.settings.inertial_relief:
             raise ValueError("Quadratic eigenanalysis interface/connector/inertial-relief transfer is unavailable")
-        if any(m.density_g_cm3 is None for m in self.assignments.values()):
+        self.mass_required=mass_required
+        if mass_required and any(m.density_g_cm3 is None for m in self.assignments.values()):
             raise ValueError("Quadratic modal analysis requires sourced positive density on every body")
         self.connectivity=np.array([[self.index[n] for n in e.nodes] for e in self.mesh.elements])
         if len(mesh.elements)*900>MAX_ASSEMBLY_ENTRIES:
@@ -50,24 +51,27 @@ class QuadraticEigenSystem(QuadraticSystem):
         product=np.einsum("eqna,eqmb,eq->enamb",physical,physical,weights)
         dot=np.einsum("enama->enm",product)
         stiffness=(lam[:,None,None,None,None]*product+mu[:,None,None,None,None]*(product.transpose(0,1,4,3,2)+np.einsum("enm,ab->enamb",dot,np.eye(3))))
-        density=np.array([density_tonne_mm3(m.density_g_cm3) for m in materials])
-        mass=np.einsum("qn,qm,eq,e->enm",shape,shape,weights,density)
+        mass=None
+        if self.mass_required:
+            density=np.array([density_tonne_mm3(m.density_g_cm3) for m in materials])
+            mass=np.einsum("qn,qm,eq,e->enm",shape,shape,weights,density)
         return stiffness.reshape(-1,30,30),mass
 
     def assemble(self,cancel):
         cells=len(self.mesh.elements)
         kr=np.empty(cells*900,dtype=np.int32);kc=np.empty_like(kr);kv=np.empty(cells*900)
-        mr=np.empty(cells*100,dtype=np.int32);mc=np.empty_like(mr);mv=np.empty(cells*100)
+        if self.mass_required:
+            mr=np.empty(cells*100,dtype=np.int32);mc=np.empty_like(mr);mv=np.empty(cells*100)
         worst_k=worst_m=0.;maximum_order=6
         for start in range(0,cells,64):
             check_cancel(cancel)
             low_k,low_m=self.element_matrices(start,4)
             high_k,high_m=self.element_matrices(start,6)
             def changes(a,b):return np.linalg.norm(a-b,axis=(1,2))/np.maximum(np.linalg.norm(b,axis=(1,2)),1e-30)
-            dk,dm=changes(low_k,high_k),changes(low_m,high_m)
+            dk=changes(low_k,high_k);dm=changes(low_m,high_m) if self.mass_required else np.zeros(len(high_k))
             if max(dk.max(),dm.max())>1e-5:
                 final_k,final_m=self.element_matrices(start,8)
-                dk,dm=changes(high_k,final_k),changes(high_m,final_m)
+                dk=changes(high_k,final_k);dm=changes(high_m,final_m) if self.mass_required else np.zeros(len(final_k))
                 high_k,high_m=final_k,final_m;maximum_order=8
             worst_k=max(worst_k,float(dk.max()));worst_m=max(worst_m,float(dm.max()))
             if max(dk.max(),dm.max())>1e-5:raise ValueError("Curved modal stiffness/mass integration did not converge; refine the mesh")
@@ -75,15 +79,18 @@ class QuadraticEigenSystem(QuadraticSystem):
             dofs=(inds[:,:,None]*3+np.arange(3)[None,None,:]).reshape(count,30)
             a,b=start*900,(start+count)*900
             kr[a:b]=np.repeat(dofs,30,axis=1).ravel();kc[a:b]=np.tile(dofs,(1,30)).ravel();kv[a:b]=high_k.ravel()
-            a,b=start*100,(start+count)*100
-            mr[a:b]=np.repeat(inds,10,axis=1).ravel();mc[a:b]=np.tile(inds,(1,10)).ravel();mv[a:b]=high_m.ravel()
+            if self.mass_required:
+                a,b=start*100,(start+count)*100
+                mr[a:b]=np.repeat(inds,10,axis=1).ravel();mc[a:b]=np.tile(inds,(1,10)).ravel();mv[a:b]=high_m.ravel()
         size=len(self.ids)
         k=sparse.coo_matrix((kv,(kr,kc)),shape=(3*size,)*2).tocsr()
-        scalar_mass=sparse.coo_matrix((mv,(mr,mc)),shape=(size,)*2).tocsr()
-        m=sparse.kron(scalar_mass,sparse.eye(3),format="csr")
-        for name,matrix in [("stiffness",k),("mass",m)]:
+        scalar_mass=sparse.coo_matrix((mv,(mr,mc)),shape=(size,)*2).tocsr() if self.mass_required else None
+        m=sparse.kron(scalar_mass,sparse.eye(3),format="csr") if self.mass_required else None
+        for name,matrix in ([("stiffness",k),("mass",m)] if self.mass_required else [("stiffness",k)]):
             if not np.isfinite(matrix.data).all() or np.any(matrix.diagonal()<=0):raise ValueError(f"Invalid quadratic {name} matrix")
             if sparse.linalg.norm(matrix-matrix.T)>sparse.linalg.norm(matrix)*1e-12:raise ValueError(f"Asymmetric quadratic {name} matrix")
+        if not self.mass_required:
+            return k,None,{"maximum_stiffness_change":worst_k,"maximum_order_used":maximum_order,"mass_model":"not required for static buckling"}
         mass=float(scalar_mass.sum())
         expected=self.mass_g/GRAMS_PER_TONNE
         if abs(mass-expected)>expected*1e-9:raise ValueError("Consistent modal mass disagrees with independently integrated material volume")
@@ -99,6 +106,11 @@ class QuadraticEigenSystem(QuadraticSystem):
                 for axis,active in enumerate(components):
                     if active:fixed.add(3*i+axis)
         return fixed
+
+
+class QuadraticEigenSystem(QuadraticElasticSystem):
+    def __init__(self,mesh,study,materials,cancel=None):
+        super().__init__(mesh,study,materials,cancel,mass_required=True)
 
 
 def modal_solve(system,case,directory,cancel=None):

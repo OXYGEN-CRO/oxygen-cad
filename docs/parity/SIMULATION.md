@@ -85,8 +85,8 @@ quadratic weights with sourced density; negative corner weights are genuine.
 Remote force/moment transfer preserves the requested resultant and moment, with
 its nodal idealization explicit. Fixed/world-axis partial supports are translated
 without rotation/MPC approximations. Each independent static solid must restrain
-all six rigid motions; modal analysis retains the remaining rigid space. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
-buckling translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
+all six rigid motions; modal analysis retains the remaining rigid space. Quadratic contact/bolts/inertial relief, bearing/hydrostatic
+translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
 
 User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
 static displacement probe for either canonical family. Outside points refuse;
@@ -141,3 +141,19 @@ Equation residuals, force/moment or heat balance, energy, genuine mesh refinemen
 The workspace panel preserves the existing application shell and themes. It edits sourced materials and cases, binds selected CAD faces, runs meshes/studies, opens exact snapshots, compares studies and renders numerical fields in a local Three.js view. Advanced typed inputs remain available as JSON. Reports include numerical evidence and limitations. Handoff exports a neutral versioned ZIP and compatible CalculiX decks with a transfer-loss manifest. It does not create an Ansys `.sdz` archive or claim geometry/condition parity with Ansys.
 
 Validation uses disposable projects. The browser form fixture verifies real panel interactions and callback persistence; it deliberately cannot execute a solver. Python tests execute the actual numerical and external-worker paths. Linux results do not establish macOS packaging, hardware correlation or complete Fusion parity.
+
+## Canonical quadratic buckling
+
+Full ten-node canonical elastic buckling now solves declared reference-load
+equilibrium and integrates its initial-stress geometric stiffness. Positive
+critical factors scale every dead reference load together. Density remains
+unrequired unless gravity needs it; no synthetic density is inserted. Elastic
+stiffness supplies the reciprocal eigensolver metric, while geometric stiffness
+may be indefinite. Force/moment/equation checks, strict mode residuals,
+orthogonality and quadrature sensitivity are retained. Complete physical-volume
+body-preserving mode/subspace correlation and genuine refinement are required.
+Full K/Kg, reference displacement/stress/reactions, constraints, guard fields and
+audits export in neutral evidence, without claiming an executed CalculiX deck.
+Explicit yield and reference-deformation screens can make the result inconclusive.
+No independent preload, contact, thermal/history/velocity/follower-load transfer,
+imperfect collapse, postbuckling or physical calibration is established.
