@@ -114,6 +114,9 @@
 .modeling-inline-form label {
   flex: 1 1 70px;
 }
+.modeling-vector { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-control); min-width: 0; }
+.modeling-vector legend { padding-inline: 4px; color: var(--text-secondary); font-size: 11px; }
+.modeling-vector-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .modeling-panel .modeling-check {
   display: flex;
   align-items: center;

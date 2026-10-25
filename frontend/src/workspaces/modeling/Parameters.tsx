@@ -112,11 +112,13 @@ export default function Parameters({
   busy,
   locks = {},
   onLock,
+  onFeatures,
 }: {
   parameters: NativeParameter[];
   execute: Execute;
   busy: boolean;
   locks?: Record<string, boolean>;
+  onFeatures?: () => void;
   onLock: (name: string, locked: boolean) => Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -127,10 +129,31 @@ export default function Parameters({
   const [graph, setGraph] = useState<unknown>(null);
   return (
     <div className="modeling-parameters">
-      <p className="modeling-muted">
-        Native parameters support equations and units. Cycles, incompatible
-        units and used-parameter deletion are checked by the engine.
-      </p>
+      <div className="modeling-row">
+        <strong>Named parameters</strong>
+        {onFeatures && <Button onClick={onFeatures}>Feature dimensions</Button>}
+      </div>
+      <label className="modeling-check">
+        <input
+          type="checkbox"
+          checked={showModel}
+          onChange={(e) => setShowModel(e.target.checked)}
+        />
+        Show model parameters
+      </label>
+      {parameters
+        .filter((p) => showModel || !p.model)
+        .map((p) => (
+          <ParameterRow
+            key={`${p.name}:${p.expression}`}
+            parameter={p}
+            execute={execute}
+            busy={busy}
+            locked={locks[p.name] === true}
+            onLock={onLock}
+          />
+        ))}
+      <h4>Add parameter</h4>
       <form
         className="modeling-form"
         onSubmit={(e) => {
@@ -174,26 +197,6 @@ export default function Parameters({
           Add parameter
         </Button>
       </form>
-      <label className="modeling-check">
-        <input
-          type="checkbox"
-          checked={showModel}
-          onChange={(e) => setShowModel(e.target.checked)}
-        />
-        Show model parameters
-      </label>
-      {parameters
-        .filter((p) => showModel || !p.model)
-        .map((p) => (
-          <ParameterRow
-            key={`${p.name}:${p.expression}`}
-            parameter={p}
-            execute={execute}
-            busy={busy}
-            locked={locks[p.name] === true}
-            onLock={onLock}
-          />
-        ))}
       <Button
         disabled={busy}
         onClick={() => safe(execute("parameters.graph").then(setGraph))}

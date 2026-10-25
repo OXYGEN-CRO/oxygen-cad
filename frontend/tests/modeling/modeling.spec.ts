@@ -588,6 +588,7 @@ test("native history and topology work in both themes at narrow widths", async (
     14400,
     4,
   );
+  await page.getByText("Feature details and history", { exact: true }).click();
   await page
     .getByRole("button", { name: "Suppress / unsuppress", exact: true })
     .click();

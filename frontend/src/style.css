@@ -1551,6 +1551,7 @@ option {
 .creation-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .creation-start button { display: inline-flex; gap: 7px; padding: 10px 14px; min-height: 38px; }
 .canvas-toolbar .create-sketch-tool { gap: 6px; padding-inline: 9px; font-size: 11px; }
+.selection-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .modeling-canvas-host { position: absolute; inset: 0; z-index: 3; background: var(--surface-inset); overflow: hidden; border-radius: inherit; }
 .modeling-canvas-host[hidden], .modeling-canvas-host:empty, .model-card[hidden] { display: none; }
 .right-panel[hidden] { display: none; }

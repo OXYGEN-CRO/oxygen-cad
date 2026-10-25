@@ -54,6 +54,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
   function applyNavigation(detail: {
     feature?: number | string;
     tab?: string;
+    command?: string;
   }) {
     const nextTab = (
       {
@@ -64,6 +65,16 @@ export default function ModelingPanel(props: DomainPanelProps) {
       } as Record<string, Tab>
     )[detail?.tab?.toLowerCase() ?? ""];
     if (nextTab) setTab(nextTab);
+    if (
+      detail.command &&
+      operations.some(
+        (operation) =>
+          operation.command === detail.command && operation.group !== "Sketch",
+      )
+    ) {
+      setOperationId(detail.command);
+      setTab("Solid");
+    }
     if (nextTab === "Sketch" && detail.feature === undefined)
       setCreateOpen(true);
     if (detail?.feature !== undefined) {
@@ -77,8 +88,13 @@ export default function ModelingPanel(props: DomainPanelProps) {
   useEffect(() => {
     const navigate = (event: Event) =>
       applyNavigation(
-        (event as CustomEvent<{ feature?: number | string; tab?: string }>)
-          .detail,
+        (
+          event as CustomEvent<{
+            feature?: number | string;
+            tab?: string;
+            command?: string;
+          }>
+        ).detail,
       );
     window.addEventListener("o3d:modeling", navigate);
     return () => window.removeEventListener("o3d:modeling", navigate);
@@ -110,9 +126,12 @@ export default function ModelingPanel(props: DomainPanelProps) {
       .catch(() => {})
       .then(async () => {
         try {
+          const canonicalInspection =
+            command === "timeline.inspect" &&
+            Boolean(propsRef.current.project.native_document);
           const reply = await propsRef.current.native(command, params);
           setResult({ command, data: reply.result });
-          await reload();
+          if (!canonicalInspection) await reload();
           return reply.result;
         } catch (e) {
           setError(errorText(e));
@@ -198,6 +217,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
         <span className="modeling-muted">
           Revision {props.project.revision}
         </span>
+        {busy && <span className="modeling-muted" role="status">Working…</span>}
         <Button
           disabled={busy}
           aria-label="Refresh native model"
@@ -582,6 +602,9 @@ export default function ModelingPanel(props: DomainPanelProps) {
           execute={execute}
           busy={busy}
           focusedFeature={focusedFeature}
+          revision={props.project.revision}
+          onParameters={() => setTab("Parameters")}
+          onEditSketch={() => setTab("Sketch")}
         />
       )}
       {tab === "Parameters" && (
@@ -591,6 +614,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
           busy={busy}
           locks={locks}
           onLock={lockParameter}
+          onFeatures={() => setTab("History")}
         />
       )}
       {result && (

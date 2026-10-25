@@ -3,7 +3,7 @@ import type { JsonObject } from "../contracts";
 export interface Field {
   key: string;
   label: string;
-  kind?: "text" | "json" | "names" | "boolean";
+  kind?: "text" | "json" | "names" | "boolean" | "vector";
   value?: string;
   options?: string[];
   optional?: boolean;
@@ -32,6 +32,12 @@ const data = (
   value: string,
   optional = false,
 ): Field => ({ key, label, value, kind: "json", optional });
+const vector = (key: string, label: string): Field => ({
+  key,
+  label,
+  value: "[0,0,0]",
+  kind: "vector",
+});
 const choice = (key: string, label: string, options: string[]): Field => ({
   key,
   label,
@@ -348,8 +354,10 @@ export const operations: Operation[] = [
       expr("length", "Length", "40 mm"),
       expr("width", "Width", "30 mm"),
       expr("height", "Height", "10 mm"),
-      data("corner", "Corner", "[0,0,0]"),
+      vector("center", "Center"),
       operation,
+      text("name", "Feature name", "", true),
+      text("body_name", "Body name", "", true),
     ],
   },
   {
@@ -359,9 +367,11 @@ export const operations: Operation[] = [
     fields: [
       expr("diameter", "Diameter", "20 mm"),
       expr("height", "Height"),
-      data("base", "Base center", "[0,0,0]"),
+      vector("base", "Base"),
       choice("axis", "Axis", ["Z", "X", "Y"]),
       operation,
+      text("name", "Feature name", "", true),
+      text("body_name", "Body name", "", true),
     ],
   },
   {
@@ -370,8 +380,10 @@ export const operations: Operation[] = [
     group: "Create",
     fields: [
       expr("radius", "Radius"),
-      data("center", "Center", "[0,0,0]"),
+      vector("center", "Center"),
       operation,
+      text("name", "Feature name", "", true),
+      text("body_name", "Body name", "", true),
     ],
   },
   {
@@ -718,7 +730,21 @@ export function operationParams(
     if (!value && field.optional) continue;
     if (!value && field.kind !== "boolean")
       throw new Error(`${field.label} is required`);
-    if (field.kind === "json") params[field.key] = JSON.parse(value);
+    if (field.kind === "vector") {
+      const coordinates = JSON.parse(value) as unknown;
+      if (!Array.isArray(coordinates) || coordinates.length !== 3)
+        throw new Error(`${field.label} needs X, Y and Z`);
+      params[field.key] = coordinates.map((coordinate, index) => {
+        const expression = String(coordinate).trim();
+        if (!expression)
+          throw new Error(
+            `${field.label} ${["X", "Y", "Z"][index]} is required`,
+          );
+        return Number.isFinite(Number(expression))
+          ? Number(expression)
+          : expression;
+      });
+    } else if (field.kind === "json") params[field.key] = JSON.parse(value);
     else if (field.kind === "names")
       params[field.key] = value
         .split(",")

@@ -20,6 +20,11 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 FIXTURES = {
+    "editing.spec.ts": {
+        "server": "tests/fixtures/editing_server.py", "port": 8975,
+        "port_env": "O3D_TEST_PORT", "host_env": "O3D_TEST_HOST",
+        "enable_env": "O3D_EDITING_JOURNEY",
+    },
     "creation-journey/creation.spec.ts": {
         "server": "tests/fixtures/creation_server.py", "port": 8974,
         "port_env": "O3D_TEST_PORT", "host_env": "O3D_TEST_HOST",

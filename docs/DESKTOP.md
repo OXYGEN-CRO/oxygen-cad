@@ -5,8 +5,8 @@ The Tauri application is a Rust launcher around the existing Oxygen React studio
 ## Install a test build
 
 1. Install and start Docker Desktop on the Mac.
-2. Open the latest successful [CAD and browser checks run](https://github.com/OXYGEN-CRO/oxygen-cad/actions/workflows/ci.yml) and download **Oxygen-CAD-Apple-Silicon** under Artifacts.
-3. Unzip the artifact, then unzip `Oxygen-CAD-Apple-Silicon.zip`. Move **Oxygen CAD.app** to Applications and open it.
+2. Download `Oxygen-CAD-Apple-Silicon.zip` from a tested preview under [Releases](https://github.com/OXYGEN-CRO/oxygen-cad/releases). Public previews are published after the main-branch backend, browser and Mac packaging checks all pass. Each includes its source/build receipt and SHA256 checksum.
+3. Unzip once. Move **Oxygen CAD.app** to Applications and open it. For an older build available only under [Actions artifacts](https://github.com/OXYGEN-CRO/oxygen-cad/actions/workflows/ci.yml), first unzip the artifact wrapper to reach the app ZIP.
 4. The first launch imports its bundled runtime into Docker. Following launches reuse it. Keep Docker Desktop running while using Oxygen.
 
 Test builds are ad-hoc signed, not notarized. macOS may require **System Settings → Privacy & Security → Open Anyway** the first time. No signing account or certificate is needed to build the development preview.

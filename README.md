@@ -16,7 +16,7 @@ The studio uses [Oxygen Studio components](docs/UI.md): neutral dark and light t
 
 The desktop app uses the same Oxygen interface, feature tree, property editor and review tools. A small Rust/Tauri launcher runs the CAD and simulation backend locally through Docker Desktop; it does not connect to the development server. Install and start Docker Desktop before opening the app.
 
-The [CAD and browser checks workflow](https://github.com/OXYGEN-CRO/oxygen-cad/actions/workflows/ci.yml) builds an **Oxygen-CAD-Apple-Silicon** download artifact. The ZIP contains the test app and its local runtime. Unzip, move **Oxygen CAD.app** to Applications and open it. This preview is ad-hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** on first launch. Projects live under `~/Library/Application Support/io.oxygen.cad/projects` and survive app updates and closing Docker.
+Successful main-branch [CAD and browser checks](https://github.com/OXYGEN-CRO/oxygen-cad/actions/workflows/ci.yml) publish a versioned Mac preview under [Releases](https://github.com/OXYGEN-CRO/oxygen-cad/releases). Download **Oxygen-CAD-Apple-Silicon.zip** directly, unzip once, move **Oxygen CAD.app** to Applications and open it. The app includes its local runtime; each release includes source/build information and a checksum. Older builds remain available as Actions artifacts. This preview is ad-hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** on first launch. Projects live under `~/Library/Application Support/io.oxygen.cad/projects` and survive app updates and closing Docker.
 
 The initial runtime is Linux AMD64 because the pinned mesher stack has no Linux ARM64 wheels. Docker Desktop translates it on Apple Silicon. The app window is native ARM64; this is a local desktop preview, not a fully native standalone macOS solver distribution. See [desktop setup](docs/DESKTOP.md) for development and packaging.
 
@@ -30,7 +30,11 @@ cd oxygen-cad
 ./o3d studio
 ```
 
-Open **http://localhost:8787**. A camera mounting bracket is created automatically. Click **Build model** if geometry has not yet been generated. Select a feature, edit its dimensions, save, and rebuild. The default view keeps the model and searchable feature tree visible; selecting a feature or face opens its properties. Geometry controls appear first; expand Placement or Feature details for less frequent edits. Use the View menu for isometric/front/top/right views, `F` to fit, `M` to measure, `/` to find features, and `⌘S` / `Ctrl+S` to save. Breadcrumbs and panel icons collapse or expand either sidebar. The **⋯** menu opens **Study setup** for fit and stress tools and **Project settings** for naming, parameters and requirements, plus source, history, STEP import and agent commands. Save and rebuild controls appear when needed.
+Open **http://localhost:8787**. A camera mounting bracket is created automatically. Use **Edit dimensions** to change named dimensions such as width or thickness; **Feature dimensions** opens the feature chooser for individual operations. You can also select a feature in the left-hand list and edit its dimensions directly. Apply the parameter or feature change to save it and update the geometry. Selecting a surface selects geometry; it does not choose an arbitrary construction feature for you.
+
+Use **Add shape → Box, Cylinder or Sphere** to create a solid with dimension and X/Y/Z placement fields. Choose **New body**, **Join** or **Cut** for the intended operation. **Create sketch** opens planar drawing tools in the main canvas; finish the sketch to use its profiles for an extrusion. Undo and Redo are in the **⋯** project menu.
+
+The default view keeps the model and searchable feature tree visible. Click **Build model** if existing geometry needs rebuilding. Use the View menu for isometric/front/top/right views, `F` to fit, `M` to measure, `/` to find features, and `⌘S` / `Ctrl+S` to save a legacy/source draft. Breadcrumbs and panel icons collapse or expand either sidebar. The **⋯** menu opens **Study setup**, **Project settings**, source/history, import and agent tools. Controls vary with the active project and tool; the parity ledger above records remaining limitations.
 
 From another terminal in the repository:
 

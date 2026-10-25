@@ -36,7 +36,7 @@ export default function OperationForm({
           f.key,
           value === undefined
             ? (f.value ?? "")
-            : f.kind === "json"
+            : f.kind === "json" || f.kind === "vector"
               ? JSON.stringify(value)
               : f.kind === "names" && Array.isArray(value)
                 ? value.join(", ")
@@ -115,6 +115,38 @@ export default function OperationForm({
               </output>
             )}
           </div>
+        ) : field.kind === "vector" ? (
+          <fieldset className="modeling-vector" key={field.key}>
+            <legend>
+              {field.label}
+              {field.key === "base" ? " center" : ""}
+            </legend>
+            <div className="modeling-vector-inputs">
+              {["X", "Y", "Z"].map((axis, index) => {
+                const coordinates = JSON.parse(
+                  values[field.key] || "[0,0,0]",
+                ) as (string | number)[];
+                return (
+                  <label key={axis}>
+                    {axis}
+                    <Input
+                      aria-label={`${field.label} ${axis}`}
+                      value={coordinates[index] ?? ""}
+                      required
+                      onChange={(event) => {
+                        const next = [...coordinates];
+                        next[index] = event.target.value;
+                        setValues({
+                          ...values,
+                          [field.key]: JSON.stringify(next),
+                        });
+                      }}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
         ) : (
           <label
             key={field.key}
@@ -147,7 +179,19 @@ export default function OperationForm({
                     }
                   >
                     {field.options.map((option) => (
-                      <option key={option}>{option}</option>
+                      <option key={option} value={option}>
+                        {field.key === "operation"
+                          ? ((
+                              {
+                                new: "New body",
+                                join: "Join",
+                                cut: "Cut",
+                                intersect: "Intersect",
+                                auto: "Automatic",
+                              } as Record<string, string>
+                            )[option] ?? option)
+                          : option}
+                      </option>
                     ))}
                   </SelectControl>
                 ) : (

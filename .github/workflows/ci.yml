@@ -97,7 +97,8 @@ jobs:
           O3D_DESKTOP_RUNTIME_ARCHIVE: ${{ github.workspace }}/desktop-runtime/runtime.tar.gz
         run: |
           test "$(uname -m)" = arm64
-          export O3D_DESKTOP_RUNTIME_IMAGE="$(cat desktop-runtime/image-id.txt)"
+          O3D_DESKTOP_RUNTIME_IMAGE="$(cat desktop-runtime/image-id.txt)"
+          export O3D_DESKTOP_RUNTIME_IMAGE
           npm ci --prefix desktop
           cd desktop
           npm run build -- --target aarch64-apple-darwin --bundles app
@@ -114,3 +115,45 @@ jobs:
           name: Oxygen-CAD-Apple-Silicon
           path: desktop-download/
           compression-level: 0
+  publish-preview:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [browser, desktop-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Oxygen-CAD-Apple-Silicon
+          path: preview-download
+      - name: Prepare public preview receipt
+        run: |
+          cd preview-download
+          sha256sum Oxygen-CAD-Apple-Silicon.zip > SHA256SUMS.txt
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          sha = os.environ['GITHUB_SHA']
+          run = os.environ['GITHUB_RUN_ID']
+          Path('source.json').write_text(json.dumps({'commit': sha, 'run_id': run, 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'platform': 'macOS Apple Silicon', 'runtime': 'local Docker Desktop; not a standalone native solver'}, indent=2) + '\n')
+          Path('release-notes.md').write_text(f'''Apple Silicon desktop test preview from `{sha}`.
+
+          Download **Oxygen-CAD-Apple-Silicon.zip** below, unzip once and move **Oxygen CAD.app** to Applications. Projects remain in the app's Application Support folder.
+
+          **Docker Desktop is required for this preview.** The app is ad-hoc signed, not notarized; macOS may require Privacy & Security → Open Anyway on first launch. A fully native standalone runtime remains separate work.
+
+          This source passed its CAD/numerical checks and browser acceptance; macOS packaging passed. Automated checks do not establish full Fusion parity or physical Mac task acceptance.
+
+          Source and build receipt: source.json. Verify the archive with SHA256SUMS.txt.
+          ''')
+          PY
+      - name: Publish versioned Mac preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "preview-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Mac editing preview ${GITHUB_SHA::7}" --prerelease --latest=false \
+            --notes-file preview-download/release-notes.md \
+            preview-download/Oxygen-CAD-Apple-Silicon.zip \
+            preview-download/SHA256SUMS.txt preview-download/source.json

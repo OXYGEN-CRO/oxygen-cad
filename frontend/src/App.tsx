@@ -1081,6 +1081,11 @@ export default function App() {
           {centralWorkspace ? <div className="workspace-editor" id="workspace-editor">{workspacePanel}</div> : <>
           <div className="canvas-toolbar" style={activeSketch ? { visibility: "hidden" } : undefined}>
             <div>
+              {!emptyModel && !activeSketch && (tab === "design" || tab === "modeling") && <Button className="create-sketch-tool" disabled={dirty || busy} onClick={() => openModeling({ tab: "parameters" })}>Edit dimensions</Button>}
+              {!activeSketch && (tab === "design" || tab === "modeling") && <Menu>
+                <MenuTrigger asChild><Button className="create-sketch-tool" disabled={dirty || busy}><Box size={15} />Add shape<ChevronDown size={12} /></Button></MenuTrigger>
+                <MenuContent className="tools-popover" aria-label="Add shape">{[["solid.box", "Box"], ["solid.cylinder", "Cylinder"], ["solid.sphere", "Sphere"]].map(([command, label]) => <MenuItem className="ui-menu-item" key={command} onSelect={() => openModeling({ tab: "solid", command })}>{label}</MenuItem>)}</MenuContent>
+              </Menu>}
               {!emptyModel && !activeSketch && (tab === "design" || tab === "modeling") && <Button className="create-sketch-tool" disabled={dirty || busy} onClick={() => openModeling({ tab: "sketch" })}><Square size={15} />Create sketch</Button>}
               <ToolButton
                 hint="Measure between two surface points"
@@ -2146,6 +2151,10 @@ export default function App() {
                       Point{" "}
                       {selection.point.map((v) => v.toFixed(3)).join(", ")} mm
                     </small>
+                    <div className="selection-edit-actions">
+                      <Button disabled={dirty || busy} onClick={() => openModeling({ tab: "parameters" })}>Named parameters</Button>
+                      <Button disabled={dirty || busy} onClick={() => openModeling({ tab: "history" })}>Feature dimensions</Button>
+                    </div>
                     <Button
                       className="wide-button"
                       onClick={() => {
