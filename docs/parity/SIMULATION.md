@@ -6,7 +6,7 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-10` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-11` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials retain their identity. Linear perfect mortar bonds and
@@ -198,3 +198,29 @@ penalty and energy checks remain distinct. Stock solver work remains unqualified
 mixed bond/contact, self-contact, connectors, thermal contact and physical
 interface/material correlation remain open. Independent SI compression/opening
 and guided shear references establish only the stated numerical fixtures.
+
+
+## Independent load histories
+
+Canonical nonlinear static and existing C3D4 events accept an optional `history`
+on each load. It overrides the shared case multiplier. Without a shared fallback,
+every load needs an explicit history; declared schedules have at least two points,
+start at zero time, have strictly increasing times and share their final time.
+Nonlinear static also requires zero initial multipliers. Event curves must cover
+the full physical duration. Missing schedules, extrapolation and histories on
+unsupported studies refuse.
+
+The union of schedule knots defines static steps. Complete consistent nodal bases
+are assembled separately, so loads whose reference vectors cancel still act in
+different phases. Explicit zero endpoint entries clear previous CLOADs. Every
+increment's reactions, per-body equilibrium and contact external-work audit use
+the actual independently resolved force vector. Native printed endpoint rounding
+is matched only to an unambiguous declared knot for evaluating loads; raw output
+times remain recorded. Phases closer than printed-time resolution refuse.
+
+`load-path.json` retains the resolved schedules, sources, spatial-force hashes,
+resultants and time convention. Events expose the same audit and per-load factors.
+The studio edits shared/per-load curves and preserves them through revision checks,
+input invalidation and handoff. Constant normal preload and shear reversal are
+checked against an analytical guided spring-slider; this does not qualify general
+friction cycles, rate-dependent friction, wear or active-set tangent stability.

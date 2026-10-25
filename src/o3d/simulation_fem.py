@@ -629,10 +629,9 @@ def event_solve(system,case,cancel=None,step_scale=1.):
     steps=math.ceil(settings.duration_s/dt)
     if steps>settings.max_time_steps:raise ValueError(f"Event requires {steps} steps, exceeding budget {settings.max_time_steps}; no mass scaling applied")
     dt=settings.duration_s/steps
-    if case.history and case.history[-1][0]<settings.duration_s:raise ValueError("Load history does not cover the entire event")
-    if not case.history and case.loads:raise ValueError("Event loads require an explicit time multiplier history")
-    load=system.loads(case)
-    def external(time):return load*np.interp(time,[p[0] for p in case.history],[p[1] for p in case.history]) if case.history else np.zeros_like(load)
+    from .simulation_loading import LoadPath
+    load_path=LoadPath(system,case,event_duration=settings.duration_s)
+    external=load_path.at
     def internal(q):
         u=np.asarray(t@q).ravel()
         ki,preload,interfaces=system.interface_stiffness(u)
@@ -676,7 +675,7 @@ def event_solve(system,case,cancel=None,step_scale=1.):
         error=abs(kinetic+strain+dissipation-work-initial_energy)/max(abs(work),abs(initial_energy),abs(strain),1e-12)
         max_error=max(max_error,error)
         if step==steps or step%max(1,steps//200)==0:
-            history.append({"time_s":step*dt,"kinetic_energy_n_mm":kinetic,"strain_energy_n_mm":strain,"external_work_n_mm":work,"damping_energy_n_mm":dissipation,"relative_energy_error":float(error),"energy_residual_n_mm":float(kinetic+strain+dissipation-work-initial_energy),"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max())})
+            history.append({"time_s":step*dt,"load_multipliers":load_path.factors(step*dt),"kinetic_energy_n_mm":kinetic,"strain_energy_n_mm":strain,"external_work_n_mm":work,"damping_energy_n_mm":dissipation,"relative_energy_error":float(error),"energy_residual_n_mm":float(kinetic+strain+dissipation-work-initial_energy),"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max())})
         if step==steps:break
         next_q=q+dt*velocity+.5*dt*dt*acc
         next_force=np.asarray(t.T@external((step+1)*dt)).ravel()
@@ -695,4 +694,4 @@ def event_solve(system,case,cancel=None,step_scale=1.):
     ratio=history[-1]["kinetic_energy_n_mm"]/max(history[-1]["strain_energy_n_mm"],1e-12)
     peak_internal=max(pair[1] for pair in energy_pairs)
     max_ratio=max((kinetic/max(strain,1e-12) for kinetic,strain in energy_pairs if strain>.05*peak_internal),default=0.)
-    return {"values":{"max_displacement_mm":peak_displacement,"final_displacement_mm":history[-1]["max_displacement_mm"],"max_von_mises_mpa":peak_stress},"checks":{"residual":0.,"energy_balance_error":float(max_error),"final_kinetic_internal_ratio":float(ratio),"max_kinetic_internal_ratio":float(max_ratio),"time_step_s":dt,"stability_limit_s":stable,"time_steps":steps,"mass_scaling":False},"field":fields,"time_history":history,"interfaces":interfaces,"warnings":["Small-strain central-difference event; no damage, element deletion or rate-dependent material model."]}
+    return {"values":{"max_displacement_mm":peak_displacement,"final_displacement_mm":history[-1]["max_displacement_mm"],"max_von_mises_mpa":peak_stress},"checks":{"residual":0.,"energy_balance_error":float(max_error),"final_kinetic_internal_ratio":float(ratio),"max_kinetic_internal_ratio":float(max_ratio),"time_step_s":dt,"stability_limit_s":stable,"time_steps":steps,"mass_scaling":False},"field":fields,"time_history":history,"load_path":load_path.audit(),"interfaces":interfaces,"warnings":["Small-strain central-difference event; no damage, element deletion or rate-dependent material model."]}

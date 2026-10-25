@@ -76,10 +76,10 @@ def audit_contact(directory,contact,case,result,force):
     volume_weights={e.id:np.array([np.linalg.det((np.array([system.mesh.nodes[n] for n in e.nodes])-system.mesh.nodes[e.nodes[0]]).T@g)/24 for g in volume_gradients]) for e in system.mesh.elements}
     if any(np.any(w<=0) for w in volume_weights.values()):raise ValueError('Invalid solver-order bulk energy quadrature')
     expected={(r['step'],r['increment']):r for r in result['checks']['increments']}
-    load_history=case.history or [(0.,0.),(1.,1.)]
+    load_path=system._load_path
     printed=json.loads((directory/'contact.json').read_text())['history']
     previous_u=np.zeros((len(system.ids),3));previous_f=np.zeros_like(previous_u)
-    base_force=force.reshape(-1,3);force_scale=max(float(np.linalg.norm(base_force,axis=1).sum()),1e-300)
+    force_scale=max(load_path.force_scale_n,1e-300)
     work=0.;dissipation=0.;initial_energy=None;history=[];seen=set();maximum_errors={}
     elastic_scale=sum(system.assignments[b].youngs_modulus_mpa*v for b,v in system.body_volumes.items())
     for frame in frames(path):
@@ -100,7 +100,7 @@ def audit_contact(directory,contact,case,result,force):
             seen.add(identity)
         elif abs(time)>contact.initialization_period*1e-6:
             raise ValueError('Unexpected contact initialization load parameter')
-        f=base_force*float(np.interp(max(time,0),[p[0] for p in load_history],[p[1] for p in load_history])) if loaded else np.zeros_like(base_force)
+        f=load_path.at(time).reshape(-1,3) if loaded else np.zeros_like(previous_u)
         work+=float(np.sum((f+previous_f)*(u-previous_u)))/2
         if loaded and np.max(np.linalg.norm(previous-previous_u,axis=1))>extent*1e-8:
             raise ValueError('Exported increment-start displacement differs from the previous accepted state')
@@ -142,8 +142,8 @@ def audit_contact(directory,contact,case,result,force):
             values=finite(point['contact_displacement_stress'],(6,));pressure=values[3];tau=values[4]*t1+values[5]*t2
             xs=a@(sx+su);xm=b@(mx+mu)
             if loaded:
-                left,right=load_history[meta['step']-2:meta['step']]
-                relative_time=(time-left[0])/(right[0]-left[0])
+                left,right=load_path.times[meta['step']-2:meta['step']]
+                relative_time=(time-left)/(right-left)
             else:relative_time=meta['solver_total_time']/contact.initialization_period
             correction=float(finite(point['first_step_clearance_correction_mm']))*(1-relative_time)
             gap_error=max(gap_error,abs(float((xs-xm)@normal)-correction-values[0]))
@@ -180,6 +180,7 @@ def audit_contact(directory,contact,case,result,force):
                 moment_error=max(moment_error,float(np.linalg.norm(secondary_moment[record['id']]-cf[3:]))/(force_scale*extent))
             if max(resultant_error,moment_error)>1e-5:raise ValueError('Independent quadrature forces/moments differ from printed contact resultants')
             history.append({'step':meta['step'],'increment':meta['increment'],'time_s':time,'solver_total_time':meta['solver_total_time'],
+                'load_multipliers':load_path.factors(time),
                 'bulk_internal_energy_n_mm':bulk,'contact_spring_energy_n_mm':spring,'friction_increment_n_mm':diss,
                 'frictional_dissipation_n_mm':dissipation,'external_work_n_mm':work,
                 'energy_residual_n_mm':bulk+spring+dissipation-initial_energy-work,

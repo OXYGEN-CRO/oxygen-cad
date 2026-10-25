@@ -121,7 +121,7 @@ def normalize_contact_history(contact,history,frames,vectors,increments,converge
     if initial_vectors is None or any(set(initial_vectors.get(k,{}))!=set(system.ids) for k in ('displacements','reactions')):raise RuntimeError('Incomplete contact initialization displacement/reaction audit')
     initial_force=float(np.linalg.norm(np.array(list(initial_vectors['reactions'].values())),axis=1).sum())
     initial_displacement=max(r['max_displacement_mm'] for r in initial)
-    if initial_displacement>extent*1e-10 or initial_force>max(float(np.linalg.norm(force)),1.)*1e-8:raise RuntimeError('Unloaded contact initialization moved/loaded the design; initial interference/prestress requires explicit modeling')
+    if initial_displacement>extent*1e-10 or initial_force>max(system._load_path.force_scale_n,1.)*1e-8:raise RuntimeError('Unloaded contact initialization moved/loaded the design; initial interference/prestress requires explicit modeling')
     initial_contact=[f for f in frames if f['name']=='CONTACT' and np.isclose(f['time'],offset,rtol=1e-6,atol=0)]
     if not initial_contact or any(set(f['values'])!=set(system.ids) for f in initial_contact):raise RuntimeError('Missing initial contact stress audit')
     initial_pressure=max(abs(v[3]) for f in initial_contact for v in f['values'].values())
@@ -186,7 +186,7 @@ def read_contact(directory,contact,case,result,frames,vector_history,force,const
                 entry[expect]=values;expect=None
             elif current is not None:current=None
     checks=[];maximum_penetration=0.;penalty_error=0.;coulomb_error=0.;penetration_ratio=0.
-    load_history=case.history or [(0.,0.),(1.,1.)]
+    load_path=system._load_path
     for time,row in data.items():
         if row['spring_energy_n_mm'] is None or not np.isfinite(row['spring_energy_n_mm']) or row['spring_energy_n_mm']<0:raise RuntimeError('Missing/nonfinite/negative contact spring energy')
         displacements=row['displacement'];stresses=row['stress']
@@ -202,10 +202,10 @@ def read_contact(directory,contact,case,result,frames,vector_history,force,const
             coulomb_error=max(coulomb_error,max(shear-record['friction_coefficient']*pressure,0.)/max(abs(pressure),shear,1e-300),max(-pressure,0.)/scale)
             maximum_penetration=max(maximum_penetration,penetration);penetration_ratio=max(penetration_ratio,penetration/record['declared_maximum_penetration_mm'])
             peak=pair_peaks[record['id']];peak['maximum_penetration_mm']=max(peak['maximum_penetration_mm'],penetration);peak['maximum_pressure_mpa']=max(peak['maximum_pressure_mpa'],pressure);peak['maximum_shear_mpa']=max(peak['maximum_shear_mpa'],shear)
-        factor=float(np.interp(time,[p[0] for p in load_history],[p[1] for p in load_history]));applied=force.reshape(-1,3)*factor
+        applied=load_path.at(load_path.output_time(time)).reshape(-1,3)
         vectors=vector_history[time];raw=np.array([vectors['reactions'][n] for n in system.ids]);reacted=np.where(constrained,raw-applied,0.)
         xyz=system.xyz+(np.array([vectors['displacements'][n] for n in system.ids]) if system.study.settings.large_deformation else 0.)
-        forces={};moments={};scale=max(float(np.linalg.norm(force.reshape(-1,3),axis=1).sum()),1e-300)
+        forces={};moments={};scale=max(load_path.force_scale_n,1e-300)
         for body,nodes in system.body_nodes.items():
             indices=[system.index[n] for n in nodes];external=applied[indices]+reacted[indices]
             forces[body]=external.sum(axis=0);moments[body]=np.cross(xyz[indices],external).sum(axis=0)

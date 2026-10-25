@@ -147,9 +147,10 @@ final displacement while failing work convergence. The independent simple-shear
 reference is 0.025125 N mm; refinement must approach it. Single solves do not earn
 work qualification. `contact.json`, downloadable in the studio, includes the work
 audit and history; the handoff preserves every raw state/trial. Active-set tangent
-stability remains unqualified even when these energy checks pass. Changing normal
-preload independently from shear, reversal/cyclic friction, large sliding,
-nonlinear constitutive energy and measured friction require further qualification.
+stability remains unqualified even when these energy checks pass. Independent normal preload and a guided symmetric shear reversal now have
+analytical work checks through the independent load histories below. General
+cyclic friction, large sliding, nonlinear constitutive energy and measured
+friction require further qualification.
 
 The binary, adjacent build receipt and actual loaded shared libraries are hashed
 in result provenance. Runtime library drift invalidates results or refuses an
@@ -509,6 +510,62 @@ residuals/tangents. These are numerical checks on the supplied idealization;
 they do not establish measured heat-transfer coefficients or electronics CFD.
 
 The deck conventions follow the [CalculiX 2.23 manual](https://www.dhondt.de/ccx_2.23.htm.tar.bz2), including `*PLASTIC`, `*AMPLITUDE`, `*STATIC` and `*TIME POINTS`. Large deformation alone does not establish that a material model is valid at arbitrary large strain.
+
+## Independent canonical load histories
+
+A load can provide `history: [[time, multiplier], ...]`, overriding its case's
+shared history. An empty load history inherits the shared curve. If any load has
+an override and the case has no shared curve, every load must have an explicit
+curve. All declared curves end at the same case time, contain at least two points,
+start at zero time and have strictly increasing finite times. Their load `source`
+covers both spatial values and schedule. Nonlinear static requires zero initial
+multipliers; it does not infer prestress from a nonzero first value. With no
+histories, its existing default zero-to-one ramp remains. Events require explicit
+curves that cover their entire physical duration.
+
+For example, these independent multipliers ramp normal preload, hold it through
+a shear reversal, then return the applied shear to zero:
+
+```json
+{
+  "normal": [[0, 0], [1, 1], [4, 1]],
+  "shear": [[0, 0], [1, 0], [2, 1], [3, -1], [4, 0]]
+}
+```
+
+These are illustrative curve values, not material/force recommendations. Each
+curve goes on its corresponding sourced load record. Nonlinear-static time is a
+rate-independent load parameter; event time is physical seconds. No physical rate
+or rate-sensitive material law is inferred from a static curve.
+
+The static adapter uses the union of all knots and ramps each complete equivalent
+nodal force vector between endpoints. It retains explicit zero entries to clear
+previous loads. Separate spatial bases preserve opposing loads whose unscaled
+sum vanishes. Reaction subtraction, per-increment/body equilibrium and external
+work use the actual time-resolved force vector. Independent forces also drive the
+existing physical-inertia event adapter. Unsupported study families refuse these
+histories rather than applying only their last value.
+
+`load-path.json` records each source, resolved curve/origin, spatial nodal-force
+hash, resultant and moment, plus time convention and force scale. Increment and
+work histories expose per-load multipliers. Solver-printed times have fewer digits
+than the deck; an unambiguous nearby declared knot is used only for evaluating
+loads, with raw output/evaluation times retained separately. No extrapolation is
+allowed and unresolved phase-time ambiguity refuses. Linear elastic problems
+submitted through the nonlinear entry point may have no nonlinear convergence
+log; only when contact, geometric nonlinearity and plasticity are all absent does
+complete per-increment free-DOF RF/CLOAD equilibrium provide the residual instead.
+Missing nonlinear convergence evidence still refuses a genuinely nonlinear model.
+
+Independent tests include delayed opposite forces with cancelling reference sum,
+full unloading, fractional printed endpoints, a free-flight triangular acceleration
+pulse and a constant-normal-load guided friction cycle. In the latter reference,
+bulk shear stiffness40000N/mm, tangential penalty400000N/mm and declared mu*N30N
+predict0.17625Nmm dissipation and a residual -0.00075mm shear displacement after
+100→-100→0N applied shear. Load-step refinement checks the full work trajectory and
+external/internal/spring/dissipation balance. These synthetic references do not
+calibrate friction or establish general contact stability. All surface-contact
+results remain inconclusive pending tangent-stability qualification.
 
 ## CAD → analysis and meshing
 

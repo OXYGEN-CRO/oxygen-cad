@@ -4,6 +4,7 @@ import { artifact } from "../../api";
 import type { Material } from "../../generated";
 import type { DomainPanelProps, JsonObject } from "../contracts";
 import FieldPreview, { type FieldData } from "./FieldPreview";
+import LoadHistoryEditor from "./LoadHistoryEditor";
 import "./simulation.css";
 
 type Row = Record<string, any>;
@@ -54,8 +55,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
     [caseId, setCaseId] = useState("");
   const [elementFamily, setElementFamily] = useState("C3D10");
   const [probeText, setProbeText] = useState("");
-  const [advanced, setAdvanced] = useState(""),
-    [historyText, setHistoryText] = useState("");
+  const [advanced, setAdvanced] = useState("");
   const serialized = JSON.stringify(props.domainData);
   useEffect(() => {
     setData(parse(props.domainData));
@@ -598,7 +598,6 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 value={loadCase?.id ?? ""}
                 onChange={(e) => {
                   setCaseId(e.target.value);
-                  setHistoryText("");
                 }}
               >
                 {study.cases.map((c: Row) => (
@@ -788,6 +787,28 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     }
                   />
                 </label>
+                {(event ||
+                  study.type === "nonlinear_static" ||
+                  l.history?.length > 0) && (
+                  <>
+                    <LoadHistoryEditor
+                      key={`${loadCase.id}:${l.id}`}
+                      label={`Load ${index + 1} history (time, multiplier)`}
+                      value={l.history ?? []}
+                      onApply={(history) =>
+                        editCase((c) => {
+                          c.loads[index].history = history;
+                        })
+                      }
+                      onError={props.setError}
+                    />
+                    <span className="sim-help">
+                      An empty load history uses the shared case history.
+                      Without a shared history, specify every load and use the
+                      same final time. The load source covers the schedule.
+                    </span>
+                  </>
+                )}
                 <Button
                   onClick={() => editCase((c) => c.loads.splice(index, 1))}
                 >
@@ -903,43 +924,30 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     }
                   />
                 </label>
-                <label>
-                  Time (s), load multiplier per line
-                  <textarea
-                    value={
-                      historyText ||
-                      (loadCase?.history ?? [])
-                        .map((p: number[]) => p.join(", "))
-                        .join("\n")
-                    }
-                    onChange={(e) => setHistoryText(e.target.value)}
-                    placeholder={"0, 0\n0.001, 1"}
-                  />
-                </label>
-                <Button
-                  onClick={() => {
-                    try {
-                      const history = historyText
-                        .split("\n")
-                        .filter(Boolean)
-                        .map((line) => {
-                          const row = line.split(",").map(Number);
-                          if (row.length !== 2 || !row.every(Number.isFinite))
-                            throw new Error(
-                              "Each history row needs time, multiplier.",
-                            );
-                          return row;
-                        });
-                      editCase((c) => {
-                        c.history = history;
-                      });
-                    } catch (e) {
-                      props.setError(String(e));
-                    }
-                  }}
-                >
-                  Apply history
-                </Button>
+              </>
+            )}
+            {(event ||
+              study.type === "nonlinear_static" ||
+              loadCase?.history?.length > 0) && (
+              <>
+                <LoadHistoryEditor
+                  key={`case:${loadCase?.id}`}
+                  label="Shared case history (time, multiplier)"
+                  value={loadCase?.history ?? []}
+                  onApply={(history) =>
+                    editCase((c) => {
+                      c.history = history;
+                    })
+                  }
+                  onError={props.setError}
+                />
+                <span className="sim-help">
+                  {event
+                    ? "Time is in physical seconds."
+                    : "Time is a rate-independent static load parameter; this does not define a physical loading rate."}{" "}
+                  Each load can override the shared multiplier. With no
+                  histories, nonlinear static uses its default zero-to-one ramp.
+                </span>
               </>
             )}
           </details>

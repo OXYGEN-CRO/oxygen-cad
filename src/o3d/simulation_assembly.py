@@ -62,7 +62,7 @@ def von_mises(t):
 
 
 def bonded_solve(system,case,directory,cancel=None):
-    if case.history or case.thermal or any(case.initial_velocity_mm_s) or system.study.settings.large_deformation:
+    if (case.history or any(load.history for load in case.loads)) or case.thermal or any(case.initial_velocity_mm_s) or system.study.settings.large_deformation:
         raise ValueError('Linear bonded assembly does not translate thermal/history/velocity/large-deformation inputs')
     t,fixed=system.bonding.transformation(case,cancel)
     if t.shape[1]>MAX_COMPONENT_DOFS:raise ValueError('Bonded assembly exceeds 60000 independent DOFs; larger-model qualification is required')

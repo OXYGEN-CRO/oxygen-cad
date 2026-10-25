@@ -11,6 +11,7 @@ import numpy as np
 from .solver import run_process, solver_binary, parse_stress, calculix_number,calculix_float,CALCULIX_REAL_PATTERN
 from .simulation_fem import System
 from .simulation_units import density_tonne_mm3
+from .simulation_loading import LoadPath,has_history
 
 
 def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1., temperatures=None):
@@ -31,14 +32,15 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     if any(case.initial_velocity_mm_s):raise ValueError("Static CalculiX studies do not translate initial velocity; use an event study")
     transfer=None
     if temperatures is not None:
-        if nonlinear or study.settings.large_deformation or case.history:
+        if nonlinear or study.settings.large_deformation or has_history(case):
             raise ValueError("Sequential quadratic thermal stress currently requires a linear elastic static step")
         from .simulation_thermoelastic import prepare_transfer
         transfer=prepare_transfer(system,temperatures)
     elif case.thermal:raise ValueError("Thermal boundaries require an explicit solved-temperature transfer")
     if contact is not None:contact.validate_supports(case)
     elif hasattr(system,"validate_supports"):system.validate_supports(case)
-    force=system.loads(case)
+    load_path=LoadPath(system,case);system._load_path=load_path
+    force=load_path.reference_force
     lines=["*HEADING","Oxygen versioned study: mm N s tonne; dead-load small-strain or NLGEOM", "*NODE"]
     for n in system.ids:
         lines.append(f"{n},"+",".join(calculix_number(x) for x in system.mesh.nodes[n]))
@@ -76,33 +78,35 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     lines.extend(["*NSET,NSET=SUPPORTS"])
     for i in range(0,len(fixed),16):lines.append(",".join(map(str,sorted(fixed)[i:i+16])))
     increment=study.settings.nonlinear_initial_increment*increment_scale
-    history=case.history or [(0.,0.),(1.,1.)]
-    if history[0]!=(0.,0.):raise ValueError("Nonlinear load history must start at time zero and zero multiplier")
+    times=load_path.times
     if contact is not None:
         # CalculiX 2.23 gencontelem_f2f removes current penetration during
         # increments of the FIRST step. Finish an unloaded initialization step
         # before applying the physical load path; otherwise intermediate gaps
         # differ from the declared pressure/overclosure law despite a correct
         # final frame. This adds no support, force or coordinate adjustment.
-        contact.initialization_period=min(b[0]-a[0] for a,b in zip(history,history[1:]))
+        contact.initialization_period=min(b-a for a,b in zip(times,times[1:]))
         period=calculix_number(contact.initialization_period)
         lines.extend(['*STEP,INC=100'+(',NLGEOM' if study.settings.large_deformation else ''),'*STATIC',f'{period},{period}',
             '*NODE PRINT,NSET=ALLNODES,FREQUENCY=1','U','*NODE PRINT,NSET=ALLNODES,FREQUENCY=1','RF',
             '*EL PRINT,ELSET=ALL_ELEMENTS,FREQUENCY=1','ENER',*contact.output,'*END STEP'])
-    for (previous_time,_),(time,factor) in zip(history,history[1:]):
+    for previous_time,time in zip(times,times[1:]):
         duration=time-previous_time
         lines.extend(["*STEP,INC=1000"+(",NLGEOM" if study.settings.large_deformation else ""),"*STATIC",",".join(calculix_number(v) for v in (increment*duration,duration,1e-7*duration,increment*duration))])
         if transfer is not None:
             lines.append("*TEMPERATURE,OP=NEW")
             lines.extend(f"{n},{calculix_number(transfer['temperatures'][n])}" for n in system.ids)
-        if np.any(force):lines.append("*CLOAD,OP=NEW")
+        endpoint_force=load_path.at(time)
+        if np.any(load_path.active_dofs):lines.append("*CLOAD,OP=NEW")
         for i,n in enumerate(system.ids):
             for axis in range(3):
-                if force[i*3+axis]!=0:lines.append(f"{n},{axis+1},{calculix_number(force[i*3+axis]*factor)}")
+                if load_path.active_dofs[i*3+axis]:lines.append(f"{n},{axis+1},{calculix_number(endpoint_force[i*3+axis])}")
         lines.extend(["*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","U","*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","RF","*EL PRINT,ELSET=ALL_ELEMENTS,FREQUENCY=1","S,PEEQ,ENER","*NODE FILE,FREQUENCY=1","U,RF","*EL FILE,FREQUENCY=1","S,PEEQ"])
         if contact is not None:lines.extend(contact.output)
         lines.append("*END STEP")
     path.write_text("\n".join(lines)+"\n")
+    from .store import write_json
+    write_json(path.parent/'load-path.json',load_path.audit())
     return force
 
 
@@ -216,7 +220,8 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     log=(directory/"solver.log").read_text(errors="replace")
     if "*ERROR" in log.upper() or "JOB FINISHED" not in log.upper():
         raise RuntimeError("CalculiX did not report a completed job; inspect solver.log")
-    increments=_last_increment(directory/"analysis.sta",(case.history[-1][0] if case.history else 1.)+offset)
+    load_path=system._load_path
+    increments=_last_increment(directory/"analysis.sta",load_path.duration+offset)
     convergence=_convergence(directory/"analysis.cvg")
     displacement,reactions=_parse_node_print(directory/"analysis.dat")
     if set(displacement)!=set(system.ids):raise RuntimeError("CalculiX result misses mesh nodes")
@@ -224,7 +229,7 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     if not all(np.isfinite(values).all() for field in (displacement,reactions) for values in field.values()):raise RuntimeError("Nonfinite CalculiX output")
     stress=parse_stress(directory/"analysis.frd")
     u=np.array([displacement[n] for n in system.ids]).ravel()
-    applied=force.reshape(-1,3)*(case.history[-1][1] if case.history else 1.)
+    applied=load_path.at(load_path.duration).reshape(-1,3)
     reacted=np.zeros_like(applied)
     constrained=np.zeros_like(applied,dtype=bool)
     for support in case.supports:
@@ -239,14 +244,16 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
                     # history-scaled values on each constrained component.
                     reacted[i,axis]=reactions[system.ids[i]][axis]-applied[i,axis]
                     constrained[i,axis]=True
-    scale=max(np.linalg.norm(applied,axis=1).sum(),np.linalg.norm(force.reshape(-1,3),axis=1).sum(),thermal_sum_norm,1e-12)
+    scale=max(np.linalg.norm(applied,axis=1).sum(),load_path.force_scale_n,thermal_sum_norm,1e-12)
     force_error=float(np.linalg.norm((applied+reacted).sum(axis=0))/scale)
     coordinates=system.xyz+(u.reshape(-1,3) if system.study.settings.large_deformation else 0)
     length=max(np.linalg.norm(np.ptp(coordinates,axis=0)),1e-12)
     moment_error=float(np.linalg.norm(np.cross(coordinates,applied+reacted).sum(axis=0))/(scale*length))
     last_by_increment={(r["step"],r["increment"]):r for r in convergence}
     residual=max((abs(r["force_residual_percent"])/100 for r in last_by_increment.values()),default=None)
-    if residual is None and not nonlinear:
+    convergence_residual=residual is not None
+    actual_nonlinear=nonlinear and (system.study.settings.large_deformation or contact is not None or any(m.plastic_curve for m in system.assignments.values()))
+    if residual is None and not actual_nonlinear:
         raw=np.array([reactions[n] for n in system.ids])
         residual=float(np.linalg.norm((raw-applied)[~constrained])/max(np.linalg.norm(applied[~constrained]),thermal_norm,1e-12))
     if residual is None:raise RuntimeError("CalculiX convergence residuals unavailable; no verification inferred from process exit")
@@ -275,7 +282,6 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         result['checks']['residual']=max((abs(r['force_residual_percent'])/100 for r in {(r['step'],r['increment']):r for r in convergence if r['step']>1}.values()),default=float('inf'))
     envelope={n:0. for n in system.ids}
     increment_checks=[];probes=[]
-    load_history=case.history or [(0.,0.),(1.,1.)]
     for row in history:
         when=row["time"]
         candidates=[f for f in frames if f["name"]=="STRESS" and np.isclose(f["time"],when,rtol=1e-5,atol=1e-8)]
@@ -289,14 +295,20 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         row["max_von_mises_mpa"]=max(float(np.sqrt(.5*((v[0]-v[1])**2+(v[1]-v[2])**2+(v[2]-v[0])**2)+3*sum(x*x for x in v[3:6]))) for v in stress_frame.values())
         entry=vectors.get(when)
         if entry is None or any(set(entry.get(kind,{}))!=set(system.ids) for kind in ("displacements","reactions")):raise RuntimeError("Incomplete increment displacement/force history")
-        factor=float(np.interp(when,[p[0] for p in load_history],[p[1] for p in load_history]))
-        loaded=force.reshape(-1,3)*factor
+        evaluation_time=load_path.output_time(when)
+        factor=load_path.shared_factor(evaluation_time)
+        loaded=load_path.at(evaluation_time).reshape(-1,3)
         raw=np.array([entry["reactions"][n] for n in system.ids])
         supported=np.where(constrained,raw-loaded,0.)
         positions=system.xyz+np.array([entry["displacements"][n] for n in system.ids]) if system.study.settings.large_deformation else system.xyz
-        increment_scale=max(float(np.linalg.norm(loaded,axis=1).sum()),float(np.linalg.norm(force.reshape(-1,3),axis=1).sum()),thermal_sum_norm,1e-12)
+        increment_scale=max(float(np.linalg.norm(loaded,axis=1).sum()),load_path.force_scale_n,thermal_sum_norm,1e-12)
         increment_length=max(float(np.linalg.norm(np.ptp(positions,axis=0))),1e-12)
-        increment_checks.append({"time_s":when,"load_factor":factor,"force_balance_error":float(np.linalg.norm((loaded+supported).sum(axis=0))/increment_scale),"moment_balance_error":float(np.linalg.norm(np.cross(positions,loaded+supported).sum(axis=0))/(increment_scale*increment_length))})
+        increment_checks.append({"time_s":when,"load_evaluation_time":evaluation_time,"load_factor":factor,"load_multipliers":load_path.factors(evaluation_time),"applied_resultant_n":loaded.sum(axis=0).tolist(),"force_balance_error":float(np.linalg.norm((loaded+supported).sum(axis=0))/increment_scale),"moment_balance_error":float(np.linalg.norm(np.cross(positions,loaded+supported).sum(axis=0))/(increment_scale*increment_length))})
+        if not actual_nonlinear:
+            free_residual=float(np.linalg.norm((raw-loaded)[~constrained])/max(float(np.linalg.norm(loaded[~constrained])),load_path.force_scale_n,thermal_norm,1e-12))
+            increment_checks[-1]['free_equilibrium_residual']=free_residual
+            result['checks']['residual']=max(result['checks']['residual'],free_residual)
+        row['load_multipliers']=load_path.factors(evaluation_time)
         if hasattr(system,"displacement_probe"):
             probe=system.displacement_probe(entry["displacements"])
             if probe is not None:
@@ -329,7 +341,7 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
             "scope":"Von Mises versus declared yield is an elastic-range screen; failure-criterion applicability and physical material calibration are not established"}
             for body,material in system.assignments.items()}
         result["warnings"].append("Sequential small-strain isotropic thermal stress uses supplied constant properties and a uniform stress-free temperature; no feedback, process calibration or thermal contact is implied.")
-    result["checks"].update({"increment_equilibrium":increment_checks,"force_balance_error":max(x["force_balance_error"] for x in increment_checks),"moment_balance_error":max(x["moment_balance_error"] for x in increment_checks),"residual_method":"CalculiX nonlinear convergence records" if nonlinear else "Free-component nodal equilibrium from printed RF and applied CLOAD; output precision can limit the reported residual"})
+    result["checks"].update({"increment_equilibrium":increment_checks,"force_balance_error":max(x["force_balance_error"] for x in increment_checks),"moment_balance_error":max(x["moment_balance_error"] for x in increment_checks),"residual_method":"CalculiX nonlinear convergence records" if convergence_residual else "Free-component nodal equilibrium from printed RF and applied CLOAD; output precision can limit the reported residual"})
     if system.mesh.element_family=="C3D10":
         result["mesh_quality"]=system.quality_record
         result["values"]["mass_g"]=system.mass_g

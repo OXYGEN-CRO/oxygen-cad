@@ -15,6 +15,11 @@ Vec3 = tuple[float, float, float]
 StudyType = Literal["linear_static", "modal", "buckling", "steady_thermal", "thermal_stress", "nonlinear_static", "quasi_static_event", "dynamic_event", "electronics_cooling", "topology", "generative", "general_cfd", "fatigue", "harmonic", "transient_thermal", "injection_molding"]
 
 
+def validate_history(history):
+    if history and (len(history)<2 or history[0][0]!=0 or any(b[0]<=a[0] for a,b in zip(history,history[1:]))):
+        raise ValueError('History requires at least two points, starts at zero and has strictly increasing times')
+
+
 class MaterialRecord(Record):
     id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
     revision: int = Field(default=1, ge=1)
@@ -140,6 +145,13 @@ class Load(Record):
     density_kg_m3: float | None = Field(default=None, gt=0)
     source: str = Field(min_length=1)
     frame: Literal["world"] = "world"
+    # Overrides the shared case multiplier; source covers values and schedule.
+    history: list[tuple[float, float]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def history_order(self):
+        validate_history(self.history)
+        return self
 
 
 class ThermalBoundary(Record):
@@ -174,8 +186,9 @@ class LoadCase(Record):
 
     @model_validator(mode="after")
     def history_order(self):
-        if self.history and (self.history[0][0] != 0 or any(b[0] <= a[0] for a, b in zip(self.history, self.history[1:]))):
-            raise ValueError("History starts at zero with strictly increasing times")
+        validate_history(self.history)
+        from .simulation_loading import resolved_histories
+        resolved_histories(self)
         ids = [x.id for x in [*self.supports, *self.loads, *self.thermal]]
         if len(ids) != len(set(ids)):
             raise ValueError("Boundary/load identifiers must be unique within a case")

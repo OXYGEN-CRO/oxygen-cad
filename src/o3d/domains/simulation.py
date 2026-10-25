@@ -67,6 +67,8 @@ def preflight(project,domain,study,model):
     if model.geometry_key!=current:errors.append("Analysis model belongs to different geometry; rebuild/remap explicitly")
     if not study.assumptions_confirmed:errors.append("Review and confirm the study assumptions")
     if not study.cases:errors.append("Add at least one explicit load case")
+    from ..simulation_loading import has_history
+    if study.type not in {'nonlinear_static','dynamic_event','quasi_static_event'} and any(has_history(case) for case in study.cases):errors.append('Load histories require an event or nonlinear-static study')
     if study.settings.probe_point_mm is not None and study.type not in {"linear_static","nonlinear_static","thermal_stress"}:errors.append("Physical displacement probes currently require a static or thermal-stress study; arbitrary eigenmode amplitudes are not displacement predictions")
     if study.type in {'linear_static','nonlinear_static','thermal_stress'} and any(any(c.initial_velocity_mm_s) for c in study.cases):errors.append('Static studies do not translate initial velocity; use an event study')
     if not model.mesh:errors.append("Generate or supply a volume mesh")

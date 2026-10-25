@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-10"
+ADAPTER_VERSION="oxygen-canonical-11"
 
 
 def clean(value):
@@ -72,7 +72,7 @@ def solve(request,directory,cancel=None):
     if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and case.thermal:raise ValueError("Thermal boundaries require a thermal or thermal-stress study")
     if study.type=="thermal_stress" and any(case.initial_velocity_mm_s):raise ValueError("Thermal stress does not translate initial velocity")
     if study.type=="modal" and case.loads:raise ValueError("Preloaded modal transfer is unavailable; remove mechanical loads for free/constrained modes")
-    if study.type not in {"dynamic_event","quasi_static_event","nonlinear_static"} and case.history:raise ValueError("Load histories require an event or nonlinear-static study")
+    if study.type not in {"dynamic_event","quasi_static_event","nonlinear_static"} and (case.history or any(load.history for load in case.loads)):raise ValueError("Load histories require an event or nonlinear-static study")
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
     if any(mesh.element_family!=family for mesh in meshes):raise ValueError("Refinement levels must use the same element family")

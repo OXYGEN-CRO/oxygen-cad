@@ -66,7 +66,7 @@ def geometric_matrix(system,u,cancel=None):
 
 def buckling_solve(system,case,directory,cancel=None):
     if system.study.type!="buckling":raise ValueError("Quadratic buckling solve requires a buckling study")
-    if case.thermal or case.history or any(case.initial_velocity_mm_s) or system.study.settings.large_deformation:
+    if case.thermal or case.history or any(load.history for load in case.loads) or any(case.initial_velocity_mm_s) or system.study.settings.large_deformation:
         raise ValueError("Linearized buckling does not translate thermal fields, history, initial velocity or large-deformation settings")
     system.validate_supports(case)
     fixed=system.constrained(case);free=np.array([i for i in range(3*len(system.ids)) if i not in fixed],dtype=int)

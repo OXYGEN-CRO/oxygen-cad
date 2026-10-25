@@ -18,7 +18,7 @@ test("native solids preserve explicit experimental contact and downloadable evid
   page,
   request,
 }) => {
-  test.setTimeout(180000);
+  test.setTimeout(360000);
   const original = await (await request.get("/api/project")).json();
   try {
     const reset = await request.post("/api/commands", {
@@ -272,6 +272,154 @@ test("native solids preserve explicit experimental contact and downloadable evid
       path: "test-results/contact-assembly-preview.png",
     });
     await page.screenshot({ path: "test-results/contact-assembly-field.png" });
+
+    // Declare a guided simple-shear numerical fixture on both actual meshes.
+    // These are explicit nodal guides, not inferred mounting conditions.
+    const beforeCycle = await (await request.get("/api/project")).json();
+    const cycleData = beforeCycle.domains.simulation;
+    const cycleStudy = cycleData.studies[0];
+    const cycleCase = cycleStudy.cases[0];
+    for (const mesh of [
+      cycleData.models[0].mesh,
+      ...cycleData.models[0].refinements,
+    ]) {
+      for (const [id, body] of [
+        ["first-guide", first],
+        ["second-guide", second],
+      ] as const) {
+        mesh.regions.push({
+          id,
+          body_id: body.id,
+          node_ids: [
+            ...new Set(
+              mesh.elements
+                .filter((element: any) => element.body_id === body.id)
+                .flatMap((element: any) => element.nodes),
+            ),
+          ],
+        });
+      }
+    }
+    cycleCase.supports.find(
+      (support: any) => support.id === "guide",
+    ).region_id = "second-guide";
+    cycleCase.supports.push({
+      id: "shear-guide",
+      region_id: "first-guide",
+      kind: "partial",
+      components: [true, false, true],
+    });
+    cycleCase.loads[0].source =
+      "Declared 100 N normal preload held during the shear cycle";
+    cycleCase.loads.push({
+      id: "shear",
+      region_id: "primary",
+      vector: [0, 100, 0],
+      source: "Declared symmetric simple-shear cycle, no measured friction",
+    });
+    const cycleSave = await request.put("/api/domains/simulation", {
+      data: {
+        expected_revision: beforeCycle.revision,
+        actor: "human",
+        data: cycleData,
+      },
+    });
+    expect(cycleSave.ok(), await cycleSave.text()).toBeTruthy();
+    await page.reload();
+    await page
+      .getByLabel("Workspace", { exact: true })
+      .selectOption("simulation");
+    await page
+      .getByLabel("Load 1 history (time, multiplier)", { exact: true })
+      .fill("0, 0\n1, 1\n4, 1");
+    await page
+      .getByRole("button", {
+        name: "Apply Load 1 history (time, multiplier)",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByLabel("Load 2 history (time, multiplier)", { exact: true })
+      .fill("0, 0\n1, 0\n2, 1\n3, -1\n4, 0");
+    await page
+      .getByRole("button", {
+        name: "Apply Load 2 history (time, multiplier)",
+        exact: true,
+      })
+      .click();
+    await page.getByText("Surface contact", { exact: true }).click();
+    await page
+      .getByLabel("Contact 1 source", { exact: true })
+      .fill(
+        "Declared Coulomb 0.3/stick slope100000 reference, no interface calibration",
+      );
+    await page
+      .getByLabel("Contact 1 Friction coefficient (0 for frictionless)", {
+        exact: true,
+      })
+      .fill("0.3");
+    await page
+      .getByLabel(
+        "Contact 1 Tangential penalty (N/mm³, positive friction only)",
+        { exact: true },
+      )
+      .fill("100000");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await (await request.get("/api/project")).json()).domains.simulation
+            .studies[0].cases[0].loads[1].history,
+      )
+      .toEqual([
+        [0, 0],
+        [1, 0],
+        [2, 1],
+        [3, -1],
+        [4, 0],
+      ]);
+    await page
+      .getByRole("button", { name: "Solve all cases", exact: true })
+      .click();
+    let cycleEvidence: any;
+    await expect
+      .poll(
+        async () => {
+          const currentLink = page.getByRole("link", {
+            name: "Contact interface fields",
+            exact: true,
+          });
+          if ((await currentLink.count()) !== 1) return 0;
+          const href = await currentLink.getAttribute("href");
+          if (!href) return 0;
+          cycleEvidence = await (await request.get(href)).json();
+          return cycleEvidence.work_history?.at(-1)?.time_s ?? 0;
+        },
+        { timeout: 180000 },
+      )
+      .toBe(4);
+    expect(cycleEvidence.work_audit.energy_balance_error).toBeLessThan(0.02);
+    expect(cycleEvidence.frictional_dissipation_n_mm).toBeCloseTo(0.17625, 3);
+    for (const [time, shear] of [
+      [1, 0],
+      [2, 30],
+      [3, -30],
+      [4, 30],
+    ]) {
+      const phase = cycleEvidence.work_history.find(
+        (row: any) => Math.abs(row.time_s - time) < 1e-7,
+      );
+      expect(phase.load_multipliers.force).toBe(1);
+      const force = Object.values(phase.secondary_force_n)[0] as number[];
+      expect(force[0]).toBeCloseTo(100, 3);
+      expect(force[1]).toBeCloseTo(shear, 3);
+    }
+    await expect(
+      page.getByText("contact active-set tangent stability not qualified", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await page.screenshot({ path: "test-results/contact-cycle-history.png" });
   } finally {
     const project = await (await request.get("/api/project")).json();
     const restored = await request.post("/api/commands", {
