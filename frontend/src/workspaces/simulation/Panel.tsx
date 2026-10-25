@@ -4,6 +4,7 @@ import { artifact } from "../../api";
 import type { Material } from "../../generated";
 import type { DomainPanelProps, JsonObject } from "../contracts";
 import FieldPreview, { type FieldData } from "./FieldPreview";
+import FlowSetup from "./FlowSetup";
 import LoadHistoryEditor from "./LoadHistoryEditor";
 import "./simulation.css";
 
@@ -34,6 +35,7 @@ const types = [
   ["dynamic_event", "Dynamic event · small strain"],
   ["quasi_static_event", "Quasi-static event · small strain"],
   ["electronics_cooling", "Electronics · prescribed-film thermal"],
+  ["general_cfd", "Fluid flow · steady laminar incompressible"],
   ["topology", "Topology · SIMP mesh guidance"],
   ["generative", "Generative · evaluated material alternatives"],
 ];
@@ -114,6 +116,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
     "electronics_cooling",
     "thermal_stress",
   ].includes(study?.type);
+  const flow = study?.type === "general_cfd";
   const event = ["dynamic_event", "quasi_static_event"].includes(study?.type);
   const build = props.state.build as Row | null;
   const sceneBodies: Row[] =
@@ -290,7 +293,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
       props.setError(String(error));
     }
   };
-  const addBoundary = (kind: "support" | "load" | "thermal") => {
+  const addBoundary = (kind: "support" | "load" | "thermal" | "flow") => {
     try {
       const draft = structuredClone(data),
         region = selectionRegion(draft),
@@ -319,6 +322,15 @@ export default function SimulationPanel(props: DomainPanelProps) {
           value: 0,
           source: "",
         });
+      if (kind === "flow") {
+        c.flow ??= [];
+        c.flow.push({
+          id: id("flow"),
+          region_id: region,
+          kind: "no_slip",
+          source: "",
+        });
+      }
       setData(draft);
     } catch (e) {
       props.setError(String(e));
@@ -343,13 +355,15 @@ export default function SimulationPanel(props: DomainPanelProps) {
         Math.max(0, value.modes?.findIndex((m) => m.rigid_body !== true) ?? 0),
       );
       setQuantity(
-        value.element_density
-          ? "density"
-          : value.modes
-            ? "mode"
-            : value.temperature_k && !value.displacements_mm
-              ? "temperature"
-              : "displacement",
+        value.velocity_m_s
+          ? "velocity"
+          : value.element_density
+            ? "density"
+            : value.modes
+              ? "mode"
+              : value.temperature_k && !value.displacements_mm
+                ? "temperature"
+                : "displacement",
       );
     });
   const loadResults = () =>
@@ -557,6 +571,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
                   ["youngs_modulus_mpa", "Young’s modulus (MPa)"],
                   ["poisson_ratio", "Poisson ratio"],
                   ["density_g_cm3", "Density (g/cm³)"],
+                  ["dynamic_viscosity_pa_s", "Dynamic viscosity (Pa·s)"],
                   ["conductivity_w_mk", "Conductivity (W/m·K)"],
                   ["expansion_per_k", "Expansion (1/K)"],
                   ["yield_strength_mpa", "Yield strength (MPa)"],
@@ -582,6 +597,24 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     />
                   </label>
                 ))}
+                {flow &&
+                  ["density_g_cm3", "dynamic_viscosity_pa_s"].map((key) => (
+                    <label key={key}>
+                      {key === "density_g_cm3"
+                        ? "Fluid density source"
+                        : "Fluid viscosity source"}
+                      <Input
+                        value={m.property_sources?.[key] ?? ""}
+                        onChange={(e) =>
+                          update((d) => {
+                            const row = d.materials.find((x) => x.id === m.id)!;
+                            row.property_sources ??= {};
+                            row.property_sources[key] = e.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
                 <p className="sim-help">
                   Plastic true stress/strain curves and their provenance can be
                   entered in Advanced setup. No calibrated properties are
@@ -641,6 +674,14 @@ export default function SimulationPanel(props: DomainPanelProps) {
               {props.selection?.id ?? "Select a face in the viewport"}
             </p>
             <div className="sim-toolbar">
+              {flow && (
+                <Button
+                  onClick={() => addBoundary("flow")}
+                  disabled={!props.selection}
+                >
+                  Add fluid boundary
+                </Button>
+              )}
               <Button
                 onClick={() => addBoundary("support")}
                 disabled={!props.selection}
@@ -662,6 +703,14 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 </Button>
               )}
             </div>
+            {flow && (
+              <FlowSetup
+                study={study}
+                loadCase={loadCase}
+                editStudy={editStudy}
+                editCase={editCase}
+              />
+            )}
             {loadCase?.supports.map((s: Row, index: number) => (
               <div className="sim-boundary" key={s.id}>
                 <code title={s.region_id}>{s.region_id}</code>
@@ -1698,6 +1747,12 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 <option value="displacement">
                   Displacement magnitude (mm)
                 </option>
+                {field.velocity_m_s && (
+                  <option value="velocity">Fluid speed (m/s)</option>
+                )}
+                {field.pressure_gauge_pa && (
+                  <option value="flow_pressure">Gauge pressure (Pa)</option>
+                )}
                 <option value="temperature">Temperature (K)</option>
                 <option value="stress">Von Mises stress (MPa)</option>
                 {field.nodal_contact && (
@@ -1751,15 +1806,20 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     load
                   </p>
                 )}
-              <label>
-                Deformation display scale ×
-                <Input
-                  type="number"
-                  step="any"
-                  value={scale}
-                  onChange={(e) => setScale(Number(e.target.value))}
-                />
-              </label>
+              {!field.velocity_m_s && (
+                <label>
+                  Deformation display scale ×
+                  <Input
+                    type="number"
+                    step="any"
+                    value={scale}
+                    onChange={(e) => setScale(Number(e.target.value))}
+                  />
+                </label>
+              )}
+              {field.flow_display_scope && (
+                <p className="sim-help">{field.flow_display_scope}</p>
+              )}
               {field.field_state === "final" && (
                 <p className="sim-help">
                   Final field at recorded time {format(field.field_time_s)} s.

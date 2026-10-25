@@ -10,7 +10,7 @@ import shutil
 import subprocess
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=4096)
 def _hash(path,modified_ns,changed_ns,size,inode):
     digest=hashlib.sha256()
     with Path(path).open('rb') as stream:

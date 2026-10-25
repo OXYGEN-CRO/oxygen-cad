@@ -7,6 +7,9 @@ export interface FieldData {
   field_time_s?: number;
   nodes?: Record<string, number[]>;
   displacements_mm?: Record<string, number[]>;
+  velocity_m_s?: Record<string, number[]>;
+  pressure_gauge_pa?: Record<string, number>;
+  flow_display_scope?: string;
   temperature_k?: Record<string, number>;
   von_mises_mpa?: Record<string, number>;
   element_density?: Record<string, number>;
@@ -60,35 +63,47 @@ export default function FieldPreview({
       quantity === "mode"
         ? (field.modes?.[mode]?.shape ??
           field.modes?.[mode]?.mass_normalized_displacement)
-        : field.displacements_mm;
-    const values: Record<string, number> = quantity.startsWith("contact_")
-      ? Object.fromEntries(
-          (field.contact_secondary_node_ids ?? []).map((id) => {
-            const v = field.nodal_contact?.[id];
-            return [
+        : ["velocity", "flow_pressure"].includes(quantity)
+          ? undefined
+          : field.displacements_mm;
+    const values: Record<string, number> =
+      quantity === "velocity"
+        ? Object.fromEntries(
+            Object.entries(field.velocity_m_s ?? {}).map(([id, v]) => [
               id,
-              v
-                ? quantity === "contact_pressure"
-                  ? v[3]
-                  : quantity === "contact_shear"
-                    ? Math.hypot(v[4], v[5])
-                    : v[0]
-                : NaN,
-            ];
-          }),
-        )
-      : quantity === "temperature"
-        ? (field.temperature_k ?? {})
-        : quantity === "stress"
-          ? (field.nodal_recovered_von_mises_mpa ??
-            field.nodal_extrapolated_von_mises_mpa ??
-            {})
-          : Object.fromEntries(
-              Object.entries(displacement ?? {}).map(([id, v]) => [
-                id,
-                Math.hypot(...v),
-              ]),
-            );
+              Math.hypot(...v),
+            ]),
+          )
+        : quantity === "flow_pressure"
+          ? (field.pressure_gauge_pa ?? {})
+          : quantity.startsWith("contact_")
+            ? Object.fromEntries(
+                (field.contact_secondary_node_ids ?? []).map((id) => {
+                  const v = field.nodal_contact?.[id];
+                  return [
+                    id,
+                    v
+                      ? quantity === "contact_pressure"
+                        ? v[3]
+                        : quantity === "contact_shear"
+                          ? Math.hypot(v[4], v[5])
+                          : v[0]
+                      : NaN,
+                  ];
+                }),
+              )
+            : quantity === "temperature"
+              ? (field.temperature_k ?? {})
+              : quantity === "stress"
+                ? (field.nodal_recovered_von_mises_mpa ??
+                  field.nodal_extrapolated_von_mises_mpa ??
+                  {})
+                : Object.fromEntries(
+                    Object.entries(displacement ?? {}).map(([id, v]) => [
+                      id,
+                      Math.hypot(...v),
+                    ]),
+                  );
     const elementValues =
       quantity === "density"
         ? field.element_density
@@ -129,17 +144,21 @@ export default function FieldPreview({
     const uniform =
       Number(minimum.toPrecision(6)) === Number(maximum.toPrecision(6));
     const unit =
-      quantity === "stress" ||
-      quantity === "contact_pressure" ||
-      quantity === "contact_shear"
-        ? "MPa"
-        : quantity === "temperature"
-          ? "K"
-          : quantity === "mode"
-            ? "relative shape"
-            : quantity === "density"
-              ? "relative density"
-              : "mm";
+      quantity === "velocity"
+        ? "m/s"
+        : quantity === "flow_pressure"
+          ? "Pa gauge"
+          : quantity === "stress" ||
+              quantity === "contact_pressure" ||
+              quantity === "contact_shear"
+            ? "MPa"
+            : quantity === "temperature"
+              ? "K"
+              : quantity === "mode"
+                ? "relative shape"
+                : quantity === "density"
+                  ? "relative density"
+                  : "mm";
     setLegend(
       !available
         ? "No values for this field."

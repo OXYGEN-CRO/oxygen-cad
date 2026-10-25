@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-17"
+ADAPTER_VERSION="oxygen-canonical-18"
 
 
 def clean(value):
@@ -64,6 +64,9 @@ def solve(request,directory,cancel=None):
     actual_software=software_fingerprint(study.type,family)
     if request.get("software",actual_software)!=actual_software:raise ValueError("Solver software changed after snapshot; resubmit the study")
     case=next(c for c in study.cases if c.id==request["case_id"])
+    if study.type=='general_cfd':
+        from .simulation_flow import solve_study
+        return solve_study(request,domain,study,model,case,directory,actual_software,cancel)
     if study.settings.large_deformation and study.type!="nonlinear_static":raise ValueError("Large deformation requires the CalculiX nonlinear-static adapter")
     if study.settings.probe_point_mm is not None and study.type not in {"linear_static","nonlinear_static","thermal_stress"}:raise ValueError("Physical displacement probes require a supported static study; no arbitrary mode amplitude or unused probe is accepted")
     if study.settings.inertial_relief and study.type not in {"linear_static","thermal_stress","topology","generative"}:raise ValueError("Inertial relief is unavailable for this study type")

@@ -87,7 +87,7 @@ COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
 COPY o3d ./
-COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/reference_contact_global.py scripts/reference_bulk_kernel.py scripts/bulk_kernel_probe.f90 scripts/material_kernel_probe.f90 scripts/contact_kernel_probe.f90 scripts/native_tangent_limits.c scripts/
+COPY scripts/prepare_openfoam.py scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/reference_contact_global.py scripts/reference_bulk_kernel.py scripts/bulk_kernel_probe.f90 scripts/material_kernel_probe.f90 scripts/contact_kernel_probe.f90 scripts/native_tangent_limits.c scripts/
 COPY verification-requirements.lock ./
 COPY skills/ skills/
 COPY .claude-plugin/ .claude-plugin/

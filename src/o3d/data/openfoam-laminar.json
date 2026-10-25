@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "distribution": "OpenCFD OpenFOAM",
+  "version": "1912.200626-3+b1",
+  "architecture": "linux-amd64",
+  "license": "GPL-3.0-or-later",
+  "packages": [
+    {
+      "file": "libboost-system1.83.0_1.83.0-4.2_amd64.deb",
+      "sha256": "a453edc44ae53303495d6e123b3ea659431849dd52b075459518cfffc49ff179",
+      "bytes": 230532,
+      "metadata": "Package: libboost-system1.83.0\nVersion: 1.83.0-4.2\nArchitecture: amd64\n"
+    },
+    {
+      "file": "libopenfoam_1912.200626-3+b1_amd64.deb",
+      "sha256": "3ee623d08b2eb38caa06aa1bf608f7df83ef858d79fe010a70be70089a046ce6",
+      "bytes": 45434872,
+      "metadata": "Package: libopenfoam\nVersion: 1912.200626-3+b1\nArchitecture: amd64\n"
+    },
+    {
+      "file": "libptscotch-7.0_7.0.7-1_amd64.deb",
+      "sha256": "65bde098d6c2a9c5a90063defc30427eec4d39d9ea8fa1059e949b3f83300b90",
+      "bytes": 659680,
+      "metadata": "Package: libptscotch-7.0\nVersion: 7.0.7-1\nArchitecture: amd64\n"
+    },
+    {
+      "file": "libscotch-7.0_7.0.7-1_amd64.deb",
+      "sha256": "583198da3cf00d222fc033204bfa3927dfe32048e64b178d03e1bb3fc9d622ae",
+      "bytes": 410896,
+      "metadata": "Package: libscotch-7.0\nVersion: 7.0.7-1\nArchitecture: amd64\n"
+    },
+    {
+      "file": "mpi-default-bin_1.18_amd64.deb",
+      "sha256": "64ead4f3ec4b31db0dbb607c281367badd768f167470690042f5425be0f5cd61",
+      "bytes": 2576,
+      "metadata": "Package: mpi-default-bin\nVersion: 1.18\nArchitecture: amd64\n"
+    },
+    {
+      "file": "openfoam_1912.200626-3+b1_amd64.deb",
+      "sha256": "79959979587cae196dc92024e97501dc244768e1a36d75858776cb1fd49d386c",
+      "bytes": 24123176,
+      "metadata": "Package: openfoam\nVersion: 1912.200626-3+b1\nArchitecture: amd64\n"
+    },
+    {
+      "file": "openmpi-bin_5.0.7-1_amd64.deb",
+      "sha256": "9c0604ef15bf0a4265012ec04ffa527c6b960985209b93e262c404b8632d93eb",
+      "bytes": 188932,
+      "metadata": "Package: openmpi-bin\nVersion: 5.0.7-1\nArchitecture: amd64\n"
+    },
+    {
+      "file": "openmpi-common_5.0.7-1_all.deb",
+      "sha256": "4a0281229c2d391a5504de4b15e4fb3e0894b49c8f0153e00b5e4f813b73fd50",
+      "bytes": 97184,
+      "metadata": "Package: openmpi-common\nVersion: 5.0.7-1\nArchitecture: all\n"
+    }
+  ],
+  "binaries_sha256": {
+    "simpleFoam": "0f38364591a05348410f768f6d00d73003b80273d8f001dadfdb759fa9edb110",
+    "checkMesh": "d62326097607d40e460bdd5d63df245896dd51ea16cf965199b75509308de791"
+  },
+  "source": {
+    "url": "https://deb.debian.org/debian/pool/main/o/openfoam/openfoam_1912.200626.orig.tar.bz2",
+    "sha256": "c75ca0f04cc4f49708296c1926cbde9d0138b3fef298fed54270dfe29e2df404",
+    "debian_url": "https://deb.debian.org/debian/pool/main/o/openfoam/openfoam_1912.200626-3.debian.tar.xz",
+    "debian_sha256": "f2a9218de53cde79efa2e274e00323419f705e931fd85146d1ea5ce13e9c6ab5"
+  }
+}

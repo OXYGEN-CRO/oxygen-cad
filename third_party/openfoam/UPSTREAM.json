@@ -1,0 +1,16 @@
+{
+  "distribution": "OpenCFD OpenFOAM",
+  "version": "1912.200626-3+b1",
+  "architecture": "linux-amd64",
+  "license": "GPL-3.0-or-later",
+  "source": {
+    "url": "https://deb.debian.org/debian/pool/main/o/openfoam/openfoam_1912.200626.orig.tar.bz2",
+    "sha256": "c75ca0f04cc4f49708296c1926cbde9d0138b3fef298fed54270dfe29e2df404",
+    "debian_url": "https://deb.debian.org/debian/pool/main/o/openfoam/openfoam_1912.200626-3.debian.tar.xz",
+    "debian_sha256": "f2a9218de53cde79efa2e274e00323419f705e931fd85146d1ea5ce13e9c6ab5"
+  },
+  "binaries_sha256": {
+    "simpleFoam": "0f38364591a05348410f768f6d00d73003b80273d8f001dadfdb759fa9edb110",
+    "checkMesh": "d62326097607d40e460bdd5d63df245896dd51ea16cf965199b75509308de791"
+  }
+}

@@ -1011,3 +1011,15 @@ actual computed fields and exposed correlation evidence.
 
 These unchecked items remain part of the implementation objective. No physical
 measurements have been supplied or performed by this software implementation.
+
+
+## Native laminar-flow accuracy hold
+
+The canonical `general_cfd` workspace now executes a pinned separate OpenCFD
+OpenFOAM laminar incompressible flow case, displays actual velocity/gauge-pressure
+fields and packages its complete executed evidence. It requires an explicit fluid
+volume and sourced density/viscosity/boundaries. Full native mesh checks and
+conservation pass on the retained benchmarks, but pressure-field spatial accuracy
+is unresolved; **all flow results remain inconclusive**. This is an experimental
+backend increment, not electronics conjugate cooling or complete CFD parity.
+See [the detailed scope and retained pressure NONPASS](parity/SIMULATION.md#experimental-native-laminar-flow).

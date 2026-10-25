@@ -38,6 +38,7 @@ class MaterialRecord(Record):
     condition: str = "User-specified; physical correlation not supplied"
     process: str | None = None
     property_sources: dict[str, str] = Field(default_factory=dict)
+    dynamic_viscosity_pa_s: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def curves(self):
@@ -174,12 +175,39 @@ class ThermalBoundary(Record):
         return self
 
 
+class FlowBoundary(Record):
+    id: str
+    region_id: str
+    kind: Literal['velocity','pressure','no_slip','moving_wall','symmetry']
+    velocity_m_s: Vec3 | None = None
+    pressure_gauge_pa: float | None = None
+    source: str = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def fields(self):
+        if (self.kind in {'velocity','moving_wall'})!=(self.velocity_m_s is not None):
+            raise ValueError('Velocity/moving-wall boundaries require their explicit velocity in m/s')
+        if (self.kind=='pressure')!=(self.pressure_gauge_pa is not None):
+            raise ValueError('Pressure boundaries require explicit gauge pressure in Pa')
+        return self
+
+
+class FlowSettings(Record):
+    domain_kind: Literal['fluid_volume']
+    model: Literal['steady_laminar_incompressible_newtonian']
+    control_volumes: Literal['barycentric_hexahedra'] = 'barycentric_hexahedra'
+    source: str = Field(min_length=1)
+    pressure_reference_pa: float | None = None
+    maximum_iterations: int = Field(default=500, ge=20, le=2000)
+
+
 class LoadCase(Record):
     id: str
     name: str
     supports: list[Support] = Field(default_factory=list)
     loads: list[Load] = Field(default_factory=list)
     thermal: list[ThermalBoundary] = Field(default_factory=list)
+    flow: list[FlowBoundary] = Field(default_factory=list)
     initial_velocity_mm_s: Vec3 = (0, 0, 0)
     # Time (s), multiplier; piecewise linear, no extrapolation beyond last point.
     history: list[tuple[float, float]] = Field(default_factory=list)
@@ -189,7 +217,7 @@ class LoadCase(Record):
         validate_history(self.history)
         from .simulation_loading import resolved_histories
         resolved_histories(self)
-        ids = [x.id for x in [*self.supports, *self.loads, *self.thermal]]
+        ids = [x.id for x in [*self.supports, *self.loads, *self.thermal, *self.flow]]
         if len(ids) != len(set(ids)):
             raise ValueError("Boundary/load identifiers must be unique within a case")
         return self
@@ -246,7 +274,7 @@ class Bolt(Record):
 
 class Limit(Record):
     id: str
-    quantity: Literal["max_displacement_mm", "max_von_mises_mpa", "max_temperature_k", "min_frequency_hz", "min_buckling_factor", "mass_g"]
+    quantity: Literal["max_displacement_mm", "max_von_mises_mpa", "max_temperature_k", "min_frequency_hz", "min_buckling_factor", "mass_g", "max_speed_m_s", "rms_speed_m_s", "pressure_range_pa"]
     operator: Literal["le", "ge"] = "le"
     value: float
     source: str = Field(min_length=1)
@@ -297,11 +325,14 @@ class StudyRecord(Record):
     limits: list[Limit] = Field(default_factory=list)
     stress_free_temperature_k: float | None = Field(default=None, gt=0)
     search: SearchSettings | None = None
+    flow: FlowSettings | None = None
     assumptions: list[str] = Field(default_factory=list)
     assumptions_confirmed: bool = False
 
     @model_validator(mode="after")
     def unique(self):
+        if self.type!='general_cfd' and (self.flow is not None or any(c.flow for c in self.cases)):
+            raise ValueError('Fluid settings and boundaries require a general_cfd study')
         for name in ("cases", "interfaces", "bolts", "limits"):
             rows = getattr(self, name)
             if len({r.id for r in rows}) != len(rows):

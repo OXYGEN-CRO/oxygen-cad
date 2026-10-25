@@ -143,7 +143,7 @@ Events use physical lumped mass, an explicit stability bound including potential
 
 Filtered SIMP evaluates compliance under a volume constraint, preserves explicit cells, excludes explicit obstacle cells and independently reanalyses the thresholded tetrahedral solid. Disconnected or ill-conditioned reconstructions fail reanalysis. Gray-density volume and retained-solid volume are separate outputs. Generative evaluation runs bounded sourced material alternatives, evaluates limits on reconstructed solids and reports volume misses. Neither path claims a global optimum, manufacturing-specific constraints, editable CAD reconstruction or final-CAD verification. Optimization studies remain inconclusive pending the latter work.
 
-Electronics cooling currently provides a solid/prescribed-film thermal calculation with explicit powers and heat rejection. It supplies no air domain, fan solution, buoyancy or conjugate CFD. General CFD, fatigue, harmonic/random response, transient thermal and molding adapters refuse execution. The capability register records these boundaries across all 20 audited families.
+Electronics cooling currently provides a solid/prescribed-film thermal calculation with explicit powers and heat rejection. It supplies no air domain, fan solution, buoyancy or conjugate CFD. A separate experimental native laminar-flow path is described below; it supplies no conjugate thermal coupling. Fatigue, harmonic/random response, transient thermal and molding adapters refuse execution. The capability register records these boundaries across all 20 audited families.
 
 Every run retains a unique immutable run directory, exact inputs and source/package/backend fingerprints. Relevant edits produce a new signature; results remain inspectable and are marked stale. Cancellation propagates through the scientific worker to nested solver process groups. The API's generic jobs layer supplies asynchronous execution and cancellation. Study/model clones return domain edits for Store revision checks rather than writing the project file directly.
 
@@ -234,3 +234,79 @@ The studio edits shared/per-load curves and preserves them through revision chec
 input invalidation and handoff. Constant normal preload and shear reversal are
 checked against an analytical guided spring-slider; this does not qualify general
 friction cycles, rate-dependent friction, wear or active-set tangent stability.
+
+
+## Experimental native laminar flow
+
+Adapter `oxygen-canonical-18` adds a separate-process OpenCFD OpenFOAM 1912
+`simpleFoam` path for an explicitly declared single fluid volume, sourced density
+and dynamic viscosity, and steady laminar incompressible Newtonian flow. It is
+**not qualified CFD parity**: the pressure-driven analytical reference retains
+spatial pressure oscillations, so **every flow result remains inconclusive**.
+This hold is independent of residual, conservation and mesh-sensitivity checks.
+The existing electronics-cooling path remains prescribed-film solid conduction.
+
+`StudyRecord.flow` declares the model, fluid-volume interpretation, assumption
+source, iteration ceiling and optional closed-volume gauge reference. Cases carry
+explicit velocity, gauge-pressure, stationary/moving tangential wall or planar
+symmetry conditions. Every exterior face must be assigned exactly once. Missing,
+overlapping or disconnected domains, quadratic corner fallback, mechanical/heat
+loads, solid interfaces/bolts and nondefault event/solid solver settings refuse.
+The adapter never infers air by treating an arbitrary physical solid as fluid.
+
+C3D4 control tetrahedra become four convex barycentric hexahedral finite volumes
+each, with conserved volume and first moment. Native face orientation is built
+from geometry; either source tetrahedral connectivity orientation is accepted.
+The mesh is bounded at 150,000 resulting volumes and 600,000 faces. Native
+`checkMesh -allTopology -allGeometry` must explicitly report `Mesh OK.`: exit
+code zero can accompany failed mesh checks. The earlier raw tetrahedral and
+agglomerated-dual trial failures are retained in the evidence.
+
+CAD/display coordinates are mm; native coordinates are m, velocity is m/s,
+density kg/m³ and viscosity Pa·s. Native kinematic pressure is multiplied by the
+explicit density to produce gauge Pa. Native SI cell fields and signed face
+volume fluxes are retained. Volume-weighted source-vertex recovery is only for
+visual interpolation and never becomes displacement deformation or the source
+of reported extrema. Closed-volume gauge pressure is referenced to native cell
+zero; it is not a measured absolute pressure.
+
+A native convergence marker, matching written iteration, bounded ASCII fields,
+correct classes/dimensions/counts and finite values are required. The runner
+checks equation residuals, global/local continuity, real geometric refinement,
+cell-centre maximum/RMS speed, pressure range and fine-cell sampled field changes
+with pressure demeaned. The field comparison evaluates the old piecewise-constant
+native field at actual fine-cell centres; it forbids extrapolation and is a
+sensitivity check, not a continuous error bound. Laminar/steady applicability and
+physical materials remain declared assumptions, not outputs of a Reynolds number.
+
+The sourced benchmark has 648/3,000 native cells. Its final moving-wall velocity
+L2 errors are approximately 2.60%/1.54%, and pressure-driven velocity errors
+6.11%/3.63%. The pressure-driven pressure RMS error is about 0.00592/0.00561 Pa
+against an 0.08 Pa drop; the declared 0.004 Pa pressure check is **NONPASS**.
+Small residuals and mass imbalance do not remove that spatial-accuracy failure.
+The tests retain this nonqualification explicitly rather than relaxing its limit.
+
+Native dictionaries, mesh, logs, outputs and runtime identity are hashed before
+handoff. Export verifies that original closure before indexing the package and
+refuses changed/missing/extra evidence or links. Exact executed OpenFOAM cases
+remain in the neutral ZIP; no Ansys or CalculiX flow-deck translation is claimed.
+
+The optional Linux/amd64 runtime is prepared from exact Debian archives listed in
+`src/o3d/data/openfoam-laminar.json`:
+
+```sh
+python scripts/prepare_openfoam.py --packages /absolute/package-directory --output /absolute/new-runtime
+export O3D_OPENFOAM_ROOT=/absolute/new-runtime
+```
+
+Obtain the exact archive names/versions in that contract, for example with
+`apt-get download`; the preparation command verifies their SHA-256 and size before
+extraction. It changes no system packages, shell rc files or HOME variable. The
+configured runtime binds pinned binaries, extracted library/configuration files,
+actual loaded libraries and source identity. Unexpected user `~/.OpenFOAM`
+configuration refuses qualification. This runtime is optional and is not bundled
+by the current Docker build; Linux execution does not establish Docker or macOS
+acceptance. GPL notices and corresponding-source URLs are under
+`third_party/openfoam/`. Turbulence, buoyancy, transient/compressible/free-surface
+flow, fan/PCB models, conjugate heat transfer and physical flow correlation remain
+open alongside the complete original simulation roadmap.

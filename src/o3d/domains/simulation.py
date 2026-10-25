@@ -31,7 +31,7 @@ CAPABILITIES=[
     ("SIM-13","Electronics cooling","experimental","Prescribed-film solid/power thermal subset; no air domain/fan/flow/CHT adapter"),
     ("SIM-14","Shape/topology optimization","experimental","Filtered SIMP compliance/volume, preserve/obstacle cells and thresholded-solid reanalysis; no editable CAD conversion"),
     ("SIM-15","Generative design","experimental","Evaluated unrestricted SIMP/material alternatives and post-search displacement/mass/modal/buckling limit checks; no manufacturing-specific/global optimum claim"),
-    ("SIM-16","General CFD","unavailable","Outside ordinary Fusion native scope; no integrated flow adapter"),
+    ("SIM-16","General CFD","experimental","Pinned OpenCFD native steady laminar incompressible Newtonian flow on an explicit fluid volume; pressure-field accuracy unqualified, all results inconclusive; no turbulence/buoyancy/CHT"),
     ("SIM-17","Fatigue, harmonic/random response, transient heat transfer","unavailable","Additional engineering scope; calibrated histories/models and dedicated adapters not integrated"),
     ("SIM-18","Study models, comparisons and reports","implemented","Independent versioned models/materials/studies/cases, clone, exact snapshots, stale detection, comparisons, HTML reports and downloadable fields"),
     ("SIM-19","Analysis handoff","experimental","Versioned neutral study package and restricted CalculiX deck with explicit transfer-loss report; no Ansys .sdz authoring"),
@@ -86,7 +86,13 @@ def preflight(project,domain,study,model):
         if study.type in {"steady_thermal","electronics_cooling"} and any(c.supports or c.loads or c.history or any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Quadratic steady thermal studies require thermal boundaries without mechanical supports/loads/history/velocity")
         if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
         if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
-    if study.type in {"general_cfd","fatigue","harmonic","transient_thermal","injection_molding"}:errors.append(f"No integrated {study.type} adapter; study is unavailable")
+    if study.type=='general_cfd':
+        from ..simulation_flow import validate_inputs
+        from ..simulation_flow_profile import profile
+        try:
+            validate_inputs(study,model,{m.id:m for m in domain.materials});profile()
+        except ValueError as exc:errors.append(str(exc))
+    if study.type in {"fatigue","harmonic","transient_thermal","injection_molding"}:errors.append(f"No integrated {study.type} adapter; study is unavailable")
     if study.type=="thermal_stress":
         if study.stress_free_temperature_k is None:errors.append("Thermal stress requires an explicit stress-free temperature in kelvin")
         if any(any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Thermal stress does not translate initial velocity")
@@ -126,7 +132,7 @@ def _mesh(store,project,domain,study,model,payload,cancel):
         if model.body_ids!=["part"]:raise ValueError("Legacy geometry build has no authoritative multi-body sidecar")
         parts=[{"body_id":"part","step":str(store.artifact(built["artifacts"]["step"]))}]
         faces=[{**f,"body_id":"part"} for f in built["faces"]]
-    required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal] if item.region_id}|{r.id for r in model.regions}
+    required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal,*case.flow] if item.region_id}|{r.id for r in model.regions}
     required|={name for interface in study.interfaces if interface.kind!='disabled' and interface.formulation in {'quadratic_surface_mortar','surface_to_surface_penalty'} for name in [interface.primary_region_id,interface.secondary_region_id] if name}
     region_requests={r.id:r.model_dump(mode="json") for r in model.regions}
     region_requests.update({r["id"]:r for r in payload.get("regions",[])})
@@ -355,6 +361,13 @@ def _handoff(store,project,domain,study,model,last):
         except ValueError as exc:losses.append("CalculiX deck unavailable: "+str(exc))
     evidence=[]
     from ..simulation_material_history import verify_material_history
+    from ..simulation_flow_evidence import verify as verify_flow
+    for result in last['results']:
+        for record in result.get('flow_evidence',[]):
+            path=run/digest(result['case_id'])/record['path']
+            if not path.resolve().is_relative_to(run.resolve()):raise ValueError('Unsafe flow evidence path')
+            verify_flow(path,record)
+    if study.type=='general_cfd':losses.append('Exact executed OpenFOAM cases are retained under solver-evidence; pressure-field accuracy remains unqualified, and no Ansys or conjugate-heat-transfer translation is claimed.')
     for material_index in sorted(run.rglob('material-derivative-history.json')):
         verify_material_history(material_index.parent)
     def file_hash(path):

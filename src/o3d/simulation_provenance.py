@@ -16,11 +16,17 @@ def software_fingerprint(study_type,element_family="C3D4"):
     sources['simulation_accepted_bulk.py']=fingerprint_file(root/'simulation_accepted_bulk.py')
     sources['simulation_material_derivatives.py']=fingerprint_file(root/'simulation_material_derivatives.py')
     sources['simulation_material_history.py']=fingerprint_file(root/'simulation_material_history.py')
+    for name in ('simulation_flow.py','simulation_flow_evidence.py','simulation_flow_convergence.py','simulation_flow_case.py','simulation_flow_mesh.py','simulation_flow_fields.py','simulation_flow_profile.py','data/openfoam-laminar.json'):
+        sources[name]=fingerprint_file(root/name)
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)
         except PackageNotFoundError:packages[name]="unavailable"
     result={"source_sha256":sources,"packages":packages,"element_family":element_family}
+    if study_type=='general_cfd':
+        from .simulation_flow_profile import profile
+        import os
+        result['openfoam_runtime']=profile()['identity'] if os.environ.get('O3D_OPENFOAM_ROOT') else 'unavailable'
     if study_type=="nonlinear_static" or element_family=="C3D10":
         # Resolve a declared backend, never execute a project-controlled command.
         import os
