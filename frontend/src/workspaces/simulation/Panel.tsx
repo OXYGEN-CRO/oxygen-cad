@@ -66,9 +66,12 @@ export default function SimulationPanel(props: DomainPanelProps) {
     JSON.stringify(data) !== JSON.stringify(parse(props.domainData));
   const study = data.studies.find((s) => s.id === data.active_study_id),
     model = data.models.find((m) => m.id === study?.model_id);
-  const quadraticSupported = ["linear_static", "nonlinear_static"].includes(
-    study?.type,
-  );
+  const quadraticSupported = [
+    "linear_static",
+    "nonlinear_static",
+    "steady_thermal",
+    "electronics_cooling",
+  ].includes(study?.type);
   const physicalProbeSupported = [
     "linear_static",
     "nonlinear_static",

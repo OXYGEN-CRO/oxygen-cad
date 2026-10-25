@@ -6,13 +6,25 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-3` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-4` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials are tested as separately supported solids;
-this does not establish quadratic contact or general assembly parity. Other
-canonical study families still use their C3D4 adapters. The separate legacy
+this does not establish quadratic contact or general assembly parity. Quadratic steady thermal/prescribed-film electronics conduction also uses these records, without elastic-property prerequisites. Other
+canonical study families still use their C3D4 adapters. Thermal-stress transfer is not yet connected to the quadratic workspace. The separate legacy
 quadratic study path is retained pending complete unification/migration.
+
+Quadratic thermal uses full ten-node conduction and volume heat, six-node
+consistent power/flux/film/radiation integration, Kelvin inputs and explicit
+material conductivity. Every disconnected solid requires heat rejection or a
+temperature anchor. Interfaces, mechanical supports/loads/history and connectors
+refuse. Quadrature sensitivity, safeguarded nonlinear radiation, thermostat
+reactions, heat-scaled residuals and rise-scaled mesh checks remain explicit.
+Temperature limits use conservative Bernstein bounds of the complete quadratic
+interpolation; nodal/quadrature extrema and volume-average heat flux are labeled
+separately. No airflow/CHT, material calibration or physical passing value is
+inferred. Neutral exports retain thermal solution JSON and numerical meshes;
+there is no executed CalculiX thermal deck from this SciPy adapter.
 
 Geometry qualification is independent of elastic properties. It checks conforming
 connectivity, rejects point/edge-only connections, checks boundary identity/order,
@@ -45,7 +57,7 @@ Remote force/moment transfer preserves the requested resultant and moment, with
 its nodal idealization explicit. Fixed/world-axis partial supports are translated
 without rotation/MPC approximations, and each independent solid must restrain
 all six rigid motions. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
-modal/buckling and thermal translation remain unavailable and refuse execution.
+modal/buckling and thermal-stress translation remain unavailable and refuse execution. Steady solid thermal transfer is described above.
 
 User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
 static displacement probe for either canonical family. Outside points refuse;
@@ -85,7 +97,7 @@ applied to unconstrained components. This is distinct from the density fix.
 
 Contact is a sourced finite-stiffness paired-node idealization: elastic bonded springs or frictionless normal separation springs, with explicit gap and active-set reporting. It is not general surface-to-surface sliding, Coulomb friction, self-contact or automatic contact qualification. Detection proposes one-to-one node pairs and reports ambiguity; it never silently inserts physical interface properties. Bolts are axial elastic trusses with specified preload; thread, washer, bending and torque conversion are absent. Inertial relief explicitly assembles translational/angular acceleration and removes only six rigid displacement gauges for a connected free solid.
 
-CalculiX is invoked as a separate GPL-licensed executable for nonlinear C3D4 studies. The adapter translates isotropic elasticity, supplied true-stress/equivalent-plastic-strain J2 hardening, optional finite deformation, dead nodal loads and world-axis zero supports. Increment histories support loading and unloading. It checks complete step time, per-increment convergence records, constrained-DOF reactions and load-step sensitivity. It refuses unimplemented nonlinear contact/connector and follower-load translation. An analytical plastic bar reproduces both the loaded strain and permanent strain after unloading. Material curves in tests are synthetic and do not establish a real grade or process calibration.
+CalculiX is invoked as a separate GPL-licensed executable for nonlinear C3D4/C3D10 studies and quadratic linear-static cases. The adapter translates isotropic elasticity, supplied true-stress/equivalent-plastic-strain J2 hardening, optional finite deformation, dead nodal loads and world-axis zero supports. Increment histories support loading and unloading. It checks complete step time, per-increment convergence records, constrained-DOF reactions and load-step sensitivity. It refuses unimplemented nonlinear contact/connector and follower-load translation. An analytical plastic bar reproduces both the loaded strain and permanent strain after unloading. Material curves in tests are synthetic and do not establish a real grade or process calibration.
 
 Events use physical lumped mass, an explicit stability bound including potential closed-contact stiffness, user load histories, initial velocity and optional viscous damping. No mass scaling is applied. Timestep refinement, work/kinetic/strain/damping energy and significant-energy kinetic/internal ratios are reported. Peak scalar stress/displacement are accumulated at **every** integration step; displayed history decimation never defines an extremum. Stored spatial fields are labeled final-state fields and include a separate stress envelope. Large motion, rate laws, damage/deletion, prescribed-motion events and advanced impact qualification require another adapter. A quasi-static label requires a sufficiently small kinetic/internal ratio over the significant strain-energy history.
 

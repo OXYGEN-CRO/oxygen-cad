@@ -9,7 +9,7 @@ full parity or real-world reliability.
 This ledger covers the quadratic CalculiX path in `project.study` and
 `named_studies`. The canonical engineering workspace in `project.domains.simulation`
 has shared analysis-model/material/case records, audited quadratic static/nonlinear
-CalculiX transfer and linear-tetrahedron adapters for the other bounded study,
+CalculiX transfer, quadratic solid thermal conduction, and linear-tetrahedron adapters for the other bounded study,
 contact/event/optimization subsets. Its implementation limits
 are recorded in [the domain ledger](parity/SIMULATION.md). Neither layer silently
 converts the other's inputs or establishes full assembly/physics parity.
@@ -17,7 +17,7 @@ converts the other's inputs or establishes full assembly/physics parity.
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
-versioned body/material/case records. Static and nonlinear-static studies default
+versioned body/material/case records. Static, nonlinear-static and steady solid thermal studies default
 to quadratic meshing; the element-family selector also retains the C3D4 path.
 Existing saved C3D4 models keep their declared family. This is the first shared
 quadratic transfer, not automatic migration of `project.study`/`named_studies`.
@@ -44,17 +44,38 @@ The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
 force/moment idealizations. Disconnected bodies require separately adequate
 supports. Shared points/edges do not become a solid load path. Contact, bolts,
-inertial relief, bearing/hydrostatic loads, modal/buckling and thermal transfer
+inertial relief, bearing/hydrostatic loads, modal/buckling and thermal-stress transfer
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately
 listed. Full study/assembly unification remains required.
+
+Canonical C3D10 steady thermal and prescribed-film electronics thermal studies
+use sourced conductivity without requiring elasticity. They integrate all ten
+shape functions for conduction/body heat and all six boundary functions for
+power/flux, convection and prescribed-surroundings radiation. Conductivity is
+W/(m·K), film coefficient W/(m²·K), flux W/mm², body heat total W, and temperature
+absolute kelvin. No airflow or conjugate CFD is implied. Every disconnected solid
+needs a thermal anchor. Mechanical supports/loads/history, interfaces and bolts
+refuse rather than disappearing.
+
+Conduction and boundary integration have quadrature sensitivity checks. Newton
+iteration uses a consistent radiation tangent, positive-temperature bounds and
+residual-decreasing steps. Heat balance includes prescribed-temperature reactions
+and loads at those nodes. Residuals scale to actual heat, and temperature mesh
+changes scale to the thermal excursion rather than absolute ambient kelvin.
+Sources below temperature representation refuse; no zero-load pass is invented.
+Reported temperature limits use conservative Bernstein bounds over the complete
+quadratic interpolated field. Sampled extrema are separately retained, and heat
+flux is labeled a volume average rather than a constant field. This conservative
+bound also needs mesh convergence. The neutral handoff includes these inputs,
+quality and thermal solution JSON; no executed CalculiX thermal deck is claimed.
 
 Set `settings.probe_point_mm` and, for multiple bodies, `settings.probe_body_id`.
 The workspace edits and saves these fields through the same Store path as CLI
 `workspace save`/`workspace run`. The point must lie inside the declared body;
 an outside or ambiguous point is never replaced by a convenient mesh node.
 Both canonical element families can interpolate a physical static displacement
-probe. Quadratic results stay inconclusive without one, and convergence checks
+probe. Quadratic mechanical results stay inconclusive without one, and convergence checks
 include the same point on every level as well as displacement maxima. Peak
 stress remains a screening quantity, not a converged nonsingular stress probe.
 

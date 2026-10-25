@@ -53,8 +53,9 @@ def exchange_deck(mesh, study):
 
 
 @lru_cache(maxsize=1)
-def volume_quadrature():
-    roots, gauss = np.polynomial.legendre.leggauss(4)
+def volume_quadrature(order=4):
+    if order not in (4, 6, 8):raise ValueError('Volume quadrature order must be 4, 6 or 8')
+    roots, gauss = np.polynomial.legendre.leggauss(order)
     roots, gauss = (roots+1)/2, gauss/2
     shape, gradients, measure = [], [], []
     for i, u in enumerate(roots):

@@ -24,7 +24,7 @@ CAPABILITIES=[
     ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 isotropic-hardening curves; full-path peaks/equilibrium, dead loads and axis supports; no translated contact/bolts"),
     ("SIM-07","Modal","experimental","Lumped mass eigenpairs, rigid modes, participation, residual and mass orthogonality; bonded elastic interfaces; no preload transfer"),
     ("SIM-08","Structural buckling","experimental","Initial-stress generalized eigenproblem with explicit sign/load-factor convention; no imperfect collapse/postbuckling"),
-    ("SIM-09","Steady thermal","experimental","Solid conduction, heat power/flux, convection, nonlinear radiation, thermal pair conductance and energy balance"),
+    ("SIM-09","Steady thermal","experimental","C3D4 solid conduction/thermal pair conductance and audited C3D10 conduction, consistent power/flux/body heat/film/radiation with heat balance; quadratic interfaces unavailable"),
     ("SIM-10","Thermal stress","experimental","Sequential same-mesh temperature/expansion transfer with stress-free reference temperature"),
     ("SIM-11","Quasi-static Event","experimental","Small-strain explicit transient subset; timestep sensitivity, energy and final kinetic/internal ratio; no large-motion event parity"),
     ("SIM-12","Dynamic Event","experimental","Small-strain lumped-mass central difference, piecewise-linear load histories, initial velocity and frictionless paired contact; no deletion/damage"),
@@ -72,10 +72,11 @@ def preflight(project,domain,study,model):
     for mesh in [model.mesh,*model.refinements]:
         if mesh and mesh.geometry_key!=current:errors.append(f"Mesh {mesh.id} belongs to stale geometry")
         if mesh and {e.body_id for e in mesh.elements}!=set(model.body_ids):errors.append("Mesh body identifiers do not match the analysis model")
-        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
+        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
     if model.mesh and any(mesh.element_family!=model.mesh.element_family for mesh in model.refinements):errors.append("All refinement levels must use the same element family")
     if model.mesh and model.mesh.element_family=="C3D10":
         if study.interfaces or study.bolts or study.settings.inertial_relief:errors.append("Quadratic contact/connector/inertial-relief translation is not integrated; no condition will be discarded")
+        if study.type in {"steady_thermal","electronics_cooling"} and any(c.supports or c.loads or c.history or any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Quadratic steady thermal studies require thermal boundaries without mechanical supports/loads/history/velocity")
         if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
         if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
     if study.type in {"general_cfd","fatigue","harmonic","transient_thermal","injection_molding"}:errors.append(f"No integrated {study.type} adapter; study is unavailable")
@@ -99,7 +100,7 @@ def _latest(store,project,domain,study):
 def _mesh(store,project,domain,study,model,payload,cancel):
     from ..geometry import build
     from ..solver import run_process,mesher_python
-    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static"} else "C3D4"))
+    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling"} else "C3D4"))
     if family not in {"C3D4","C3D10"}:raise ValueError("Choose C3D4 or C3D10 elements")
     gkey=geometry_key(project)
     built=build(store,project)
