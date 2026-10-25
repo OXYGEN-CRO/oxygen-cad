@@ -156,12 +156,13 @@ for (const [studyType, free] of [
         },
       });
       expect(created.ok(), await created.text()).toBeTruthy();
-      await completed(
+      const built = await completed(
         request,
         (await (await request.post("/api/jobs/build")).json()).id,
       );
       const state = await (await request.get("/api/state")).json();
-      const body = state.build.scene.bodies[0];
+      expect(built.key).toBe(state.geometry_key);
+      const body = built.scene.bodies[0];
       const face = (axis: number, sign: number) =>
         body.faces.find((f: any) => f.normal && sign * f.normal[axis] > 0.99);
       const selected = {

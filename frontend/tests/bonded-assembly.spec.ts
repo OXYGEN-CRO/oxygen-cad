@@ -56,12 +56,13 @@ test("native solids transfer loads through a sourced surface bond edited in the 
       });
       expect(response.ok(), await response.text()).toBeTruthy();
     }
-    await complete(
+    const built = await complete(
       request,
       (await (await request.post("/api/jobs/build")).json()).id,
     );
     const state = await (await request.get("/api/state")).json();
-    const bodies = state.build.scene.bodies;
+    expect(built.key).toBe(state.geometry_key);
+    const bodies = built.scene.bodies;
     const first = bodies.find((b: any) => b.name === "First"),
       second = bodies.find((b: any) => b.name === "Second");
     const face = (body: any, sign: number) =>
