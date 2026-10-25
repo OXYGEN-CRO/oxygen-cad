@@ -218,7 +218,7 @@ def test_unit_source_changes_invalidate_previous_results(tmp_path,monkeypatch):
         return "0"*64 if Path(path).name=="simulation_units.py" else actual_hash(path)
     monkeypatch.setattr(provenance,"fingerprint_file",changed)
     assert input_key(project,domain,study)!=key
-    assert domain_adapter==worker_adapter=="oxygen-tet4-2"
+    assert domain_adapter==worker_adapter=="oxygen-canonical-3"
     request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":before}
     with pytest.raises(ValueError,match="software changed after snapshot"):
         solve(request,tmp_path)
@@ -473,7 +473,7 @@ def test_native_step_netgen_transfer_has_real_volume_and_selected_regions(tmp_pa
     domain.models[0].geometry_key=geometry_key(project);domain.models[0].mesh=None
     case.supports=[Support(id="root",region_id="part:xmin")]
     store=Store(tmp_path/"mesh-project");store.init(project)
-    result=execute(store,project,"mesh",{"data":domain.model_dump(mode="json"),"mesh_size_mm":1.5,"refinements":2})
+    result=execute(store,project,"mesh",{"data":domain.model_dump(mode="json"),"mesh_size_mm":1.5,"refinements":2,"element_family":"C3D4"})
     generated=SimulationDomain.model_validate(result["data"]).models[0]
     assert result["changed"] and generated.refinements[0].geometry_key==geometry_key(project)
     assert len(generated.refinements[0].elements)>len(generated.mesh.elements)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input, SelectControl } from "../../components/ui";
 import { artifact } from "../../api";
+import type { Material } from "../../generated";
 import type { DomainPanelProps, JsonObject } from "../contracts";
 import FieldPreview, { type FieldData } from "./FieldPreview";
 import "./simulation.css";
@@ -51,6 +52,8 @@ export default function SimulationPanel(props: DomainPanelProps) {
   const [meshSize, setMeshSize] = useState(4),
     [refinements, setRefinements] = useState(2),
     [caseId, setCaseId] = useState("");
+  const [elementFamily, setElementFamily] = useState("C3D10");
+  const [probeText, setProbeText] = useState("");
   const [advanced, setAdvanced] = useState(""),
     [historyText, setHistoryText] = useState("");
   const serialized = JSON.stringify(props.domainData);
@@ -63,6 +66,38 @@ export default function SimulationPanel(props: DomainPanelProps) {
     JSON.stringify(data) !== JSON.stringify(parse(props.domainData));
   const study = data.studies.find((s) => s.id === data.active_study_id),
     model = data.models.find((m) => m.id === study?.model_id);
+  const quadraticSupported = ["linear_static", "nonlinear_static"].includes(
+    study?.type,
+  );
+  const physicalProbeSupported = [
+    "linear_static",
+    "nonlinear_static",
+    "thermal_stress",
+  ].includes(study?.type);
+  useEffect(() => {
+    setElementFamily(
+      quadraticSupported ? (model?.mesh?.element_family ?? "C3D10") : "C3D4",
+    );
+  }, [
+    study?.id,
+    study?.type,
+    model?.id,
+    model?.mesh?.element_family,
+    quadraticSupported,
+  ]);
+  const storedProbe = JSON.stringify(study?.settings?.probe_point_mm ?? null);
+  useEffect(() => {
+    const value = JSON.parse(storedProbe);
+    setProbeText(value ? value.join(", ") : "");
+  }, [study?.id, storedProbe]);
+  const probeValues = probeText
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  const validProbe =
+    probeText.trim().length > 0 &&
+    probeValues.length === 3 &&
+    probeValues.every(Number.isFinite);
   const loadCase =
     study?.cases?.find((c: Row) => c.id === caseId) ?? study?.cases?.[0];
   const currentInspection = inspection?.studies?.find(
@@ -121,12 +156,45 @@ export default function SimulationPanel(props: DomainPanelProps) {
       const bodyIds = sceneBodies.length
         ? sceneBodies.map((b) => b.id)
         : ["part"];
-      if (!d.materials.length && props.project.material)
+      if (!d.materials.length && props.project.material) {
+        const material = props.project.material as Material;
+        const aliases: Record<string, string> = {
+          thermal_conductivity_w_m_k: "conductivity_w_mk",
+          specific_heat_j_kg_k: "specific_heat_j_kgk",
+          thermal_expansion_per_k: "expansion_per_k",
+        };
+        const propertySources = { ...(material.property_sources ?? {}) };
+        for (const [key, value] of Object.entries(
+          material.property_sources ?? {},
+        )) {
+          const target = Object.hasOwn(aliases, key) ? aliases[key] : undefined;
+          if (target && !(target in propertySources))
+            propertySources[target] = value;
+        }
         d.materials.push({
           id: "project-material",
           revision: 1,
-          ...props.project.material,
+          name: material.name,
+          source: material.source,
+          youngs_modulus_mpa: material.youngs_modulus_mpa,
+          poisson_ratio: material.poisson_ratio,
+          density_g_cm3: material.density_g_cm3,
+          yield_strength_mpa: material.yield_strength_mpa,
+          conductivity_w_mk: material.thermal_conductivity_w_m_k,
+          specific_heat_j_kgk: material.specific_heat_j_kg_k,
+          expansion_per_k: material.thermal_expansion_per_k,
+          process: material.process ?? null,
+          condition:
+            material.condition ??
+            "Not supplied; physical correlation not supplied",
+          property_sources: propertySources,
+          plastic_curve: (material.plastic_curve ?? []).map((point) => [
+            point.stress_mpa,
+            point.plastic_strain,
+          ]),
+          plastic_source: material.plastic_curve_source ?? null,
         });
+      }
       d.models.push({
         id: modelId,
         name: "Analysis model",
@@ -821,6 +889,19 @@ export default function SimulationPanel(props: DomainPanelProps) {
           </details>
           <details open>
             <summary>Mesh and verification</summary>
+            <label>
+              Element family
+              <SelectControl
+                aria-label="Element family"
+                value={elementFamily}
+                onChange={(e) => setElementFamily(e.target.value)}
+              >
+                <option value="C3D10" disabled={!quadraticSupported}>
+                  Quadratic tetrahedra · C3D10
+                </option>
+                <option value="C3D4">Linear tetrahedra · C3D4</option>
+              </SelectControl>
+            </label>
             <div className="sim-vector">
               <label>
                 Initial size (mm)
@@ -844,9 +925,74 @@ export default function SimulationPanel(props: DomainPanelProps) {
               </label>
             </div>
             <p className="sim-help">
-              Linear tetrahedra. Stress maxima are screening values; bending
-              requires refinement. Region ambiguity stops the job.
+              {elementFamily === "C3D10"
+                ? "Quadratic geometry with static/nonlinear CalculiX transfer. Use fixed or axis-partial supports and force, pressure, gravity or remote loads. Curved cells are checked before solving."
+                : "Linear tetrahedra. Bending and thin sections require particular care and refinement."}{" "}
+              Stress maxima are screening values. Region ambiguity stops the
+              job.
             </p>
+            {(physicalProbeSupported || study.settings.probe_point_mm) && (
+              <>
+                <label>
+                  Displacement probe (mm)
+                  <Input
+                    value={probeText}
+                    placeholder="x, y, z"
+                    onChange={(e) => setProbeText(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Probe body
+                  <SelectControl
+                    aria-label="Probe body"
+                    value={
+                      study.settings.probe_body_id ?? model?.body_ids?.[0] ?? ""
+                    }
+                    onChange={(e) =>
+                      editStudy((s) => {
+                        s.settings.probe_body_id = e.target.value;
+                      })
+                    }
+                  >
+                    {(model?.body_ids ?? []).map((body: string) => (
+                      <option key={body} value={body}>
+                        {sceneBodies.find((b) => b.id === body)?.name ?? body}
+                      </option>
+                    ))}
+                  </SelectControl>
+                </label>
+                <div className="sim-toolbar">
+                  <Button
+                    disabled={!validProbe || !physicalProbeSupported}
+                    onClick={() =>
+                      editStudy((s) => {
+                        s.settings.probe_point_mm = probeValues;
+                        s.settings.probe_body_id ??=
+                          model?.body_ids?.[0] ?? null;
+                      })
+                    }
+                  >
+                    Set probe
+                  </Button>
+                  <Button
+                    disabled={!study.settings.probe_point_mm}
+                    onClick={() =>
+                      editStudy((s) => {
+                        s.settings.probe_point_mm = null;
+                        s.settings.probe_body_id = null;
+                      })
+                    }
+                  >
+                    Clear probe
+                  </Button>
+                </div>
+                <p className="sim-help">
+                  {physicalProbeSupported
+                    ? "Choose a point inside the selected solid. The same physical point is checked on every mesh. Quadratic results remain inconclusive until a probe is supplied."
+                    : "This study type does not accept a physical displacement probe. Clear the saved probe or choose a supported static study."}
+                </p>
+              </>
+            )}
             <label className="sim-checkbox">
               <input
                 type="checkbox"
@@ -865,7 +1011,11 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 disabled={dirty || !!busy}
                 onClick={() =>
                   void act("Meshing", async () => {
-                    await run("mesh", { mesh_size_mm: meshSize, refinements });
+                    await run("mesh", {
+                      mesh_size_mm: meshSize,
+                      refinements,
+                      element_family: elementFamily,
+                    });
                     await props.refresh();
                   })
                 }
@@ -1154,6 +1304,12 @@ export default function SimulationPanel(props: DomainPanelProps) {
                   onChange={(e) => setScale(Number(e.target.value))}
                 />
               </label>
+              {field.field_state === "final" && (
+                <p className="sim-help">
+                  Final field at recorded time {format(field.field_time_s)} s.
+                  Scalar peaks span the recorded load history.
+                </p>
+              )}
               <FieldPreview
                 field={field}
                 quantity={quantity}

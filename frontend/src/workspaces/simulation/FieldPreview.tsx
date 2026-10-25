@@ -3,6 +3,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export interface FieldData {
+  field_state?: string;
+  field_time_s?: number;
   nodes?: Record<string, number[]>;
   displacements_mm?: Record<string, number[]>;
   temperature_k?: Record<string, number>;

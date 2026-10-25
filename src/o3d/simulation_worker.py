@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-tet4-2"
+ADAPTER_VERSION="oxygen-canonical-3"
 
 
 def clean(value):
@@ -39,12 +39,14 @@ def solve(request,directory,cancel=None):
     from .simulation_mesh import validate_boundary
     domain=SimulationDomain.model_validate(request["data"])
     study=next(s for s in domain.studies if s.id==request["study_id"])
-    from .simulation_provenance import software_fingerprint
-    actual_software=software_fingerprint(study.type)
-    if request.get("software",actual_software)!=actual_software:raise ValueError("Solver software changed after snapshot; resubmit the study")
     model=next(m for m in domain.models if m.id==study.model_id)
+    from .simulation_provenance import software_fingerprint
+    family=model.mesh.element_family if model.mesh else "C3D4"
+    actual_software=software_fingerprint(study.type,family)
+    if request.get("software",actual_software)!=actual_software:raise ValueError("Solver software changed after snapshot; resubmit the study")
     case=next(c for c in study.cases if c.id==request["case_id"])
     if study.settings.large_deformation and study.type!="nonlinear_static":raise ValueError("Large deformation requires the CalculiX nonlinear-static adapter")
+    if study.settings.probe_point_mm is not None and study.type not in {"linear_static","nonlinear_static","thermal_stress"}:raise ValueError("Physical displacement probes require a supported static study; no arbitrary mode amplitude or unused probe is accepted")
     if study.settings.inertial_relief and study.type not in {"linear_static","thermal_stress","topology","generative"}:raise ValueError("Inertial relief is unavailable for this study type")
     if study.type=="modal" and any(b.preload_n for b in study.bolts):raise ValueError("Preloaded modal connector transfer is unavailable")
     if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and any(i.kind=="thermal" for i in study.interfaces):raise ValueError("Thermal interfaces require a thermal or thermal-stress study")
@@ -54,23 +56,31 @@ def solve(request,directory,cancel=None):
     if study.type not in {"dynamic_event","quasi_static_event","nonlinear_static"} and case.history:raise ValueError("Load histories require an event or nonlinear-static study")
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
+    if any(mesh.element_family!=family for mesh in meshes):raise ValueError("Refinement levels must use the same element family")
+    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
     materials={m.id:m for m in domain.materials}
     iterations=[];result=None;previous=None;converged=False
     previous_resolution=None;seen_discretizations=set()
     for i,mesh in enumerate(meshes):
         validate_boundary(mesh)
-        system=System(mesh,study,materials,mechanical=study.type not in {"steady_thermal","electronics_cooling"})
+        if family=="C3D10":
+            from .simulation_quadratic import QuadraticSystem
+            system=QuadraticSystem(mesh,study,materials,cancel)
+            system.qualify(directory/f"mesh-{i}"/"quality",cancel)
+        else:
+            system=System(mesh,study,materials,mechanical=study.type not in {"steady_thermal","electronics_cooling"})
         from .model import digest
         # Compare actual cell geometry, not user-controlled mesh/node/element IDs.
-        canonical=sorted((e.body_id,sorted(tuple(round(v,12) for v in mesh.nodes[n]) for n in e.nodes)) for e in mesh.elements)
+        canonical=sorted((e.body_id,sorted(tuple(round(v,12) for v in system.mesh.nodes[n]) for n in e.nodes)) for e in system.mesh.elements)
         discretization=digest(canonical)
         if discretization in seen_discretizations:raise ValueError("Identical discretization cannot demonstrate mesh convergence")
         seen_discretizations.add(discretization)
-        resolution=(len(mesh.nodes),len(mesh.elements),max(x[3] for x in system.elements))
+        resolution=(len(mesh.nodes),len(mesh.elements),system.max_element_volume_mm3)
         if previous_resolution and not (resolution[0]>previous_resolution[0] and resolution[1]>previous_resolution[1] and resolution[2]<previous_resolution[2]*(1-1e-6)):
             raise ValueError("Mesh convergence requires genuinely finer cells, more nodes and more elements")
         previous_resolution=resolution
-        if study.type=="linear_static":result=static_solve(system,case,cancel)
+        if study.type=="linear_static":
+            result=calculix_solve(system,case,directory/f"mesh-{i}"/"linear",cancel,nonlinear=False) if family=="C3D10" else static_solve(system,case,cancel)
         elif study.type in {"steady_thermal","electronics_cooling"}:
             result=thermal_solve(system,case,cancel)
             if study.type=="electronics_cooling":result["warnings"]=["Prescribed-film solid electronics thermal model. No air domain, fan-flow, buoyancy or conjugate CFD solve; no fluid result is implied."]
@@ -96,18 +106,21 @@ def solve(request,directory,cancel=None):
         elif study.type=="topology":result=optimize(system,case,cancel)
         elif study.type=="generative":result=generative(system,case,cancel)
         else:raise ValueError(f"{study.type}: no qualified integrated solver adapter is available")
-        quantities={k:v for k,v in result["values"].items() if k in {"max_displacement_mm","max_von_mises_mpa","max_temperature_k","min_frequency_hz","min_buckling_factor"}}
+        quantities={k:v for k,v in result["values"].items() if k in {"max_displacement_mm","probe_displacement_mm","max_von_mises_mpa","max_temperature_k","min_frequency_hz","min_buckling_factor"}}
         # Element stress maxima are screening fields, not a nonsingular stress-convergence probe.
         convergence_quantities={k:v for k,v in quantities.items() if k!="max_von_mises_mpa"}
         changes={k:abs(v-previous[k])/max(abs(v),1e-12) for k,v in convergence_quantities.items() if previous is not None and k in previous}
         converged=bool(changes) and all(v<=study.settings.convergence_tolerance for v in changes.values())
-        iterations.append({"mesh_id":mesh.id,"nodes":len(mesh.nodes),"elements":len(mesh.elements),"mesh_size_mm":mesh.mesh_size_mm,"minimum_mean_ratio_quality":system.quality,"values":quantities,"relative_changes":changes})
+        iterations.append({"mesh_id":mesh.id,"nodes":len(mesh.nodes),"elements":len(mesh.elements),"element_family":family,"mesh_size_mm":mesh.mesh_size_mm,("minimum_mean_ratio_quality" if family=="C3D4" else "minimum_corner_determinant_edge_ratio"):system.quality,"values":quantities,"relative_changes":changes})
         previous=convergence_quantities
-    from .simulation_mesh import exterior_triangles
-    result["field"]["boundary_triangles"]=exterior_triangles(mesh.nodes,mesh.elements)
+    from .simulation_mesh import display_triangles,exterior_triangles
+    result["field"]["boundary_triangles"]=display_triangles(mesh)
+    result["field"]["boundary_faces"]=exterior_triangles(mesh.nodes,mesh.elements)
     result["field"]["element_connectivity"]={e.id:list(e.nodes) for e in mesh.elements}
     result=clean(result)
     failures=numerical_checks(result,study)
+    if family=="C3D10" and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
+    if family=="C3D10" and study.type=="linear_static" and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")
     if result["checks"].get("time_step_change",0)>study.settings.convergence_tolerance:failures.append("time-step sensitivity")
     if result["checks"].get("load_step_change",0)>study.settings.convergence_tolerance:failures.append("load-step sensitivity")
     result["checks"]["residual_tolerance_used"]=study.settings.residual_tolerance
@@ -121,10 +134,12 @@ def solve(request,directory,cancel=None):
         strength_screening=limit.quantity=="max_von_mises_mpa"
         findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"operator":limit.operator,"satisfied":met,"source":limit.source,"evidence":"screening peak stress; no nonsingular stress probe convergence" if strength_screening else "specified numerical model","verified":not failures and not strength_screening and met is not None})
     result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
-    if software_fingerprint(study.type)!=actual_software:raise ValueError("Solver software changed during execution; results refused")
+    if family=="C3D10":result["field_location"]["stress"]="nodal_extrapolated"
+    if software_fingerprint(study.type,family)!=actual_software:raise ValueError("Solver software changed during execution; results refused")
     result.setdefault("solver","Oxygen C3D4 NumPy/SciPy reference worker")
     result.setdefault("warnings",[])
-    result["warnings"].extend(["Numerical verification applies only to the stated discretization, inputs and assumptions; no hardware correlation was supplied.","Linear tetrahedra can be overly stiff in bending and near incompressibility; demonstrate mesh convergence for the requested quantity."])
+    result["warnings"].append("Numerical verification applies only to the stated discretization, inputs and assumptions; no hardware correlation was supplied.")
+    if family=="C3D4":result["warnings"].append("Linear tetrahedra can be overly stiff in bending and near incompressibility; demonstrate mesh convergence for the requested quantity.")
     return result
 
 

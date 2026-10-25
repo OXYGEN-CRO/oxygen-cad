@@ -2,7 +2,65 @@
 
 The simulation domain stores independent analysis models, revisioned sourced material cards, studies and load cases. Its public entry points are `validate(data)` and `execute(store, project, operation, payload, cancel)`. Domain records use schema version 1 and SI-derived engineering units: mm, N, s, tonne, MPa, K and W. Thermal conductivity is entered in W/(m·K), film coefficient in W/(m²·K), surface heat flux in W/mm² and body heat as total W. Gravity and acceleration vectors use mm/s². Positive pressure is compression. All vectors are world-frame vectors.
 
-The native geometry bridge consumes exact per-body STEP plus face ID, body ID, centroid, area and normal descriptors. It refuses ambiguous regions, surfaces and display meshes. Netgen runs in a separate interpreter and emits linear tetrahedra with named boundary triangles. Bodies retain separate connectivity; proximity does not create a bond. Explicit reference meshes are also accepted with declared provenance and an exact geometry fingerprint. A supplied fingerprint is an association claim, not independent proof that a user mesh represents the CAD.
+The native geometry bridge consumes exact per-body STEP plus face ID, body ID, centroid, area and normal descriptors. It refuses ambiguous regions, surfaces and display meshes. Netgen runs in a separate interpreter and emits the declared C3D4 or C3D10 family with corresponding three- or six-node boundary triangles. Bodies retain separate connectivity; proximity does not create a bond. Explicit reference meshes are also accepted with declared provenance and an exact geometry fingerprint. A supplied fingerprint or CAD-volume field is an association claim, not independent proof that a user mesh represents the CAD.
+
+## Canonical quadratic transfer
+
+Adapter `oxygen-canonical-3` connects static and nonlinear C3D10 CalculiX studies
+to these same canonical models, materials, cases and result signatures. No legacy
+Project is reconstructed, no midside node is discarded and no material/load is
+invented. Multiple bodies/materials are tested as separately supported solids;
+this does not establish quadratic contact or general assembly parity. Other
+canonical study families still use their C3D4 adapters. The separate legacy
+quadratic study path is retained pending complete unification/migration.
+
+Geometry qualification is independent of elastic properties. It checks conforming
+connectivity, rejects point/edge-only connections, checks boundary identity/order,
+uses isolated Gmsh whole-element Jacobian bounds and independently compares
+integrated cell volumes with the load quadrature. The exact serialized coordinates
+are audited. CalculiX's 20-character numeric readers previously truncated some
+long exponent tokens; scientific formatting now fits complete tokens, records
+coordinate rounding and refuses insufficient coordinate resolution at large
+origins. Actual generated meshes exercise this failure and correction.
+Label values as well as counts are bounded before invoking CalculiX; sparse
+imported labels cannot inflate its label-indexed allocations. Quality results
+record the mapping from audit indices to actual solver element IDs.
+
+The New study material import maps the legacy thermal/plastic field names
+explicitly and preserves process, condition and all per-property citations.
+Original citation keys remain; canonical aliases are added without overwriting
+explicit alternatives. Metadata retention does not create a calibrated process
+or constitutive model. A real browser/API roundtrip verifies the imported card.
+
+Refinement retains the count/maximum-cell-volume checks below. A smaller size
+request sometimes produces a larger worst cell; generation now measures the
+candidate and can lower the size within four bounded attempts rather than
+claiming refinement. All attempts are retained. Worker checks repeat independently
+on the actual mesh, so a user-supplied repeated/renumbered mesh still cannot pass.
+
+Quadratic force/pressure transfer integrates shape functions, area and physical
+normals with Gauss6/Gauss8 sensitivity checks. Body gravity integrates signed
+quadratic weights with sourced density; negative corner weights are genuine.
+Remote force/moment transfer preserves the requested resultant and moment, with
+its nodal idealization explicit. Fixed/world-axis partial supports are translated
+without rotation/MPC approximations, and each independent solid must restrain
+all six rigid motions. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
+modal/buckling and thermal translation remain unavailable and refuse execution.
+
+User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
+static displacement probe for either canonical family. Outside points refuse;
+multi-body probes require identity. Quadratic numerical verification additionally
+requires the probe and its refinement. Nonlinear output includes every recorded
+increment's stress/displacement/probe extrema and equilibrium, plus separately
+labeled final fields. Stress maxima remain unverified screening values.
+
+The neutral handoff includes complete immutable numerical-run evidence and file
+hashes. The exact executed finest-mesh deck is preserved where available;
+regenerated compatible decks are labeled. Export staging is unique, hashes are
+verified and changed inputs refuse publication. Numerical meshes are included;
+the source CAD/STEP and Ansys study semantics are not.
+
+## Linear reference adapters and remaining capabilities
 
 The NumPy/SciPy worker assembles constant-strain C3D4 stiffness, consistent face tractions and lumped translational mass. It solves small-strain linear elasticity, solid conduction with nonlinear radiation, sequential thermal expansion, mass-normalized modal eigenpairs, initial-stress buckling and a bounded central-difference event subset. Axis and arbitrary plane-normal constraints are eliminated using local orthonormal bases. Linear tetrahedra can lock or over-stiffen bending; near incompressibility and thin sections require particular care. The buckling regression deliberately demonstrates coarse-mesh stiffness error instead of calling a finite eigenvalue an accurate critical load.
 

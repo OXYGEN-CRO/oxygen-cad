@@ -65,10 +65,13 @@ class System:
     mechanical: bool = True
 
     def __post_init__(self):
+        if self.mesh.element_family != "C3D4":
+            raise ValueError("The linear-tetrahedron reference system requires C3D4; use the quadratic adapter for C3D10")
         self.ids = sorted(self.mesh.nodes)
         self.index = {n: i for i, n in enumerate(self.ids)}
         self.xyz = np.array([self.mesh.nodes[n] for n in self.ids], dtype=float)
         self.regions = {r.id: r for r in self.mesh.regions}
+        self._probe_cache={}
         self.assignments = {a.body_id: self.materials[a.material_id] for a in self.study.assignments}
         missing = {e.body_id for e in self.mesh.elements} - self.assignments.keys()
         if missing:
@@ -101,6 +104,7 @@ class System:
         self.k = sparse.coo_matrix((values, (rows, cols)), shape=(3*len(self.ids),)*2).tocsr()
         self.kt = sparse.coo_matrix((self.thermal_values, (self.thermal_rows, self.thermal_cols)), shape=(len(self.ids),)*2).tocsr()
         self.m = np.repeat(self.mass, 3)
+        self.max_element_volume_mm3 = max(e[3] for e in self.elements)
         if self.quality < 1e-5:
             raise ValueError("Mesh quality below 1e-5; refine or repair geometry")
 
@@ -108,6 +112,10 @@ class System:
         if region_id not in self.regions:
             raise ValueError(f"Missing region: {region_id}; repair mapping explicitly")
         return self.regions[region_id]
+
+    def displacement_probe(self, field):
+        from .simulation_mesh import displacement_probe
+        return displacement_probe(self.mesh,self.study.settings.probe_point_mm,self.study.settings.probe_body_id,field,self._probe_cache)
 
     def region_nodes(self, region_id):
         r = self.region(region_id)
@@ -437,7 +445,11 @@ def static_solve(system, case, cancel=None, temperatures=None):
         checks["energy_balance_error"]=abs(values["strain_energy_n_mm"]-external_work)/max(abs(external_work),abs(values["strain_energy_n_mm"]),1e-12)
     if relief:
         checks["inertial_relief"]=relief
-    return {"values":values,"checks":checks,"field":fields,"interfaces":interface,"u":u,"kg":kg,"k":k,"t":t}
+    probe=system.displacement_probe(fields["displacements_mm"])
+    if probe is not None:values["probe_displacement_mm"]=probe["magnitude_mm"]
+    result={"values":values,"checks":checks,"field":fields,"interfaces":interface,"u":u,"kg":kg,"k":k,"t":t}
+    if probe is not None:result["displacement_probe"]={"final":probe,"peak":probe,"history":[probe]}
+    return result
 
 
 def thermal_solve(system, case, cancel=None):

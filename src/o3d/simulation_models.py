@@ -31,6 +31,8 @@ class MaterialRecord(Record):
     plastic_curve: list[tuple[float, float]] = Field(default_factory=list)
     plastic_source: str | None = None
     condition: str = "User-specified; physical correlation not supplied"
+    process: str | None = None
+    property_sources: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def curves(self):
@@ -55,7 +57,7 @@ class Region(Record):
     selection: str | None = None
     node_ids: list[int] = Field(default_factory=list)
     # Boundary triangles carry outward orientation. Coordinates alone never select a face.
-    triangles: list[tuple[int, int, int]] = Field(default_factory=list)
+    triangles: list[tuple[int, int, int] | tuple[int, int, int, int, int, int]] = Field(default_factory=list)
     normal: Vec3 | None = None
     center_mm: Vec3 | None = None
     area_mm2: float | None = Field(default=None, gt=0)
@@ -64,7 +66,7 @@ class Region(Record):
 class Element(Record):
     id: int = Field(gt=0)
     body_id: str = "part"
-    nodes: tuple[int, int, int, int]
+    nodes: tuple[int, int, int, int] | tuple[int, int, int, int, int, int, int, int, int, int]
 
 
 class MeshRecord(Record):
@@ -74,8 +76,9 @@ class MeshRecord(Record):
     elements: list[Element] = Field(min_length=1, max_length=150000)
     regions: list[Region] = Field(default_factory=list)
     source: str = Field(min_length=1)
-    element_family: Literal["C3D4"] = "C3D4"
+    element_family: Literal["C3D4", "C3D10"] = "C3D4"
     mesh_size_mm: float | None = Field(default=None, gt=0)
+    cad_volumes_mm3: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def connectivity(self):
@@ -86,15 +89,21 @@ class MeshRecord(Record):
         if len({r.id for r in self.regions}) != len(self.regions):
             raise ValueError("Region identifiers must be unique")
         used = set()
+        order = 10 if self.element_family == "C3D10" else 4
+        face_order = 6 if order == 10 else 3
         for e in self.elements:
-            if len(set(e.nodes)) != 4 or any(n not in self.nodes for n in e.nodes):
+            if len(e.nodes) != order or len(set(e.nodes)) != order or any(n not in self.nodes for n in e.nodes):
                 raise ValueError(f"Element {e.id}: repeated or missing node")
             used.update(e.nodes)
         if used != set(self.nodes):
             raise ValueError("Unconnected mesh nodes are not permitted")
         for r in self.regions:
+            if any(len(t) != face_order or len(set(t)) != face_order for t in r.triangles):
+                raise ValueError(f"Region {r.id}: boundary order differs from {self.element_family}")
             if any(n not in self.nodes for n in r.node_ids) or any(n not in self.nodes for t in r.triangles for n in t):
                 raise ValueError(f"Region {r.id}: missing node")
+        if any(value <= 0 for value in self.cad_volumes_mm3.values()) or not self.cad_volumes_mm3.keys() <= {e.body_id for e in self.elements}:
+            raise ValueError("CAD volumes require positive values and existing body IDs")
         return self
 
 
@@ -219,6 +228,8 @@ class SolverSettings(Record):
     nonlinear_initial_increment: float = Field(default=.1, gt=0, le=1)
     large_deformation: bool = False
     inertial_relief: bool = False
+    probe_point_mm: Vec3 | None = None
+    probe_body_id: str | None = None
 
 
 class SearchSettings(Record):

@@ -8,10 +8,67 @@ full parity or real-world reliability.
 
 This ledger covers the quadratic CalculiX path in `project.study` and
 `named_studies`. The canonical engineering workspace in `project.domains.simulation`
-has separate analysis-model/material/case records and linear-tetrahedron adapters,
-including bounded contact/event/optimization subsets. Its implementation limits
+has shared analysis-model/material/case records, audited quadratic static/nonlinear
+CalculiX transfer and linear-tetrahedron adapters for the other bounded study,
+contact/event/optimization subsets. Its implementation limits
 are recorded in [the domain ledger](parity/SIMULATION.md). Neither layer silently
 converts the other's inputs or establishes full assembly/physics parity.
+
+## Canonical quadratic study integration
+
+The Simulate workspace can generate and solve `C3D10` meshes directly from its
+versioned body/material/case records. Static and nonlinear-static studies default
+to quadratic meshing; the element-family selector also retains the C3D4 path.
+Existing saved C3D4 models keep their declared family. This is the first shared
+quadratic transfer, not automatic migration of `project.study`/`named_studies`.
+
+All ten element nodes and six boundary nodes reach the solver. Native body IDs,
+exact per-body STEP regions and distinct sourced material assignments are
+preserved. Regions require matching plane, integrated area and centroid. Every
+quadratic mesh receives an isolated whole-element curved-Jacobian audit, including
+the precise coordinate values serialized into the CalculiX deck. A smaller
+requested mesh size alone does not count as refinement: generation checks node/
+cell counts and maximum integrated cell volume, with at most four bounded size
+attempts per level. The worker independently checks those conditions again.
+External solver labels are bounded to 100,000 nodes and 150,000 elements,
+including label values; compact sparse imported labels before using CalculiX.
+Audit indices retain an explicit mapping to the actual element labels.
+
+Creating a study from the project's legacy material maps conductivity, heat
+capacity, expansion and plastic-curve fields into the canonical names while
+preserving process, condition and every property citation. Canonical citation
+aliases are added without overwriting an already supplied citation. These are
+declared inputs; recording a process does not calibrate an isotropic material law.
+
+The current canonical quadratic transfer supports fixed/world-axis partial
+constraints, consistent force/pressure/gravity loads, and conservative remote
+force/moment idealizations. Disconnected bodies require separately adequate
+supports. Shared points/edges do not become a solid load path. Contact, bolts,
+inertial relief, bearing/hydrostatic loads, modal/buckling and thermal transfer
+are not yet connected to this quadratic adapter; unsupported conditions refuse.
+The existing C3D4 and legacy quadratic study capabilities remain separately
+listed. Full study/assembly unification remains required.
+
+Set `settings.probe_point_mm` and, for multiple bodies, `settings.probe_body_id`.
+The workspace edits and saves these fields through the same Store path as CLI
+`workspace save`/`workspace run`. The point must lie inside the declared body;
+an outside or ambiguous point is never replaced by a convenient mesh node.
+Both canonical element families can interpolate a physical static displacement
+probe. Quadratic results stay inconclusive without one, and convergence checks
+include the same point on every level as well as displacement maxima. Peak
+stress remains a screening quantity, not a converged nonsingular stress probe.
+
+Canonical nonlinear results retain stress/displacement/probe peaks across every
+recorded increment, final fields and per-increment force/moment balance. Loading,
+unloading and load-step sensitivity remain distinct checks. A final field is
+labeled explicitly and need not depict the load-history peak.
+
+Handoff packages retain the immutable run's inputs, meshes, fields, exact executed
+decks, raw outputs and quality evidence with checked file hashes. A regenerated
+compatible C3D4 handoff deck is labeled separately from an executed deck. Export
+uses unique staging and rechecks current study inputs before publication. Source
+CAD/STEP is not included; numerical meshes are included. None of this establishes
+physical correlation or complete Fusion parity.
 
 ## Current executable workflows
 

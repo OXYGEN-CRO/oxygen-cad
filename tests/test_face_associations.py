@@ -1,6 +1,7 @@
 """Native viewport IDs must identify independently read STEP/Netgen faces."""
 import build123d as bd
 import numpy as np
+import pytest
 
 from o3d.domains.simulation import execute
 from o3d.geometry import associate_native_faces, build, face_metadata
@@ -30,7 +31,8 @@ def viewport_faces(scene):
     return output
 
 
-def test_canonical_viewport_faces_transfer_to_exact_transformed_fe_regions(tmp_path):
+@pytest.mark.parametrize("element_family",["C3D4","C3D10"])
+def test_canonical_viewport_faces_transfer_to_exact_transformed_fe_regions(tmp_path,element_family):
     store = Store(tmp_path)
     store.init(Project(name="Face association acceptance"))
 
@@ -67,7 +69,7 @@ def test_canonical_viewport_faces_transfer_to_exact_transformed_fe_regions(tmp_p
         body_ids=list(bodies), regions=regions)], studies=[StudyRecord(id="study", name="Region transfer", model_id="model",
         cases=[LoadCase(id="case", name="Selected faces", supports=[Support(id=f"support-{i}", region_id=region.id)
             for i, region in enumerate(regions)])])], active_study_id="study")
-    result = execute(store, project, "mesh", {"data": domain.model_dump(mode="json"), "mesh_size_mm": 6, "refinements": 1})
+    result = execute(store, project, "mesh", {"data": domain.model_dump(mode="json"), "mesh_size_mm": 6, "refinements": 1,"element_family":element_family})
     mesh = MeshRecord.model_validate(result["data"]["models"][0]["mesh"])
     for region, (_, pick) in zip(mesh.regions, selections):
         assert region.selection == pick["id"]

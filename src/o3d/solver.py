@@ -22,6 +22,19 @@ class Cancelled(RuntimeError):
     pass
 
 
+def calculix_number(value):
+    """A complete finite numeric token for CalculiX's F20.0 input readers.
+
+    Thirteen significant digits fit even a signed three-digit exponent. Longer
+    tokens can silently lose the exponent's final digit in nodes.f/CLOAD readers.
+    """
+    value=float(value)
+    if not np.isfinite(value):raise ValueError("CalculiX input must be finite")
+    token=f"{value:.12e}"
+    if len(token)>20:raise ValueError("CalculiX numeric token exceeds its input field")
+    return token
+
+
 def run_process(command, directory: Path, log: Path, cancel: Event | None = None, timeout=180):
     environment = dict(os.environ)
     # Workers change cwd into a job directory. Keep this checkout authoritative,

@@ -82,7 +82,7 @@ def prepare_geometry(store, project):
             "default_probe_mm":default,"default_probe_method":method}
 
 
-def validate_mesh(mesh, expected_volume=None, max_nodes=200000, curved_audit=None):
+def validate_mesh(mesh, expected_volume=None, max_nodes=200000, curved_audit=None, require_connected=True):
     nodes = {int(k): np.asarray(v, dtype=float) for k, v in mesh["nodes"].items()}
     if not nodes or len(nodes) > max_nodes:
         raise ValueError(f"Mesh must have 1–{max_nodes} nodes")
@@ -118,12 +118,13 @@ def validate_mesh(mesh, expected_volume=None, max_nodes=200000, curved_audit=Non
         raise ValueError("Inconsistent tetrahedral orientations")
     if used != set(nodes):
         raise ValueError("Mesh contains unconnected or unused nodes")
-    if len({find(n) for n in used}) != 1:
+    components = len({find(n) for n in used})
+    if require_connected and components != 1:
         raise ValueError("Disconnected volume mesh is unsupported by the single-body adapter")
     if minimum_quality < 1e-7:
         raise ValueError("Mesh contains near-degenerate tetrahedra")
     from .quadratic import boundary_faces
-    exterior, edges = boundary_faces(mesh["elements"],require_connected=True)
+    exterior, edges = boundary_faces(mesh["elements"],require_connected=require_connected)
     for name, triangles in mesh["surfaces"].items():
         if not triangles or any(len(t) != 6 or len(set(t))!=6 or any(n not in nodes for n in t) for t in triangles):
             raise ValueError(f"Invalid quadratic surface mesh for {name}")
@@ -140,7 +141,7 @@ def validate_mesh(mesh, expected_volume=None, max_nodes=200000, curved_audit=Non
     # connectivity/scale audit, not an exact curved-Jacobian certificate.
     if curved_audit is None and error is not None and error > .1:
         raise ValueError("Mesh corner volume differs from CAD by more than 10%; check geometry transfer/units")
-    result = {"nodes": len(nodes), "elements": len(volumes), "connected_components": 1,
+    result = {"nodes": len(nodes), "elements": len(volumes), "connected_components": components,
             "corner_volume_mm3": volume, "corner_volume_relative_error": error,
             "minimum_corner_quality": minimum_quality, "element_type": "C3D10",
             "curved_jacobian_checked": False,"curved_jacobian_certified": False}

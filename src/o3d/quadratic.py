@@ -15,7 +15,7 @@ def weights_and_gradients(reference):
     return weights,gradients
 
 
-def boundary_faces(elements,require_connected=False):
+def boundary_faces(elements,require_connected=False,return_components=False):
     faces,edges,corners,mids={}, {}, set(), set()
     parent=list(range(len(elements)));seen=set()
     def find(i):
@@ -41,7 +41,12 @@ def boundary_faces(elements,require_connected=False):
     if corners.intersection(mids):raise ValueError("Nonconforming mesh: a node is both a corner and a midside node")
     if require_connected and len({find(i) for i in range(len(elements))})!=1:
         raise ValueError("Disconnected volume mesh: elements must connect through complete faces, not only points or edges")
-    return {key:face for key,(count,face,_) in faces.items() if count==1},edges
+    result=({key:face for key,(count,face,_) in faces.items() if count==1},edges)
+    if return_components:
+        components={}
+        for i in range(len(elements)):components.setdefault(find(i),[]).append(i)
+        return (*result,list(components.values()))
+    return result
 
 
 def locate_probe(mesh,point):
@@ -89,7 +94,7 @@ def locate_probe(mesh,point):
     raise ValueError("The named probe could not be located inside the analysis mesh; choose an interior point away from idealized supports")
 
 
-def surface_quadrature(mesh,triangles,order=4):
+def surface_quadrature(mesh,triangles,order=4,return_normals=False):
     """Quadratic triangle values and positive physical quadrature measures."""
     if order not in (4,6,8):raise ValueError("Surface quadrature order must be 4, 6 or 8")
 
@@ -112,10 +117,12 @@ def surface_quadrature(mesh,triangles,order=4):
     weights=np.asarray(weights);gradients=np.asarray(gradients)
     local=xyz-xyz[:,0,None,:]
     jacobian=np.einsum('tni,qnj->tqij',local,gradients)
-    area_elements=np.linalg.norm(np.cross(jacobian[:,:,:,0],jacobian[:,:,:,1]),axis=2)
+    crosses=np.cross(jacobian[:,:,:,0],jacobian[:,:,:,1])
+    area_elements=np.linalg.norm(crosses,axis=2)
     measures=area_elements*np.asarray(integration)[None,:]
     if not np.isfinite(measures).all() or np.any(measures<=0):raise ValueError("Nonpositive or nonfinite surface quadrature measure")
-    return ids,xyz,weights,measures
+    result=(ids,xyz,weights,measures)
+    return (*result,crosses/area_elements[:,:,None]) if return_normals else result
 
 
 def surface_integrals(mesh,triangles):

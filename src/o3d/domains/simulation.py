@@ -16,12 +16,12 @@ from ..simulation_models import SimulationDomain,StudyRecord,AnalysisModel,MeshR
 from ..store import now,write_json
 
 CAPABILITIES=[
-    ("SIM-01","Linear static stress","experimental","C3D4 isotropic multi-body/multi-case linear elasticity; mesh refinement and equation/equilibrium checks"),
+    ("SIM-01","Linear static stress","experimental","C3D4 reference and audited C3D10 CalculiX isotropic multi-body/multi-case elasticity; physical probes, mesh refinement and equation/equilibrium checks"),
     ("SIM-02","Loads and supports","experimental","Planar traction/pressure, conservative moments/remote forces, gravity, bearing-direction traction and hydrostatic pressure; fixed/partial/frictionless/cylindrical pin"),
     ("SIM-03","Inertial relief","experimental","Free connected isotropic static solid; explicit translation/angular acceleration and six rigid gauge constraints"),
     ("SIM-04","Assembly contact","experimental","Sourced paired-node elastic bonded and frictionless separation penalties; gap/active-set checks; no general sliding/friction/self-contact"),
     ("SIM-05","Bolts/connectors","experimental","Axial elastic truss connector with sourced preload/stiffness; no thread/washer/bending/torque-derived preload"),
-    ("SIM-06","Nonlinear static","experimental","CalculiX C3D4 finite deformation and supplied J2 isotropic-hardening curves; dead loads and axis supports; no translated contact/bolts"),
+    ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 isotropic-hardening curves; full-path peaks/equilibrium, dead loads and axis supports; no translated contact/bolts"),
     ("SIM-07","Modal","experimental","Lumped mass eigenpairs, rigid modes, participation, residual and mass orthogonality; bonded elastic interfaces; no preload transfer"),
     ("SIM-08","Structural buckling","experimental","Initial-stress generalized eigenproblem with explicit sign/load-factor convention; no imperfect collapse/postbuckling"),
     ("SIM-09","Steady thermal","experimental","Solid conduction, heat power/flux, convection, nonlinear radiation, thermal pair conductance and energy balance"),
@@ -58,7 +58,7 @@ def _study(domain,study_id):
 def input_key(project,domain,study):
     model=next(m for m in domain.models if m.id==study.model_id)
     material_ids={a.material_id for a in study.assignments}|set(study.search.candidate_material_ids if study.search else [])
-    return digest({"adapter":ADAPTER_VERSION,"software":software_fingerprint(study.type),"geometry":geometry_key(project),"native_document":getattr(project,"native_document",None),"model":model.model_dump(mode="json"),"study":study.model_dump(mode="json"),"materials":[m.model_dump(mode="json") for m in domain.materials if m.id in material_ids]})
+    return digest({"adapter":ADAPTER_VERSION,"software":software_fingerprint(study.type,model.mesh.element_family if model.mesh else "C3D4"),"geometry":geometry_key(project),"native_document":getattr(project,"native_document",None),"model":model.model_dump(mode="json"),"study":study.model_dump(mode="json"),"materials":[m.model_dump(mode="json") for m in domain.materials if m.id in material_ids]})
 
 
 def preflight(project,domain,study,model):
@@ -67,10 +67,17 @@ def preflight(project,domain,study,model):
     if model.geometry_key!=current:errors.append("Analysis model belongs to different geometry; rebuild/remap explicitly")
     if not study.assumptions_confirmed:errors.append("Review and confirm the study assumptions")
     if not study.cases:errors.append("Add at least one explicit load case")
+    if study.settings.probe_point_mm is not None and study.type not in {"linear_static","nonlinear_static","thermal_stress"}:errors.append("Physical displacement probes currently require a static or thermal-stress study; arbitrary eigenmode amplitudes are not displacement predictions")
     if not model.mesh:errors.append("Generate or supply a volume mesh")
     for mesh in [model.mesh,*model.refinements]:
         if mesh and mesh.geometry_key!=current:errors.append(f"Mesh {mesh.id} belongs to stale geometry")
         if mesh and {e.body_id for e in mesh.elements}!=set(model.body_ids):errors.append("Mesh body identifiers do not match the analysis model")
+        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
+    if model.mesh and any(mesh.element_family!=model.mesh.element_family for mesh in model.refinements):errors.append("All refinement levels must use the same element family")
+    if model.mesh and model.mesh.element_family=="C3D10":
+        if study.interfaces or study.bolts or study.settings.inertial_relief:errors.append("Quadratic contact/connector/inertial-relief translation is not integrated; no condition will be discarded")
+        if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
+        if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
     if study.type in {"general_cfd","fatigue","harmonic","transient_thermal","injection_molding"}:errors.append(f"No integrated {study.type} adapter; study is unavailable")
     if study.type=="nonlinear_static" and not study.settings.large_deformation and not any(m.plastic_curve for m in domain.materials if m.id in {a.material_id for a in study.assignments}):errors.append("Nonlinear study requires large deformation or a sourced plastic constitutive curve")
     return errors
@@ -92,6 +99,8 @@ def _latest(store,project,domain,study):
 def _mesh(store,project,domain,study,model,payload,cancel):
     from ..geometry import build
     from ..solver import run_process,mesher_python
+    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static"} else "C3D4"))
+    if family not in {"C3D4","C3D10"}:raise ValueError("Choose C3D4 or C3D10 elements")
     gkey=geometry_key(project)
     built=build(store,project)
     scene=built.get("scene") or {}
@@ -121,22 +130,51 @@ def _mesh(store,project,domain,study,model,payload,cancel):
     size=float(payload.get("mesh_size_mm",4))
     steps=int(payload.get("refinements",2))
     if not 0<size<100000 or not 1<=steps<=4:raise ValueError("Mesh size must be positive and refinement count 1..4")
-    signature=digest({"geometry":gkey,"bodies":model.body_ids,"regions":regions,"size":size,"steps":steps})
+    signature=digest({"geometry":gkey,"bodies":model.body_ids,"regions":regions,"size":size,"steps":steps,"element_family":family})
     destination=store.cache/"domains"/"simulation"/"meshes"/signature/secrets.token_hex(8)
     destination.mkdir(parents=True,exist_ok=True)
-    meshes=[]
-    for i in range(steps):
-        request={"id":f"mesh-{i}","geometry_key":gkey,"parts":parts,"regions":regions,"mesh_size_mm":size/1.5**i}
-        write_json(destination/f"request-{i}.json",request)
-        run_process([mesher_python(),Path(__file__).resolve().parents[1]/"simulation_mesh_worker.py",destination/f"request-{i}.json",destination/f"mesh-{i}.json"],destination,destination/f"netgen-{i}.log",cancel,timeout=180)
-        mesh=MeshRecord.model_validate_json((destination/f"mesh-{i}.json").read_text())
+    def generate_level(i,attempt,requested_size):
+        request={"id":f"mesh-{i}","geometry_key":gkey,"parts":parts,"regions":regions,"mesh_size_mm":requested_size,"element_family":family}
+        write_json(destination/f"request-{i}-{attempt}.json",request)
+        run_process([mesher_python(),Path(__file__).resolve().parents[1]/"simulation_mesh_worker.py",destination/f"request-{i}-{attempt}.json",destination/f"mesh-{i}-{attempt}.json"],destination,destination/f"netgen-{i}-{attempt}.log",cancel,timeout=180)
+        mesh=MeshRecord.model_validate_json((destination/f"mesh-{i}-{attempt}.json").read_text())
         # Reorient exterior triangles by their owning solid tetrahedron.
         from ..simulation_mesh import exterior_triangles
         oriented={tuple(sorted(t)):t for t in exterior_triangles(mesh.nodes,mesh.elements)}
         for region in mesh.regions:region.triangles=[oriented[tuple(sorted(t))] for t in region.triangles]
-        meshes.append(mesh)
+        if family=="C3D10":
+            from ..quadratic import surface_integrals
+            import numpy as np
+            raw={"nodes":mesh.nodes}
+            for region in mesh.regions:
+                _,area,moment=surface_integrals(raw,region.triangles)
+                points=np.array([mesh.nodes[n] for triangle in region.triangles for n in triangle])
+                plane_error=float(np.max(np.abs((points-np.array(region.center_mm))@np.array(region.normal))))
+                if abs(area-region.area_mm2)/region.area_mm2>.02 or np.linalg.norm(moment/area-np.array(region.center_mm))>max(1e-4,np.sqrt(region.area_mm2)*.01) or plane_error>max(1e-5,np.sqrt(region.area_mm2)*1e-7):
+                    raise ValueError(f"Quadratic region {region.id} disagrees with its declared CAD plane/area/centroid")
+        if family=="C3D10":
+            from ..simulation_quadratic import QuadraticGeometry
+            geometry=QuadraticGeometry(mesh,cancel)
+            geometry.qualify(destination/f"quality-{i}-{attempt}",cancel)
+            maximum=geometry.max_element_volume_mm3
+        else:
+            import numpy as np
+            xyz=np.array([[mesh.nodes[n] for n in e.nodes] for e in mesh.elements])
+            maximum=float(np.max(np.abs(np.linalg.det((xyz[:,1:]-xyz[:,:1]).transpose(0,2,1))))/6)
+        return mesh,(len(mesh.nodes),len(mesh.elements),maximum)
+    meshes=[];attempts=[];previous=None;next_size=size
+    for i in range(steps):
+        for attempt in range(4):
+            requested_size=next_size/1.5**attempt
+            mesh,resolution=generate_level(i,attempt,requested_size)
+            finer=previous is None or (resolution[0]>previous[0] and resolution[1]>previous[1] and resolution[2]<previous[2]*(1-1e-6))
+            attempts.append({"level":i,"attempt":attempt,"requested_size_mm":requested_size,"nodes":resolution[0],"elements":resolution[1],"max_element_volume_mm3":resolution[2],"accepted":finer})
+            if finer:
+                meshes.append(mesh);previous=resolution;next_size=requested_size/1.5
+                break
+        else:raise ValueError("Mesher did not produce genuinely finer cells within four bounded attempts; change the initial size or geometry")
     model.geometry_key=gkey;model.mesh=meshes[0];model.refinements=meshes[1:]
-    return {"data":domain.model_dump(mode="json"),"changed":True,"mesh_summary":[{"id":m.id,"nodes":len(m.nodes),"elements":len(m.elements),"mesh_size_mm":m.mesh_size_mm} for m in meshes]}
+    return {"data":domain.model_dump(mode="json"),"changed":True,"meshing_attempts":attempts,"mesh_summary":[{"id":m.id,"nodes":len(m.nodes),"elements":len(m.elements),"mesh_size_mm":m.mesh_size_mm,"element_family":m.element_family} for m in meshes]}
 
 
 def _run(store,project,domain,study,model,payload,cancel):
@@ -147,7 +185,7 @@ def _run(store,project,domain,study,model,payload,cancel):
     run_id=secrets.token_hex(8)
     destination=store.cache/"domains"/"simulation"/"runs"/key/run_id
     destination.mkdir(parents=True,exist_ok=True)
-    snapshot={"data":domain.model_dump(mode="json"),"study_id":study.id,"input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":software_fingerprint(study.type),"run_id":run_id}
+    snapshot={"data":domain.model_dump(mode="json"),"study_id":study.id,"input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":software_fingerprint(study.type,model.mesh.element_family),"run_id":run_id}
     write_json(destination/"inputs.json",snapshot)
     cases=[c for c in study.cases if not payload.get("case_id") or c.id==payload["case_id"]]
     if not cases:raise ValueError("Load case does not exist")
@@ -201,7 +239,7 @@ def execute(store,project,operation,payload,cancel=None):
         for study in domain.studies:
             model=next(m for m in domain.models if m.id==study.model_id)
             studies.append({"id":study.id,"name":study.name,"type":study.type,"input_key":input_key(project,domain,study),"errors":preflight(project,domain,study,model),"last_result":_latest(store,project,domain,study)})
-        return {"schema_version":1,"capabilities":[{"id":i,"family":f,"status":s,"scope":sc} for i,f,s,sc in CAPABILITIES],"studies":studies,"units":"mm, N, s, tonne, MPa, K, W"}
+        return {"schema_version":1,"adapter_version":ADAPTER_VERSION,"capabilities":[{"id":i,"family":f,"status":s,"scope":sc} for i,f,s,sc in CAPABILITIES],"studies":studies,"units":"mm, N, s, tonne, MPa, K, W"}
     study,model=_study(domain,payload.get("study_id"))
     if operation=="clone_study":
         identifier=str(payload.get("new_id",""))
@@ -254,26 +292,69 @@ def execute(store,project,operation,payload,cancel=None):
 def _handoff(store,project,domain,study,model,last):
     if last["stale"]:raise ValueError("Study inputs changed; recompute before exporting a current analysis package. Historical result artifacts remain available.")
     key=input_key(project,domain,study)
-    destination=store.cache/"domains"/"simulation"/"handoff"/key
+    destination=store.cache/"domains"/"simulation"/"handoff"/key/secrets.token_hex(8)
     destination.mkdir(parents=True,exist_ok=True)
     package=destination/"analysis-package.zip"
     losses=["Not an Ansys .sdz archive; Ansys study/selection semantics require recreation.","Neutral inputs are complete; deck export is restricted to translated CalculiX structural cases."]
-    decks={}
+    run_id=last.get("run_id","")
+    if not re.fullmatch(r"[0-9a-f]{16}",run_id):raise ValueError("Stored result lacks a valid immutable run identity; recompute before handoff")
+    run=store.cache/"domains"/"simulation"/"runs"/key/run_id
+    if not run.is_dir():raise ValueError("Stored solver evidence is missing; no complete handoff can be made")
+    decks={};deck_provenance={}
     if model.mesh:
         from ..simulation_fem import System
         from ..extended_solver import write_calculix
         try:
-            system=System(model.mesh,study,{m.id:m for m in domain.materials})
             if study.type not in {"linear_static","nonlinear_static"}:raise ValueError("Study type has no handoff deck adapter")
+            system=None
+            finest=model.refinements[-1] if model.refinements else model.mesh
+            solved={r["case_id"] for r in last["results"]}
             for case in study.cases:
+                if case.id not in solved:
+                    losses.append(f"Case {case.id} was not solved in this run; its neutral inputs are included without a qualified deck")
+                    continue
                 path=destination/(digest(case.id)+".inp")
-                write_calculix(path,system,case,nonlinear=study.type=="nonlinear_static")
+                leaf="increment-half" if study.type=="nonlinear_static" else "linear"
+                actual=run/digest(case.id)/f"mesh-{len(model.refinements)}"/leaf/"analysis.inp"
+                if actual.is_file() and not actual.is_symlink() and actual.resolve().is_relative_to(run.resolve()):
+                    path.write_bytes(actual.read_bytes())
+                    deck_provenance[case.id]={"kind":"exact executed finest-mesh deck","source":"solver-evidence/"+str(actual.relative_to(run))}
+                else:
+                    if system is None:
+                        if finest.element_family=="C3D10":
+                            from ..simulation_quadratic import QuadraticSystem
+                            system=QuadraticSystem(finest,study,{m.id:m for m in domain.materials})
+                        else:system=System(finest,study,{m.id:m for m in domain.materials})
+                    write_calculix(path,system,case,nonlinear=study.type=="nonlinear_static")
+                    deck_provenance[case.id]={"kind":"regenerated compatible deck; not the executed backend","mesh_id":finest.id,"element_family":finest.element_family}
                 decks[case.id]=path
         except ValueError as exc:losses.append("CalculiX deck unavailable: "+str(exc))
-    manifest={"schema_version":1,"format":"oxygen-neutral-analysis-package-v1","input_key":key,"revision":project.revision,"stale_results":last["stale"],"geometry_key":geometry_key(project),"transfer_losses":losses,"exported_decks":list(decks),"geometry_included":False,"adapter_version":ADAPTER_VERSION}
-    with zipfile.ZipFile(package,"w",zipfile.ZIP_DEFLATED) as archive:
+    evidence=[]
+    def file_hash(path):
+        value=hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda:stream.read(1024*1024),b""):value.update(chunk)
+        return value.hexdigest()
+    for path in sorted(run.rglob("*")):
+        if path.is_symlink() or not path.resolve().is_relative_to(run.resolve()):raise ValueError("Solver evidence contains an unsafe link")
+        if path.is_file():evidence.append({"path":"solver-evidence/"+str(path.relative_to(run)),"sha256":file_hash(path),"bytes":path.stat().st_size})
+    manifest={"schema_version":1,"format":"oxygen-neutral-analysis-package-v1","input_key":key,"revision":project.revision,"stale_results":last["stale"],"geometry_key":geometry_key(project),"transfer_losses":losses,"exported_decks":list(decks),"deck_provenance":deck_provenance,"geometry_included":False,"analysis_mesh_included":True,"evidence_files":evidence,"adapter_version":ADAPTER_VERSION}
+    partial=package.with_suffix(".zip.partial")
+    with zipfile.ZipFile(partial,"w",zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json",json.dumps(manifest,indent=2))
         archive.writestr("simulation.json",json.dumps(domain.model_dump(mode="json"),indent=2))
         archive.writestr("results.json",json.dumps(last,indent=2))
         for cid,path in decks.items():archive.write(path,"calculix/"+path.name)
+        for record in evidence:archive.write(run/Path(record["path"]).relative_to("solver-evidence"),record["path"])
+    with zipfile.ZipFile(partial) as archive:
+        for record in evidence:
+            value=hashlib.sha256()
+            with archive.open(record["path"]) as stream:
+                for chunk in iter(lambda:stream.read(1024*1024),b""):value.update(chunk)
+            if value.hexdigest()!=record["sha256"]:raise ValueError("Solver evidence changed while packaging; handoff refused")
+    current=store.load()
+    current_domain=SimulationDomain.model_validate(getattr(current,"domains",{}).get("simulation",domain.model_dump(mode="json")))
+    current_study,_=_study(current_domain,study.id)
+    if input_key(current,current_domain,current_study)!=key:raise ValueError("Study inputs changed while packaging; handoff refused")
+    partial.replace(package)
     return {"artifact":str(package.relative_to(store.cache)),"manifest":manifest}
