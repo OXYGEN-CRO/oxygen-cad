@@ -319,6 +319,44 @@ geometry and plastic/large/combined contact cases have separate numerical state,
 force and derivative-status checks. The companion native archive and probe source
 retain their GPL provenance; the MIT application remains a separate process.
 
+### Refined native material replay
+
+Adapter `oxygen-canonical-16` adds a separate final-state material audit. With
+`O3D_BULK_KERNEL_EVIDENCE` configured, its GPL material executable must match the
+pinned driver, source archive, exact solver-build receipt, executable hash and
+actual loaded runtime libraries. The tool identity enters the study fingerprint;
+changed or unrelated tools cannot reuse prior results. An absent tool is reported
+as unavailable. It is never obtained from a project-controlled command.
+
+Every final plastic Gauss point, within a 4,096-point budget, replays the original
+increment-start history and the exact deck material numbers. Native stress,
+updated internal history and algorithmic tensor must match the captured state.
+The audit then compares central and both one-sided native stress derivatives at
+engineering-strain steps 1e-6, 1e-7, 1e-8, 1e-9, 3e-10 and 1e-10. Each column must have two successive
+converged refinements and matching one-sided limits within 2e-6 relative. The
+largest qualifying step is retained to limit cancellation; comparisons are per
+column so a large bulk modulus cannot hide another component's discrepancy.
+Yield boundaries and replay mismatches remain unqualified. Baseline results must
+also agree exactly across all six independent replay calls.
+
+`material-derivative-audit.json` records every point and its failure reason.
+`material-replay-input.txt` and `material-replay-output.txt` retain exact native
+inputs/outputs and hashes. `material-derivative-tensors.npz` keeps nonsymmetric
+derivatives with per-point qualification masks. Only if all final plastic points
+pass does `material-final-force-jacobian.npz` contain a separate candidate bulk
+force Jacobian, including geometric stress stiffness. C3D4 and curved C3D10
+checks differentiate every nodal force column through the native finite-strain
+plastic law; they distinguish this candidate from its original algorithmic
+tensor. The full solver evidence and handoff include these files.
+
+This is a bounded numerical derivative of the native constitutive update at one
+accepted state and fixed increment-start history. It does not replace the native
+Newton solver tensor, upgrade earlier increments, or qualify changing contact
+maps, dynamic stability or physical materials. Existing bulk/contact operator
+qualification flags remain separate and conservative. The audit is bounded to
+60 seconds, 32 MiB input and 128 MiB output; unsupported history, missing source,
+resource limits and native failures retain explicit unavailable diagnostics.
+
 ## Canonical quadratic study integration
 
 Simulation jobs share the platform's guarded status publication. A polling-cache

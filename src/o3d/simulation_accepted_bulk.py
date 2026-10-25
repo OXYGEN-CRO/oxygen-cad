@@ -102,7 +102,7 @@ def native_material_tensor(packed,kind):
     return out
 
 
-def element_operator(xyz,displacement,packed,stress,kind,nonlinear):
+def element_operator(xyz,displacement,packed,stress,kind,nonlinear,*,material_tensors=None):
     """Total-Lagrangian B^T C B + geometric stress stiffness and native force."""
     xyz=_finite(np.asarray(xyz,dtype=float));u=_finite(np.asarray(displacement,dtype=float));n=len(xyz)
     if xyz.shape!=(n,3) or u.shape!=xyz.shape or n not in (4,10):raise ValueError('Unsupported bulk element geometry')
@@ -112,13 +112,16 @@ def element_operator(xyz,displacement,packed,stress,kind,nonlinear):
         weights=[1/24]*4
     else:gradients=[np.array([[-1.,-1.,-1.],[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]])];weights=[1/6]
     if np.shape(packed)!=(len(gradients),21) or np.shape(stress)!=(len(gradients),6):raise ValueError('Incomplete accepted bulk quadrature tensors')
+    if material_tensors is not None:
+        material_tensors=_finite(np.asarray(material_tensors,dtype=float))
+        if material_tensors.shape!=(len(gradients),6,6):raise ValueError('Incomplete material force derivative tensors')
     matrix=np.zeros((3*n,3*n));force=np.zeros((n,3))
     for q,(reference,weight) in enumerate(zip(gradients,weights)):
         jac=(xyz-xyz[:1]).T@reference;det=float(np.linalg.det(jac))
         if det<=0 or not np.isfinite(det):raise ValueError('Nonpositive accepted bulk reference Jacobian')
         g=reference@np.linalg.inv(jac);f=np.eye(3)+u.T@g if nonlinear else np.eye(3)
         if np.linalg.det(f)<=0:raise ValueError('Nonpositive accepted bulk deformation Jacobian')
-        c=native_material_tensor(packed[q],kind);b=np.zeros((6,n,3))
+        c=native_material_tensor(packed[q],kind) if material_tensors is None else material_tensors[q];b=np.zeros((6,n,3))
         for axis in range(3):b[axis]=np.outer(g[:,axis],f[:,axis])
         for row,(a,d) in enumerate([(0,1),(0,2),(1,2)],3):b[row]=np.outer(g[:,d],f[:,a])+np.outer(g[:,a],f[:,d])
         b=b.reshape(6,3*n);s=stress[q];tensor=np.array([[s[0],s[3],s[4]],[s[3],s[1],s[5]],[s[4],s[5],s[2]]]);w=det*weight
@@ -128,7 +131,7 @@ def element_operator(xyz,displacement,packed,stress,kind,nonlinear):
     return _finite(matrix),_finite(force)
 
 
-def assemble_bulk(system,data):
+def assemble_bulk(system,data,*,material_tensors=None):
     if len(system.ids)*3>MAX_DOFS or len(system.mesh.elements)*len(system.mesh.elements[0].nodes)**2*9>MAX_ENTRIES:
         raise ValueError('Accepted bulk operator exceeds its declared assembly budget')
     records=data['records'];elements={e.id:e for e in system.mesh.elements}
@@ -138,7 +141,7 @@ def assemble_bulk(system,data):
         label,nn,nq,kind=map(int,record[:4]);nodes=list(map(int,record[4:4+nn]));element=elements[label]
         if list(element.nodes)!=nodes:raise ValueError('Accepted bulk connectivity differs from analysis mesh')
         indices=np.array([system.index[n] for n in nodes]);section=slice(offset,offset+nq);offset+=nq
-        matrix,local_force=element_operator(system.xyz[indices],data['accepted_displacements_mm'][np.array(nodes)-1],data['tangent'][section],data['stress'][section],kind,bool(data['header']['iperturb'][1]))
+        matrix,local_force=element_operator(system.xyz[indices],data['accepted_displacements_mm'][np.array(nodes)-1],data['tangent'][section],data['stress'][section],kind,bool(data['header']['iperturb'][1]),material_tensors=None if material_tensors is None else material_tensors[section])
         dofs=(indices[:,None]*3+np.arange(3)).ravel();rows.extend(np.repeat(dofs,len(dofs)));cols.extend(np.tile(dofs,len(dofs)));values.extend(matrix.ravel());force[indices]+=local_force
     bulk=sparse.coo_matrix((values,(rows,cols)),shape=(3*len(system.ids),)*2).tocsr();bulk.eliminate_zeros()
     return bulk,force
@@ -262,6 +265,8 @@ class AcceptedBulkAudit:
         if self.build:summary.update(binary_sha256=self.build['binary_sha256'],receipt_sha256=self.build['receipt_sha256'])
         write_json(self.directory/'accepted-bulk-audit.json',{'schema':1,'summary':summary,'history':rows})
         result['checks']['accepted_bulk_state_audit']=summary
+        from .simulation_material_derivatives import audit_final_material
+        audit_final_material(self,result)
         if has_contact:
             evidence=json.loads((self.directory/'contact.json').read_text())
             evidence['accepted_bulk_state_audit']=summary

@@ -205,7 +205,7 @@ def test_mass_limit_uses_physical_grams(tmp_path):
     assert result["physical_validation"]=="not_supplied"
 
 
-@pytest.mark.parametrize("source_name",["simulation_units.py","simulation_contact_global.py","simulation_native_tangent.py","simulation_accepted_bulk.py"])
+@pytest.mark.parametrize("source_name",["simulation_units.py","simulation_contact_global.py","simulation_native_tangent.py","simulation_accepted_bulk.py","simulation_material_derivatives.py"])
 def test_unit_source_changes_invalidate_previous_results(tmp_path,monkeypatch,source_name):
     import o3d.simulation_provenance as provenance
     from o3d.domains.simulation import ADAPTER_VERSION as domain_adapter
@@ -219,7 +219,7 @@ def test_unit_source_changes_invalidate_previous_results(tmp_path,monkeypatch,so
         return "0"*64 if Path(path).name==source_name else actual_hash(path)
     monkeypatch.setattr(provenance,"fingerprint_file",changed)
     assert input_key(project,domain,study)!=key
-    assert domain_adapter==worker_adapter=="oxygen-canonical-15"
+    assert domain_adapter==worker_adapter=="oxygen-canonical-16"
     request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":before}
     with pytest.raises(ValueError,match="software changed after snapshot"):
         solve(request,tmp_path)

@@ -10,5 +10,6 @@
   "native_tangent_header_sha256": "26c8f68ed8b144c725a478a4e5b57865f11d996792ae881b3a5f85c4ba43cc1e",
   "native_tangent_schema": 1,
   "accepted_bulk_header_sha256": "360c230acd3bde68f294baf1316f4c5c46d020fb6c92ee643e4a18562ff304aa",
-  "accepted_bulk_schema": 1
+  "accepted_bulk_schema": 1,
+  "material_probe_source_sha256": "aa0624c1bc43a56aae7098dbb0aad70c87a9f0f043b4af767da659e543d4ae9b"
 }

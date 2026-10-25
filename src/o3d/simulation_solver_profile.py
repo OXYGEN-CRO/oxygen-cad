@@ -67,3 +67,41 @@ def validated_build(binary):
     if actual is None or not set(libraries.values())<=set(actual.values()):
         raise ValueError('CalculiX runtime does not load the numerical libraries in its build receipt')
     return {**value,'receipt_sha256':file_hash(path),'runtime_library_path':library_path,'runtime_libraries_sha256':actual}
+
+
+def validated_material_probe(build):
+    """Resolve an administrator-configured, source-bound separate GPL replay tool."""
+    configured=os.environ.get('O3D_BULK_KERNEL_EVIDENCE')
+    if not configured:return None
+    path=Path(configured)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file() or path.stat().st_size>65536:
+        raise ValueError('Unsafe native material replay receipt')
+    value=json.loads(path.read_text());root=path.parent
+    if (value.get('schema')!=1 or value.get('material_api')!='native-j2-stress-148-v1'
+        or value.get('source_sha256')!=contract()['source_sha256']
+        or value.get('native_archive_sha256')!=build.get('verification_archive_sha256')
+        or value.get('native_build_receipt_sha256')!=build.get('receipt_sha256')):
+        raise ValueError('Native material replay source/build identity mismatch')
+    if value.get('binaries',{}).get('material')!='material-kernel-probe':
+        raise ValueError('Unsupported native material replay executable')
+    expected=value.get('files_sha256',{})
+    if expected.get('source/material_kernel_probe.f90')!=contract()['material_probe_source_sha256']:
+        raise ValueError('Native material replay driver differs from the pinned source')
+    for name in ('source/material_kernel_probe.f90','material-kernel-probe','COPYING'):
+        p=root/name
+        if p.is_symlink() or not p.is_file() or file_hash(p)!=expected.get(name):
+            raise ValueError('Native material replay source or executable changed')
+    runtime=value.get('runtime_libraries_sha256',{}).get('material')
+    if not isinstance(runtime,dict) or not runtime:raise ValueError('Missing native material replay runtime identity')
+    for name,digest in runtime.items():
+        p=Path(name)
+        if not p.is_absolute() or not p.is_file() or file_hash(p)!=digest:
+            raise ValueError('Native material replay runtime library changed')
+    library_path=os.pathsep.join(sorted({str(Path(p).parent) for p in runtime}))
+    binary=root/'material-kernel-probe'
+    if not os.access(binary,os.X_OK):raise ValueError('Native material replay executable cannot run')
+    actual=loaded_libraries(binary,library_path)
+    if actual!=runtime:raise ValueError('Native material replay loads a different runtime')
+    return {'binary':str(binary),'binary_sha256':expected['material-kernel-probe'],
+        'receipt_sha256':file_hash(path),'driver_sha256':expected['source/material_kernel_probe.f90'],
+        'runtime_library_path':library_path,'runtime_libraries_sha256':actual}
