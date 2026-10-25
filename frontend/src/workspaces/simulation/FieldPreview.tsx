@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
@@ -11,6 +11,7 @@ export interface FieldData {
   von_mises_mpa?: Record<string, number>;
   element_density?: Record<string, number>;
   nodal_extrapolated_von_mises_mpa?: Record<string, number>;
+  nodal_recovered_von_mises_mpa?: Record<string, number>;
   boundary_triangles?: number[][];
   element_connectivity?: Record<string, number[]>;
   modes?: {
@@ -34,6 +35,7 @@ export default function FieldPreview({
   mode?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const [legend, setLegend] = useState("");
   useEffect(() => {
     if (!host.current || !field.nodes || !field.boundary_triangles?.length)
       return;
@@ -60,7 +62,9 @@ export default function FieldPreview({
       quantity === "temperature"
         ? (field.temperature_k ?? {})
         : quantity === "stress"
-          ? (field.nodal_extrapolated_von_mises_mpa ?? {})
+          ? (field.nodal_recovered_von_mises_mpa ??
+            field.nodal_extrapolated_von_mises_mpa ??
+            {})
           : Object.fromEntries(
               Object.entries(displacement ?? {}).map(([id, v]) => [
                 id,
@@ -96,8 +100,33 @@ export default function FieldPreview({
     const scalarValues = elementValues
       ? Object.values(elementValues)
       : Object.values(values);
-    const minimum = scalarValues.reduce((a, b) => Math.min(a, b), Infinity),
-      maximum = scalarValues.reduce((a, b) => Math.max(a, b), 1e-12);
+    const available =
+      scalarValues.length > 0 && scalarValues.every(Number.isFinite);
+    const minimum = available
+      ? scalarValues.reduce((a, b) => Math.min(a, b), Infinity)
+      : 0;
+    const maximum = available
+      ? scalarValues.reduce((a, b) => Math.max(a, b), -Infinity)
+      : 0;
+    const uniform =
+      Number(minimum.toPrecision(6)) === Number(maximum.toPrecision(6));
+    const unit =
+      quantity === "stress"
+        ? "MPa"
+        : quantity === "temperature"
+          ? "K"
+          : quantity === "mode"
+            ? "relative shape"
+            : quantity === "density"
+              ? "relative density"
+              : "mm";
+    setLegend(
+      !available
+        ? "No values for this field."
+        : uniform
+          ? `Uniform at displayed precision: ${minimum.toPrecision(6)} ${unit}`
+          : `Blue ${minimum.toPrecision(6)} → red ${maximum.toPrecision(6)} ${unit}`,
+    );
     const positions: number[] = [],
       colors: number[] = [];
     for (const triangle of field.boundary_triangles) {
@@ -115,7 +144,8 @@ export default function FieldPreview({
             ? elementValue
             : (values[n] ?? 0);
         const color = new THREE.Color().setHSL(
-          0.65 * (1 - (value - minimum) / Math.max(maximum - minimum, 1e-12)),
+          0.65 *
+            (1 - (uniform ? 0.5 : (value - minimum) / (maximum - minimum))),
           0.7,
           0.5,
         );
@@ -178,10 +208,15 @@ export default function FieldPreview({
     };
   }, [field, quantity, scale, mode]);
   return (
-    <div
-      className="sim-field"
-      ref={host}
-      aria-label="Numerical finite element field preview"
-    />
+    <>
+      <div
+        className="sim-field"
+        ref={host}
+        aria-label="Numerical finite element field preview"
+      />
+      <p className="sim-help" aria-label="Field color range">
+        {legend}
+      </p>
+    </>
   );
 }

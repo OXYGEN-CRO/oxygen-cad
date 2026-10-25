@@ -19,7 +19,7 @@ CAPABILITIES=[
     ("SIM-01","Linear static stress","experimental","C3D4 reference and audited C3D10 CalculiX isotropic multi-body/multi-case elasticity; physical probes, mesh refinement and equation/equilibrium checks"),
     ("SIM-02","Loads and supports","experimental","Planar traction/pressure, conservative moments/remote forces, gravity, bearing-direction traction and hydrostatic pressure; fixed/partial/frictionless/cylindrical pin"),
     ("SIM-03","Inertial relief","experimental","Free connected isotropic static solid; explicit translation/angular acceleration and six rigid gauge constraints"),
-    ("SIM-04","Assembly contact","experimental","Sourced paired-node elastic bonded and frictionless separation penalties; gap/active-set checks; no general sliding/friction/self-contact"),
+    ("SIM-04","Assembly contact","experimental","C3D4 sourced paired penalties and canonical C3D10 linear perfect bonds through full-quadratic common-refinement mortar; no quadratic separation/friction/self-contact"),
     ("SIM-05","Bolts/connectors","experimental","Axial elastic truss connector with sourced preload/stiffness; no thread/washer/bending/torque-derived preload"),
     ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 isotropic-hardening curves; full-path peaks/equilibrium, dead loads and axis supports; no translated contact/bolts"),
     ("SIM-07","Modal","experimental","C3D4 lumped and C3D10 consistent-mass eigenpairs, analytic rigid spaces, mass-weighted modal pairing/participation and residuals; no quadratic interfaces/preload transfer"),
@@ -75,7 +75,9 @@ def preflight(project,domain,study,model):
         if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal","buckling"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
     if model.mesh and any(mesh.element_family!=model.mesh.element_family for mesh in model.refinements):errors.append("All refinement levels must use the same element family")
     if model.mesh and model.mesh.element_family=="C3D10":
-        if study.interfaces or study.bolts or study.settings.inertial_relief:errors.append("Quadratic contact/connector/inertial-relief translation is not integrated; no condition will be discarded")
+        if study.bolts or study.settings.inertial_relief:errors.append("Quadratic connector/inertial-relief translation is not integrated; no condition will be discarded")
+        active=[i for i in study.interfaces if i.kind!='disabled']
+        if study.interfaces and not (study.type=='linear_static' and all(i.kind=='bonded' and i.formulation=='quadratic_surface_mortar' for i in active)):errors.append("Quadratic interfaces currently require linear-static full-quadratic surface bonds; no other contact/thermal/connector condition is reinterpreted; no condition will be discarded")
         if study.type in {"steady_thermal","electronics_cooling"} and any(c.supports or c.loads or c.history or any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Quadratic steady thermal studies require thermal boundaries without mechanical supports/loads/history/velocity")
         if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
         if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
@@ -120,6 +122,7 @@ def _mesh(store,project,domain,study,model,payload,cancel):
         parts=[{"body_id":"part","step":str(store.artifact(built["artifacts"]["step"]))}]
         faces=[{**f,"body_id":"part"} for f in built["faces"]]
     required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal] if item.region_id}|{r.id for r in model.regions}
+    required|={name for interface in study.interfaces if interface.kind!='disabled' and interface.formulation=='quadratic_surface_mortar' for name in [interface.primary_region_id,interface.secondary_region_id] if name}
     region_requests={r.id:r.model_dump(mode="json") for r in model.regions}
     region_requests.update({r["id"]:r for r in payload.get("regions",[])})
     regions=[]
@@ -211,6 +214,11 @@ def _run(store,project,domain,study,model,payload,cancel):
             if source.is_symlink() or not evidence.is_relative_to(case_dir.resolve()) or not evidence.is_file():raise ValueError("Invalid reference-load evidence path")
             if evidence.stat().st_size!=record["bytes"] or hashlib.sha256(evidence.read_bytes()).hexdigest()!=record["sha256"]:raise ValueError("Reference-load evidence changed; results refused")
             result["reference_load_artifact"]=str(evidence.relative_to(store.cache))
+        if "interface_evidence" in result:
+            record=result["interface_evidence"];source=case_dir/record["path"];evidence=source.resolve()
+            if source.is_symlink() or not evidence.is_relative_to(case_dir.resolve()) or not evidence.is_file():raise ValueError("Invalid interface evidence path")
+            if evidence.stat().st_size!=record["bytes"] or hashlib.sha256(evidence.read_bytes()).hexdigest()!=record["sha256"]:raise ValueError("Interface evidence changed; results refused")
+            result["interface_artifact"]=str(evidence.relative_to(store.cache))
         result["completed_at"]=now()
         # Full normalized output and raw logs are retained, never only a completion badge.
         result["artifact"]=str((case_dir/"result.json").relative_to(store.cache))

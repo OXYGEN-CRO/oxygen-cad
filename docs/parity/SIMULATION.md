@@ -85,8 +85,8 @@ quadratic weights with sourced density; negative corner weights are genuine.
 Remote force/moment transfer preserves the requested resultant and moment, with
 its nodal idealization explicit. Fixed/world-axis partial supports are translated
 without rotation/MPC approximations. Each independent static solid must restrain
-all six rigid motions; modal analysis retains the remaining rigid space. Quadratic contact/bolts/inertial relief, bearing/hydrostatic
-translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
+all six rigid motions; modal analysis retains the remaining rigid space. Quadratic separation/friction, bolts/inertial relief and bearing/hydrostatic
+translation remain unavailable; linear perfect surface bonds are described below and refuses execution. Steady solid thermal transfer is described above.
 
 User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
 static displacement probe for either canonical family. Outside points refuse;
@@ -157,3 +157,23 @@ audits export in neutral evidence, without claiming an executed CalculiX deck.
 Explicit yield and reference-deformation screens can make the result inconclusive.
 No independent preload, contact, thermal/history/velocity/follower-load transfer,
 imperfect collapse, postbuckling or physical calibration is established.
+
+## Canonical full-quadratic bonded load paths
+
+Linear static now supports explicit perfect surface bonds between separately
+meshed solids, using common-refinement full-P2 variational mortar. D/B projection
+constraints preserve affine/rigid motion and constant-stress consistency without
+finite springs, nearest-node matching or coordinate adjustment. Assembly support
+checks apply to complete bonded load paths, while reduced equations, energy,
+force/moment balance and strong-trace jump remain visible. Nodal stress uses
+volume-weighted recovery; four actual stress samples are labeled screening.
+The UI edits primary/secondary face regions, tolerance and source; API/CLI use
+the same records and neutral evidence. Full operators and interface forces
+export, without an executed CalculiX assembly deck. Independent scikit-fem and
+GEOS/Shapely supermeshing check straight/curved graph patches. Current graph
+charts retain full curved normal geometry with affine projected edges; general
+curved edge intersections refuse, as do ambiguous/gapped or conflicting maps.
+Quadratic separation/friction, adhesive laws, connectors/preload, thermal and
+bonded modal/buckling/nonlinear transfer, larger budgets and physical calibration
+remain unfinished. Earlier all-quadratic-interface refusal statements are
+historical for this explicit linear perfect-bond subset only.

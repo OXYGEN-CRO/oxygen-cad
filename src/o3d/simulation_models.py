@@ -191,7 +191,20 @@ class Interface(Record):
     conductance_w_k: float | None = Field(default=None, gt=0)
     initial_gap_mm: float = Field(default=0, ge=0)
     source: str = Field(min_length=1)
-    formulation: Literal["paired_node_penalty"] = "paired_node_penalty"
+    formulation: Literal["paired_node_penalty", "quadratic_surface_mortar"] = "paired_node_penalty"
+    primary_region_id: str | None = None
+    secondary_region_id: str | None = None
+    position_tolerance_mm: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def surface_contract(self):
+        if self.formulation == "quadratic_surface_mortar":
+            if self.kind not in {"bonded", "disabled"}:raise ValueError("Quadratic surface mortar represents a perfect bond, not separation or thermal conductance")
+            if not self.primary_region_id or not self.secondary_region_id or self.primary_region_id==self.secondary_region_id or self.position_tolerance_mm is None:raise ValueError("Surface bond requires distinct primary/secondary regions and an explicit mapping tolerance")
+            if self.node_pairs or self.normal is not None or self.stiffness_n_mm is not None or self.conductance_w_k is not None or self.initial_gap_mm:raise ValueError("Surface bonds do not consume paired-node penalty/gap parameters")
+        elif self.primary_region_id is not None or self.secondary_region_id is not None or self.position_tolerance_mm is not None:
+            raise ValueError("Surface regions/tolerance require the quadratic surface mortar formulation")
+        return self
 
 
 class Bolt(Record):

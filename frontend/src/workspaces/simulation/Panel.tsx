@@ -275,6 +275,21 @@ export default function SimulationPanel(props: DomainPanelProps) {
       });
     return regionId;
   };
+  const chooseBondFace = (
+    index: number,
+    role: "primary_region_id" | "secondary_region_id",
+  ) => {
+    try {
+      const next = structuredClone(data);
+      const region = selectionRegion(next);
+      next.studies.find((item) => item.id === study?.id)!.interfaces[index][
+        role
+      ] = region;
+      setData(next);
+    } catch (error) {
+      props.setError(String(error));
+    }
+  };
   const addBoundary = (kind: "support" | "load" | "thermal") => {
     try {
       const draft = structuredClone(data),
@@ -928,6 +943,132 @@ export default function SimulationPanel(props: DomainPanelProps) {
               </>
             )}
           </details>
+          {(study.type === "linear_static" || study.interfaces?.length > 0) && (
+            <details>
+              <summary>Bonded interfaces</summary>
+              <p className="sim-help">
+                Transfer loads between coincident faces using a perfect bond.
+                Supply the engineering source and mapping tolerance. This
+                assumption has no adhesive thickness, compliance, separation or
+                friction.
+              </p>
+              <Button
+                disabled={
+                  study.type !== "linear_static" || elementFamily !== "C3D10"
+                }
+                onClick={() =>
+                  editStudy((draft) => {
+                    draft.interfaces ??= [];
+                    draft.interfaces.push({
+                      id: id("bond"),
+                      kind: "bonded",
+                      formulation: "quadratic_surface_mortar",
+                      primary_region_id: "",
+                      secondary_region_id: "",
+                      position_tolerance_mm: null,
+                      source: "",
+                    });
+                  })
+                }
+              >
+                Add bonded interface
+              </Button>
+              {study.interfaces?.map(
+                (bond: Row, index: number) =>
+                  bond.formulation === "quadratic_surface_mortar" && (
+                    <div className="sim-boundary" key={bond.id}>
+                      {(["primary", "secondary"] as const).map((role) => (
+                        <label key={role}>
+                          {role === "primary"
+                            ? "Primary face region"
+                            : "Secondary face region"}
+                          <SelectControl
+                            aria-label={`Bond ${index + 1} ${role} region`}
+                            value={bond[`${role}_region_id`] ?? ""}
+                            onChange={(event) =>
+                              editStudy((draft) => {
+                                draft.interfaces[index][`${role}_region_id`] =
+                                  event.target.value;
+                              })
+                            }
+                          >
+                            <option value="">Choose a face region</option>
+                            {model?.regions?.map((region: Row) => (
+                              <option key={region.id} value={region.id}>
+                                {region.id}
+                              </option>
+                            ))}
+                          </SelectControl>
+                          <Button
+                            disabled={props.selection?.kind !== "face"}
+                            onClick={() =>
+                              chooseBondFace(index, `${role}_region_id`)
+                            }
+                          >
+                            Use selected {role} face
+                          </Button>
+                        </label>
+                      ))}
+                      <label>
+                        Mapping tolerance (mm)
+                        <Input
+                          aria-label={`Bond ${index + 1} mapping tolerance (mm)`}
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={bond.position_tolerance_mm ?? ""}
+                          onChange={(event) =>
+                            editStudy((draft) => {
+                              draft.interfaces[index].position_tolerance_mm =
+                                event.target.value === ""
+                                  ? null
+                                  : Number(event.target.value);
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Bond assumption source
+                        <Input
+                          aria-label={`Bond ${index + 1} source`}
+                          value={bond.source}
+                          onChange={(event) =>
+                            editStudy((draft) => {
+                              draft.interfaces[index].source =
+                                event.target.value;
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="sim-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={bond.kind !== "disabled"}
+                          onChange={(event) =>
+                            editStudy((draft) => {
+                              draft.interfaces[index].kind = event.target
+                                .checked
+                                ? "bonded"
+                                : "disabled";
+                            })
+                          }
+                        />
+                        Enabled
+                      </label>
+                      <Button
+                        onClick={() =>
+                          editStudy((draft) => {
+                            draft.interfaces.splice(index, 1);
+                          })
+                        }
+                      >
+                        Remove bond
+                      </Button>
+                    </div>
+                  ),
+              )}
+            </details>
+          )}
           <details open>
             <summary>Mesh and verification</summary>
             <label>
@@ -1252,6 +1393,11 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     <a href={artifact(r.field_artifact)} download>
                       Field JSON
                     </a>
+                    {r.interface_artifact && (
+                      <a href={artifact(r.interface_artifact)} download>
+                        Bond interface fields
+                      </a>
+                    )}
                     {r.reference_load_artifact && (
                       <a href={artifact(r.reference_load_artifact)} download>
                         Reference-load fields

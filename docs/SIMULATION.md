@@ -14,6 +14,55 @@ contact/event/optimization subsets. Its implementation limits
 are recorded in [the domain ledger](parity/SIMULATION.md). Neither layer silently
 converts the other's inputs or establishes full assembly/physics parity.
 
+## Canonical bonded assemblies
+
+Canonical quadratic linear-static studies can connect separately meshed solids
+with `Interface.formulation = "quadratic_surface_mortar"`, `kind = "bonded"`,
+explicit primary/secondary face-region IDs, mapping tolerance and assumption
+source. The studio edits these selections and keeps the source/tolerance through
+normal revision-checked save. Every active interface is translated or refused.
+Existing paired-node penalties keep their separate declared semantics.
+
+The adapter intersects the two surface discretizations in a common chart and
+integrates full six-node traces with physical curved area measures. Standard
+secondary trace multipliers produce `D u_secondary = B u_primary`; the exact
+L2 projection is eliminated as constraints. This is a perfect zero-thickness
+variational bond, not a penalty spring or nearest-node map. Common-refinement
+integration preserves constant-stress patches on nonmatching quadratic meshes.
+Straight and curved graph-patch cases are checked against independent
+scikit-fem and GEOS/Shapely supermeshing. The reference packages are optional
+verification dependencies, not production solver dependencies.
+
+Qualified charts have affine projected edges, while their normal geometry may
+be quadratic and curved. The chart derives from local geometry, so world rotation
+does not change the supported graph problem. General curved edge intersections
+remain unqualified and refuse; no corner faceting fallback or node adjustment is
+used. A Bernstein bound checks coincidence across each common graph patch.
+Incomplete/ambiguous coverage, opposing-normal failure, point/edge-only load
+paths, cyclic/dependent-support conflicts and unresolved integration refuse.
+Rigid-motion checks apply to each complete bonded load path, so a bonded solid
+can transmit loads without an artificial individual clamp.
+
+Bulk stiffness uses the existing full C3D10 operator. Reduced residuals, strain
+energy, actual support reactions, interface action/reaction forces and moments,
+physical-point probes, sampled stress and real refinement remain inspectable.
+The strong trace jump is reported separately from weak mortar continuity;
+excessive relative jump requires further interface refinement. Four standard
+postprocessing stress points and volume-weighted nodal recovery are screening
+fields, not continuous stress bounds. Existing yield/deformation screens apply.
+
+Neutral handoff retains bulk stiffness, constraint transformation, mortar D/B,
+DOF order and hashed interface-force/geometry audits. Complete interface data is
+an explicit download; ordinary results retain compact summaries. No executed
+CalculiX assembly deck is claimed. Dense mortar factors/transfers are capped at
+three million entries, expanded constraints at ten million entries and reduced
+mechanical unknowns at 60,000. Larger/dual-space qualification remains open.
+
+This increment is linear perfect bonding. Quadratic separation/friction,
+adhesive compliance/damage, general connectors/preload, thermal interfaces,
+bonded modal/buckling/nonlinear transfer and physical interface calibration remain
+open under the complete simulation roadmap.
+
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
@@ -42,8 +91,8 @@ declared inputs; recording a process does not calibrate an isotropic material la
 
 The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
-force/moment idealizations. Disconnected static bodies require separately adequate
-supports; modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Contact, bolts,
+force/moment idealizations. Disconnected static load paths require adequate supports; validated perfect
+surface bonds can connect solids. Modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Linear perfect surface bonds are described above. General contact, bolts,
 inertial relief and bearing/hydrostatic loads
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately

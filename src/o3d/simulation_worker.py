@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-7"
+ADAPTER_VERSION="oxygen-canonical-8"
 
 
 def clean(value):
@@ -32,6 +32,7 @@ def numerical_checks(result,study):
     if checks.get("stiffness_orthogonality_error",0)>settings.residual_tolerance:failures.append("buckling elastic-stiffness orthogonality")
     if checks.get("reference_displacement_to_extent_ratio",0)>.05:failures.append("linear reference-load deformation screen exceeded")
     if checks.get("geometric_integration",{}).get("maximum_sampled_strain_norm",0)>.05:failures.append("linear reference-load strain screen exceeded")
+    if checks.get("maximum_relative_interface_jump",0)>settings.convergence_tolerance:failures.append("mortar strong trace jump requires further interface refinement")
     if "prestress" in checks:
         if checks["prestress"].get("residual",0)>settings.residual_tolerance:failures.append("prestress equation residual")
         if any(checks["prestress"].get(k,0)>settings.balance_tolerance for k in ("force_balance_error","moment_balance_error")):failures.append("prestress equilibrium")
@@ -74,7 +75,10 @@ def solve(request,directory,cancel=None):
         validate_boundary(mesh)
         if family=="C3D10":
             from .simulation_quadratic import QuadraticSystem
-            if study.type in {"steady_thermal","electronics_cooling"}:
+            if study.type=="linear_static" and study.interfaces:
+                from .simulation_assembly import BondedAssemblySystem
+                system=BondedAssemblySystem(mesh,study,materials,cancel)
+            elif study.type in {"steady_thermal","electronics_cooling"}:
                 from .simulation_quadratic_thermal import QuadraticThermalSystem
                 system=QuadraticThermalSystem(mesh,study,materials,cancel)
             elif study.type in {"modal","buckling"}:
@@ -95,7 +99,10 @@ def solve(request,directory,cancel=None):
             raise ValueError("Mesh convergence requires genuinely finer cells, more nodes and more elements")
         previous_resolution=resolution
         if study.type=="linear_static":
-            result=calculix_solve(system,case,directory/f"mesh-{i}"/"linear",cancel,nonlinear=False) if family=="C3D10" else static_solve(system,case,cancel)
+            if family=="C3D10" and study.interfaces:
+                from .simulation_assembly import bonded_solve
+                result=bonded_solve(system,case,directory/f"mesh-{i}"/"bonded",cancel)
+            else:result=calculix_solve(system,case,directory/f"mesh-{i}"/"linear",cancel,nonlinear=False) if family=="C3D10" else static_solve(system,case,cancel)
         elif study.type in {"steady_thermal","electronics_cooling"}:
             if family=="C3D10":
                 from .simulation_quadratic_thermal import thermal_solve as quadratic_thermal_solve
@@ -196,6 +203,7 @@ def solve(request,directory,cancel=None):
     if study.type=="buckling":result["field_location"]["mode_shape"]="unit-amplitude reference shape; not physical displacement"
     if family=="C3D10":
         if study.type in {"linear_static","nonlinear_static","thermal_stress"}:result["field_location"]["stress"]="nodal_extrapolated"
+        if study.type=="linear_static" and study.interfaces:result["field_location"]["stress"]="volume-weighted nodal recovery, screening only"
         if study.type=="thermal_stress":result["field_location"]["integration_point_stress"]="element_integration_point"
         if study.type in {"steady_thermal","electronics_cooling","thermal_stress"}:result["field_location"].update({"heat_flux":"element_volume_average", "temperature_extrema":"conservative Bernstein polynomial bounds"})
     if software_fingerprint(study.type,family)!=actual_software:raise ValueError("Solver software changed during execution; results refused")
