@@ -207,10 +207,11 @@ def exporter_probe(tmp_path_factory):
     if configured:
         binary=Path(configured).resolve();directory=binary.parent
         declared=dict(line.split(maxsplit=1)[::-1] for line in (directory/'SHA256SUMS').read_text().splitlines())
-        assert set(declared)=={'probe','native_tangent_limits.c','oxygen_contact_telemetry.h','oxygen_native_tangent.h','COPYING'}
+        assert set(declared)=={'probe','native_tangent_limits.c','oxygen_contact_telemetry.h','oxygen_native_tangent.h','oxygen_accepted_bulk.h','COPYING'}
         for name,digest in declared.items():assert file_hash(directory/name)==digest
         assert file_hash(directory/'oxygen_native_tangent.h')==contract()['native_tangent_header_sha256']
         assert file_hash(directory/'oxygen_contact_telemetry.h')==contract()['telemetry_header_sha256']
+        assert file_hash(directory/'oxygen_accepted_bulk.h')==contract()['accepted_bulk_header_sha256']
         assert file_hash(directory/'native_tangent_limits.c')==file_hash(root/'scripts/native_tangent_limits.c')
         return binary
     compiler=shutil.which('cc')

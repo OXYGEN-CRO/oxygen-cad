@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-14"
+ADAPTER_VERSION="oxygen-canonical-15"
 
 
 def clean(value):

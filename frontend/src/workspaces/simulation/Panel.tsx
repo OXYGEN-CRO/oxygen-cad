@@ -1556,8 +1556,15 @@ export default function SimulationPanel(props: DomainPanelProps) {
                         <p className="sim-help">
                           {r.checks.contact_current_state_audit
                             .full_frozen_operator.performed
-                            ? `Full deformable model: ${r.checks.contact_current_state_audit.full_frozen_operator.free_dofs} free degrees of freedom across ${r.checks.contact_current_state_audit.full_frozen_operator.frames} increments; ${r.checks.contact_current_state_audit.full_frozen_operator.complete_frames} have unambiguous contact states. Largest estimated condition number: ${format(r.checks.contact_current_state_audit.full_frozen_operator.maximum_condition_number_1_estimate)}. Large estimates indicate numerical sensitivity; a small estimate cannot prove stability.`
+                            ? `Full deformable model: ${r.checks.contact_current_state_audit.full_frozen_operator.free_dofs} free degrees of freedom across ${r.checks.contact_current_state_audit.full_frozen_operator.frames} increments; ${r.checks.contact_current_state_audit.full_frozen_operator.complete_frames} have complete bulk/contact derivative data. Largest estimated condition number: ${format(r.checks.contact_current_state_audit.full_frozen_operator.maximum_condition_number_1_estimate)}. Large estimates indicate numerical sensitivity; a small estimate cannot prove stability.`
                             : `Full deformable audit unavailable: ${r.checks.contact_current_state_audit.full_frozen_operator.reason}`}
+                        </p>
+                      )}
+                      {r.checks.accepted_bulk_state_audit && (
+                        <p className="sim-help">
+                          {r.checks.accepted_bulk_state_audit.performed
+                            ? `Accepted bulk state: ${r.checks.accepted_bulk_state_audit.state_bound_frames}/${r.checks.accepted_bulk_state_audit.accepted_frames} increments match displacement and material history exactly. Native internal forces compared in ${r.checks.accepted_bulk_state_audit.force_checked_frames} increments. Material derivatives and stability require separate qualification.`
+                            : `Accepted bulk state unavailable: ${r.checks.accepted_bulk_state_audit.reason}`}
                         </p>
                       )}
                       <p className="sim-help">

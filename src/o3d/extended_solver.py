@@ -26,6 +26,7 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
         from .simulation_contact import SurfaceContact
         contact=SurfaceContact(system)
     system._contact_definition=contact
+    system._translated_plastic=bool(nonlinear)
     if any(s.kind not in {"fixed","partial"} for s in case.supports):
         raise ValueError("CalculiX adapter accepts fixed/world-axis partial supports only")
     if not case.supports:raise ValueError("CalculiX nonlinear solve requires mechanical supports")
@@ -211,7 +212,8 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     binary=solver_binary()
     from .simulation_solver_profile import validated_build
     system._contact_build=validated_build(binary)
-    overrides={'environment_overrides':{'O3D_CCX_NATIVE_TANGENT':'1' if system._contact_build else '0'}}
+    overrides={'environment_overrides':{'O3D_CCX_NATIVE_TANGENT':'1' if system._contact_build else '0',
+        'O3D_CCX_ACCEPTED_BULK':'1' if system._contact_build else '0'}}
     if contact is not None or system._contact_build:
         overrides['environment_overrides']['O3D_CCX_CONTACT_TELEMETRY']='1' if system._contact_build else '0'
         if system._contact_build:overrides['environment_overrides']['LD_LIBRARY_PATH']=system._contact_build['runtime_library_path']
@@ -350,6 +352,9 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         peak=max(probes,key=lambda p:p["magnitude_mm"])
         result["values"]["probe_displacement_mm"]=peak["magnitude_mm"]
         result["displacement_probe"]={"final":probes[-1],"peak":peak,"history":probes}
+    if system._contact_build:
+        from .simulation_accepted_bulk import AcceptedBulkAudit
+        system._accepted_bulk=AcceptedBulkAudit(directory,system,case,increments,system._contact_build)
     if system._contact_definition is not None:
         from .simulation_contact import read_contact
         read_contact(directory,system._contact_definition,case,result,frames,vectors,force,constrained)
@@ -359,4 +364,5 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     if system._contact_build:
         from .simulation_native_tangent import audit_native_newton
         audit_native_newton(directory,system,case,result,increments)
+        system._accepted_bulk.write(result,has_contact=system._contact_definition is not None)
     return result

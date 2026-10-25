@@ -247,10 +247,27 @@ test("native solids preserve explicit experimental contact and downloadable evid
     expect(evidence.work_audit.frictional_work_integrated).toBe(true);
     expect(evidence.work_audit.contact_tangent_stability_qualified).toBe(false);
     expect(evidence.work_audit.energy_balance_error).toBeLessThan(1e-5);
-    expect(evidence.native_newton_audit.all_accepted_frames_verified).toBe(true);
-    expect(evidence.native_newton_audit.maximum_solve_backward_error).toBeLessThan(1e-12);
-    expect(evidence.native_newton_audit.accepted_state_tangent_qualified).toBe(false);
-    expect(evidence.native_newton_audit.full_contact_stability_qualified).toBe(false);
+    expect(evidence.native_newton_audit.all_accepted_frames_verified).toBe(
+      true,
+    );
+    expect(
+      evidence.native_newton_audit.maximum_solve_backward_error,
+    ).toBeLessThan(1e-12);
+    expect(evidence.native_newton_audit.accepted_state_tangent_qualified).toBe(
+      false,
+    );
+    expect(evidence.native_newton_audit.full_contact_stability_qualified).toBe(
+      false,
+    );
+    expect(evidence.accepted_bulk_state_audit.all_accepted_states_bound).toBe(
+      true,
+    );
+    expect(
+      evidence.accepted_bulk_state_audit.maximum_native_force_relative_error,
+    ).toBeLessThan(1e-10);
+    expect(
+      evidence.accepted_bulk_state_audit.accepted_state_tangent_qualified,
+    ).toBe(false);
     expect(evidence.current_state_audit.bulk_kernel.checked).toBe(true);
     expect(evidence.current_state_audit.minimum_normal_restraint_rank).toBe(12);
     expect(evidence.current_state_audit.minimum_constitutive_rank).toBe(12);
@@ -279,6 +296,9 @@ test("native solids preserve explicit experimental contact and downloadable evid
         "These restraint checks do not establish full contact stability.",
         { exact: false },
       ),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Accepted bulk state:", { exact: false }),
     ).toBeVisible();
     expect(evidence.work_audit.raw_telemetry_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(evidence.work_history.at(-1).bulk_internal_energy_n_mm).toBeCloseTo(

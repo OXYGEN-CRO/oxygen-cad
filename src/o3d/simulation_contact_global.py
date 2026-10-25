@@ -1,6 +1,7 @@
-"""Full deformable, frozen-map contact operators for accepted linear bulk states.
+"""Full deformable, frozen-map contact operators with declared bulk tangents.
 
 The bulk uses CalculiX's four C3D10 points, not the higher-order eigen adapter.
+An optional native provider supplies state-bound material/geometric tangents.
 Contact retains every signed quadratic trace coefficient and nonsymmetric term.
 Condition estimates and a symmetric-part witness are diagnostics, not a claim
 about changing maps, nonlinear bulk, dynamic stability or measured hardware.
@@ -76,13 +77,17 @@ class GlobalContactAudit:
     def __init__(self, system, case):
         self.system = system; self.history = []; self.snapshot = None; self.worst = None
         self.reason = None
-        if system.study.settings.large_deformation or any(m.plastic_curve for m in system.assignments.values()):
-            self.reason = 'Native nonlinear bulk tangent is not exported; a linear substitute is refused'
+        self.provider = getattr(system, '_accepted_bulk', None)
+        if self.provider is not None and self.provider.reason:
+            self.reason = self.provider.reason
+        elif self.provider is None and (system.study.settings.large_deformation or any(m.plastic_curve for m in system.assignments.values())):
+            self.reason = 'Accepted nonlinear bulk state is unavailable; a linear substitute is refused'
         elif len(system.ids) * 3 > MAX_DOFS or len(system.mesh.elements) * 900 > MAX_ENTRIES:
             self.reason = 'Full frozen operator exceeds the declared 12000-DOF/8000000 bulk-entry audit budget'
         if self.reason:
             return
-        self.bulk = native_bulk(system)
+        self.bulk = native_bulk(system) if self.provider is None else None
+        size = 3*len(system.ids)
         fixed = set()
         for support in case.supports:
             if support.kind not in {'fixed', 'partial'}:
@@ -91,13 +96,21 @@ class GlobalContactAudit:
                 for axis, active in enumerate((True, True, True) if support.kind == 'fixed' else support.components):
                     if active: fixed.add(3 * i + axis)
         self.fixed = sorted(fixed)
-        self.free = np.array([d for d in range(self.bulk.shape[0]) if d not in fixed], dtype=int)
+        self.free = np.array([d for d in range(size) if d not in fixed], dtype=int)
 
-    def start(self):
+    def start(self, meta=None):
+        if self.reason: return
+        self.meta=meta
+        if self.provider is not None:
+            value=self.provider.get(meta)
+            if value is None:
+                self.reason='Native accepted bulk frame is unavailable';return
+            self.bulk,self.bulk_force,self.bulk_data=value
+            self.contact_force=np.zeros_like(self.bulk_force)
         self.rows = []; self.columns = []; self.values = []; self.traces = []
         self.missing = 0; self.boundaries = 0; self.entries = 0
 
-    def point(self, derivative, trace, *, boundary=False):
+    def point(self, derivative, trace, *, boundary=False, force=None):
         if self.reason: return
         boundary = bool(boundary)
         self.boundaries += int(boundary)
@@ -114,6 +127,9 @@ class GlobalContactAudit:
             raise ValueError('Contact trace does not conserve translations')
         jump = np.kron(weights[None, :], np.eye(3))
         dofs = (np.array([self.system.index[n] for n in nodes])[:, None] * 3 + np.arange(3)).ravel()
+        if self.provider is not None:
+            if force is None:raise ValueError('Accepted bulk/contact force reconstruction requires point forces')
+            for node,weight in zip(nodes,weights):self.contact_force[self.system.index[node]]+=weight*force
         local = jump.T @ derivative @ jump
         row, column = np.nonzero(local)
         self.entries += len(row)
@@ -139,6 +155,12 @@ class GlobalContactAudit:
                'operator_sha256': matrix_hash(reduced), 'one_norm_n_mm': norm,
                'asymmetry_frobenius_ratio': float(sla.norm(reduced - reduced.T) / max(float(sla.norm(reduced)), 1e-300)),
                'condition_number_1_estimate': None, 'solve_backward_error': None, 'factorization': 'fully constrained'}
+        if self.provider is not None:
+            row.update(accepted_bulk_file_sha256=self.bulk_data['file_sha256'],
+                native_internal_force_relative_error=self.provider.check_force(self.meta,self.contact_force))
+            bound=self.provider.rows[(self.meta['step'],self.meta['increment'])]
+            row['bulk_force_jacobian_complete']=bound['bulk_force_jacobian_complete']
+            row['complete_frozen_operator'] &= bound['bulk_force_jacobian_complete']
         witness = np.zeros(len(self.free))
         if len(self.free):
             try:
@@ -160,7 +182,7 @@ class GlobalContactAudit:
         score = float('inf') if len(self.free) and row['condition_number_1_estimate'] is None else row['condition_number_1_estimate'] or 0.
         if self.worst is None or score > self.worst:
             self.worst = score
-            self.snapshot = {'contact': contact, 'reduced': reduced, 'witness': witness, 'row': row.copy(), 'traces': self.traces.copy()}
+            self.snapshot = {'bulk': self.bulk.copy(), 'contact': contact, 'reduced': reduced, 'witness': witness, 'row': row.copy(), 'traces': self.traces.copy()}
         self.history.append(row)
         return row
 
@@ -169,17 +191,19 @@ class GlobalContactAudit:
                    'complete_frames': sum(r['complete_frozen_operator'] for r in self.history),
                    'full_contact_stability_qualified': False,
                    'scope': 'Full linear-bulk frozen-map operator, exact supported DOFs and nonsymmetric contact coupling. Condition estimates are lower bounds, not stability or physical certificates.'}
+        if self.provider is not None:
+            summary['scope']='Native accepted bulk algorithmic/geometric tangent and frozen-map contact operator with exact supports; unchecked plastic material derivatives remain incomplete. Conditioning and symmetric witnesses do not establish changing-map, dynamic or physical stability.'
         if self.reason:
             write_json(directory / 'contact-global.json', {'summary': summary, 'history': self.history})
             return summary
         estimates = [r['condition_number_1_estimate'] for r in self.history if r['condition_number_1_estimate'] is not None]
-        summary.update(total_dofs=self.bulk.shape[0], free_dofs=len(self.free),
+        summary.update(total_dofs=3*len(self.system.ids), free_dofs=len(self.free),
                        maximum_condition_number_1_estimate=max(estimates, default=None),
                        failed_factorizations=sum(r['factorization'].startswith('LU failed') for r in self.history))
         spectral = {'performed': False, 'reason': 'No accepted operator'}
         if self.snapshot:
             snapshot = self.snapshot; reduced = snapshot['reduced']
-            sparse.save_npz(directory / 'contact-global-bulk.npz', self.bulk)
+            sparse.save_npz(directory / 'contact-global-bulk.npz', snapshot['bulk'])
             sparse.save_npz(directory / 'contact-global-contact.npz', snapshot['contact'])
             sparse.save_npz(directory / 'contact-global-reduced.npz', reduced)
             np.savez_compressed(directory / 'contact-global-witness.npz', inverse_action_displacement=snapshot['witness'])
@@ -198,7 +222,7 @@ class GlobalContactAudit:
                 spectral['reason'] = 'Symmetric spectrum is limited to 2048 free DOFs or there are no free DOFs'
             write_json(directory / 'contact-global-dofs.json', {'node_ids': self.system.ids, 'components': ['X', 'Y', 'Z'],
                 'ordering': 'node then world component', 'fixed_dofs': self.fixed, 'free_dofs': self.free.tolist(),
-                'snapshot': snapshot['row'], 'bulk_quadrature': 'four native C3D10 points; full ten-node isotropic Kelvin strain',
+                'snapshot': snapshot['row'], 'bulk_quadrature': 'four native C3D10 points; accepted material/geometric tensor' if self.provider is not None else 'four native C3D10 points; full ten-node isotropic Kelvin strain',
                 'symmetric_part': spectral})
         summary['worst_frame_symmetric_part'] = spectral
         write_json(directory / 'contact-global.json', {'summary': summary, 'history': self.history})

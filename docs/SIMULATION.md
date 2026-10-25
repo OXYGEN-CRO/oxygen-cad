@@ -279,6 +279,46 @@ geometry. An independent uniaxial check obtains plastic compliance
 native matrices. These tests do not establish physical materials or general
 nonconservative stability.
 
+### Accepted constitutive and bulk force state
+
+Adapter `oxygen-canonical-15` also stages the last post-correction native
+constitutive/force evaluation, after line search and before output converts stress
+measures. Its transaction commits only at an accepted increment. The reader
+requires exact equality of candidate and accepted displacement and of the material
+history before and after output. Source/ABI, element labels/connectivity, native
+quadrature and accepted STA coverage are checked. Small-strain stress and NLGEOM
+PK2 stress remain explicitly distinguished. Increment-start displacement, stress,
+strain and internal state are retained for independent material replay.
+
+`accepted-bulk-audit.json` records these bindings and original per-frame hashes.
+The operator includes the full native material tensor and geometric stress
+stiffness for C3D4/C3D10. Bulk plus full quadratic contact forces reproduce the
+native post-correction nodal forces. Final bulk matrices/forces and worst-frame
+bulk/contact matrices are exported separately; a changing bulk is saved from the
+same frame as its contact operator. Unavailable state or resource limits remain
+unperformed. State output is bounded to 10,000 active elements, 40,000 points,
+64 state variables, 64 MiB per committed frame and 512 MiB total. Assembly retains
+the existing 12,000-DOF/eight-million-entry audit budget.
+
+State binding does not establish a material force derivative. Separate GPL probes
+invoke unmodified native element and small/finite-strain J2 routines. Small-strain
+plastic loading/unloading replay reproduces the saved stress, material history and
+tensor; multiaxial native stress differences also agree closely. The pinned
+finite-strain plastic symmetric tensor has a measured relative difference about
+0.000832 from stress finite differences, with a nonsymmetric derivative. Refining
+the strain step from 1e-6 to 1e-9 preserves that difference. This is a tangent
+qualification limit, not evidence by itself of erroneous converged forces or a
+physical hardware failure.
+
+Plastic algorithmic tensors therefore remain explicitly incomplete as force
+Jacobians pending per-state derivative qualification. They are retained rather
+than replaced with elastic matrices. Exact accepted-state full contact stability,
+changing projections/normals/areas, one-sided material/contact transitions and
+physical calibration remain open; qualification flags stay false. Large elastic
+geometry and plastic/large/combined contact cases have separate numerical state,
+force and derivative-status checks. The companion native archive and probe source
+retain their GPL provenance; the MIT application remains a separate process.
+
 ## Canonical quadratic study integration
 
 Simulation jobs share the platform's guarded status publication. A polling-cache

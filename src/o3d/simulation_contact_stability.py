@@ -126,7 +126,7 @@ class ContactStateAudit:
 
     def start(self,meta):
         if not self.enabled:return
-        self.global_audit.start()
+        self.global_audit.start(meta)
         self.meta=meta;self.normal=Rows(self.dimension,self.supports);self.actual=Rows(self.dimension,self.supports);self.possible=Rows(self.dimension,self.supports)
         self.projected=np.zeros((self.dimension,self.dimension));self.counts={'normal':0,'stick':0,'slip':0,'boundary':0}
         self.force_error=0.;self.state_error=0.;self.asymmetry=0.
@@ -148,7 +148,7 @@ class ContactStateAudit:
                 'initial_state':None if initial is None else initial.tolist(),'normal_penalty_n_mm3':kn,
                 'tangential_penalty_n_mm3':kt,'friction_coefficient':friction}
         if pressure<=pressure_resolution:
-            self.global_audit.point(np.zeros((3,3)),trace,boundary=True)
+            self.global_audit.point(np.zeros((3,3)),trace,boundary=True,force=area*(-pressure*normal+tau))
             self.counts['boundary']+=1
             if friction:
                 for row in tangent_rows:self.possible.add(row)
@@ -166,7 +166,7 @@ class ContactStateAudit:
             margin=response['trial_shear_mpa']-response['friction_limit_mpa']
             resolution=max(kt*extent*np.finfo(float).eps*128,pressure_resolution*friction)
             constitutive_boundary=abs(margin)<=resolution or (margin>0 and np.linalg.norm(tau)==0)
-        self.global_audit.point(derivative,trace,boundary=constitutive_boundary)
+        self.global_audit.point(derivative,trace,boundary=constitutive_boundary,force=response['force_n'])
         self.asymmetry=max(self.asymmetry,float(np.linalg.norm(derivative-derivative.T)/np.linalg.norm(derivative)))
         if friction:
             if abs(margin)<=resolution:

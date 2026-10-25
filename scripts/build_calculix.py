@@ -34,6 +34,8 @@ HOOK='''
       if((*nmethod==1)&&(*ithermal<2)&&(*iexpl<=1)&&(*mortar<=1)){
         oxygen_native_tangent_commit(jobnamec,*istep,iinc,*ttime+time,
           *nk,mi,v);
+        oxygen_accepted_bulk_commit(jobnamec,*istep,iinc,*ttime+time,
+          *nk,mi,v,ne0,ipkon,lakon,*nstate_,xstate);
       }
 '''
 TANGENT_STAGE='''
@@ -48,6 +50,16 @@ TANGENT_SOLVED='''
           oxygen_native_tangent_solved(jobnamec,neq[0],b);
         }
 '''
+BULK_STAGE='''
+      /* Last post-correction constitutive evaluation, before output stress
+         conversion. Committing later does not promote an unaccepted iterate. */
+      if((*nmethod==1)&&(*ithermal<2)&&(*iexpl<=1)&&(*mortar<=1)){
+        oxygen_accepted_bulk_stage(jobnamec,*istep,iinc,iit,*ttime+time,dtime,
+          *nk,ne0,mi,ipkon,kon,lakon,ielmat,ielorien,*norien,nelcon,iperturb,
+          *nstate_,*nmpc,*ithermal,icmd,iout,v,vini,fn,xstiff,stx,
+          stiini,emeini,xstateini,xstate);
+      }
+'''
 
 
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -56,7 +68,7 @@ def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def patch_nonlingeo(original):
     if hashlib.sha256(original.encode()).hexdigest()!=NONLINGEO_SHA256:
         raise ValueError('Unexpected upstream nonlingeo.c; do not apply an approximate patch')
-    text=original.replace('#define max(a,b)','#include "oxygen_contact_telemetry.h"\n#include "oxygen_native_tangent.h"\n\n#define max(a,b)',1)
+    text=original.replace('#define max(a,b)','#include "oxygen_contact_telemetry.h"\n#include "oxygen_native_tangent.h"\n#include "oxygen_accepted_bulk.h"\n\n#define max(a,b)',1)
     start=text.index('      /* implicit step (static or dynamic) */')
     anchor='\tif(*isolver==0){'
     location=text.index(anchor,start)
@@ -64,6 +76,9 @@ def patch_nonlingeo(original):
     anchor='\tif(*mortar<=1){\n\t  if(isensitivity){'
     if text.count(anchor)!=1:raise ValueError('Native linear solve output hook is ambiguous')
     text=text.replace(anchor,TANGENT_SOLVED+anchor)
+    anchor='      SFREE(v);SFREE(stx);SFREE(fn);\n      \n      if((idamping'
+    if text.count(anchor)!=1:raise ValueError('Post-correction bulk evaluation hook is ambiguous')
+    text=text.replace(anchor,BULK_STAGE+anchor)
     needle='&intscheme,physcon,dam,damn,iponoel);'
     start=text.index('    /* output */');end=text.index('  /*   end of the increment loop',start)
     part=text[start:end]
@@ -100,17 +115,19 @@ def build(args):
         # Freeze source inputs before compilation so concurrent edits cannot
         # cause a receipt/source bundle to describe a different binary.
         frozen=work/'inputs';frozen.mkdir()
-        for path in [assets/'oxygen_contact_telemetry.h',assets/'oxygen_native_tangent.h',assets/'COPYING',Path(__file__)]:
+        for path in [assets/'oxygen_contact_telemetry.h',assets/'oxygen_native_tangent.h',assets/'oxygen_accepted_bulk.h',assets/'COPYING',Path(__file__)]:
             shutil.copyfile(path,frozen/path.name)
         header=frozen/'oxygen_contact_telemetry.h'
         tangent_header=frozen/'oxygen_native_tangent.h'
+        bulk_header=frozen/'oxygen_accepted_bulk.h'
         (source/'nonlingeo.c').write_text(patched);shutil.copyfile(header,source/header.name)
         shutil.copyfile(tangent_header,source/tangent_header.name)
+        shutil.copyfile(bulk_header,source/bulk_header.name)
         makefile=(source/'Makefile').read_text()
         target='ccx_2.23: $(OCCXMAIN) ccx_2.23.a  $(LIBS)'
         if makefile.count(target)!=1 or makefile.count('./date.pl; $(CC)')!=1:raise ValueError('Unexpected upstream build recipe')
         makefile=makefile.replace(target,'ccx_2.23: $(OCCXMAIN) ccx_2.23.a').replace('./date.pl; $(CC)','$(CC)')
-        makefile+='\nnonlingeo.o: oxygen_contact_telemetry.h oxygen_native_tangent.h\n'
+        makefile+='\nnonlingeo.o: oxygen_contact_telemetry.h oxygen_native_tangent.h oxygen_accepted_bulk.h\n'
         (source/'Makefile').write_text(makefile)
         cflags=f'-O2 -Wno-error=return-mismatch -I {quoted(args.spooles_include.resolve())} -DARCH="Linux" -DSPOOLES -DARPACK -DMATRIXSTORAGE -DNETWORKOUT'
         fflags='-O2 -cpp -fallow-argument-mismatch'
@@ -121,6 +138,9 @@ def build(args):
         shutil.copyfile(source/'ccx_2.23',staged/'ccx');(staged/'ccx').chmod(0o755)
         shutil.copyfile(archive,staged/archive.name);shutil.copyfile(header,staged/header.name)
         shutil.copyfile(tangent_header,staged/tangent_header.name)
+        shutil.copyfile(bulk_header,staged/bulk_header.name)
+        if args.retain_verification_archive:
+            shutil.copyfile(source/'ccx_2.23.a',staged/'verification-ccx_2.23.a')
         shutil.copyfile(frozen/'build_calculix.py',staged/'build_calculix.py')
         shutil.copyfile(frozen/'COPYING',staged/'COPYING')
         delta=''.join(difflib.unified_diff(original.splitlines(True),patched.splitlines(True),fromfile='a/nonlingeo.c',tofile='b/nonlingeo.c'))
@@ -130,12 +150,15 @@ def build(args):
             'patched_nonlingeo_sha256':hashlib.sha256(patched.encode()).hexdigest(),
             'telemetry_header_sha256':sha(header),'build_script_sha256':sha(frozen/'build_calculix.py'),
             'native_tangent_header_sha256':sha(tangent_header),'native_tangent_schema':1,
+            'accepted_bulk_header_sha256':sha(bulk_header),'accepted_bulk_schema':1,
             'binary':'ccx','binary_sha256':sha(staged/'ccx'),
             'c_compiler':subprocess.check_output([cc,'--version'],text=True).splitlines()[0],
             'fortran_compiler':subprocess.check_output([fc,'--version'],text=True).splitlines()[0],
             'cflags':cflags,'fflags':fflags,'libraries':{str(p.resolve()):sha(p.resolve()) for p in args.library},
-            'scope':'Read-only accepted static contact state and state-tagged pre-solve native Newton matrices; numerical routines unchanged; linearization and accepted states are distinct; no stability or physical qualification',
-            'source_distribution':['ccx_2.23.src.tar.bz2','nonlingeo.c.patch','oxygen_contact_telemetry.h','oxygen_native_tangent.h','build_calculix.py','COPYING']}
+            'scope':'Read-only accepted static contact state, pre-solve Newton matrices and post-correction bulk constitutive/force state bound separately to accepted displacement/history. Native algorithmic tensors are not automatically exact force derivatives. Numerical routines unchanged; no stability or physical qualification',
+            'source_distribution':['ccx_2.23.src.tar.bz2','nonlingeo.c.patch','oxygen_contact_telemetry.h','oxygen_native_tangent.h','oxygen_accepted_bulk.h','build_calculix.py','COPYING']}
+        if args.retain_verification_archive:
+            manifest['verification_archive_sha256']=sha(staged/'verification-ccx_2.23.a')
         (staged/'build-manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
         # Publish only a complete binary/source/provenance bundle.
         pending=Path(tempfile.mkdtemp(prefix='.oxygen-ccx-release-',dir=out.parent))
@@ -157,6 +180,7 @@ def main():
     parser.add_argument('--spooles-include',type=Path,required=True)
     parser.add_argument('--library',type=Path,action='append',required=True,help='Repeat for SPOOLES, ARPACK, LAPACK and BLAS, in link order')
     parser.add_argument('--jobs',type=int,choices=range(1,9),default=2)
+    parser.add_argument('--retain-verification-archive',action='store_true',help='Retain the native static library for separate kernel verification; not needed by the application')
     manifest=build(parser.parse_args());print(json.dumps({'binary_sha256':manifest['binary_sha256'],'telemetry_schema':manifest['telemetry_schema']}))
 
 

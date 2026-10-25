@@ -49,9 +49,9 @@ def validated_build(binary):
     if not path.exists():return None
     if path.is_symlink() or not path.is_file():raise ValueError('Unsafe CalculiX build receipt')
     value=json.loads(path.read_text());expected=contract()
-    for name in ('source_sha256','upstream_nonlingeo_sha256','patched_nonlingeo_sha256','telemetry_header_sha256','native_tangent_header_sha256'):
+    for name in ('source_sha256','upstream_nonlingeo_sha256','patched_nonlingeo_sha256','telemetry_header_sha256','native_tangent_header_sha256','accepted_bulk_header_sha256'):
         if value.get(name)!=expected[name]:raise ValueError(f'CalculiX instrumentation receipt differs from the pinned {name}')
-    if value.get('schema')!=1 or value.get('telemetry_schema')!=expected['schema'] or value.get('native_tangent_schema')!=1 or value.get('binary')!=binary.name:
+    if value.get('schema')!=1 or value.get('telemetry_schema')!=expected['schema'] or value.get('native_tangent_schema')!=1 or value.get('accepted_bulk_schema')!=1 or value.get('binary')!=binary.name:
         raise ValueError('Unsupported CalculiX instrumentation receipt')
     if file_hash(binary)!=value.get('binary_sha256'):raise ValueError('CalculiX binary differs from its instrumentation receipt')
     libraries=value.get('libraries')

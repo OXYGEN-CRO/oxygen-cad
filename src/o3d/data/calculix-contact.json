@@ -4,9 +4,11 @@
   "source_sha256": "9c88385c10fb04f5dc6c4e98027a51bebdd8aee3920e05190d6c1dd08357d6e7",
   "upstream_nonlingeo_sha256": "8684bb6d7fa7097c0a854db5a45eb9e2d11adfde574e688184ecbbbad56ff83f",
   "telemetry_header_sha256": "384d217649ab4d2546883702dea20e64f8fbcee230806df622bfa91ab15db70f",
-  "patched_nonlingeo_sha256": "449e055a5f9a3ab616b818ae82edb21e46b293a58de89a642f7b403b3ab747d5",
+  "patched_nonlingeo_sha256": "076b0167a9f88018e222ae13d80e4ba1ebe91ec4671c5f62722276515eb1fa9c",
   "instrumentation": "accepted-static-face-contact-v1",
   "maximum_output_bytes": 536870912,
   "native_tangent_header_sha256": "26c8f68ed8b144c725a478a4e5b57865f11d996792ae881b3a5f85c4ba43cc1e",
-  "native_tangent_schema": 1
+  "native_tangent_schema": 1,
+  "accepted_bulk_header_sha256": "360c230acd3bde68f294baf1316f4c5c46d020fb6c92ee643e4a18562ff304aa",
+  "accepted_bulk_schema": 1
 }
