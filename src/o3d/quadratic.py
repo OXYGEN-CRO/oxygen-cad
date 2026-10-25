@@ -7,6 +7,17 @@ FACES=((0,1,2,4,5,6),(0,1,3,4,8,7),(0,2,3,6,9,7),(1,2,3,5,9,8))
 GRADIENTS=np.array([[-1.,-1.,-1.],[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]])
 
 
+def scalar_bounds(values):
+    """Conservative Bernstein bounds for complete quadratic tetrahedral fields."""
+    values=np.asarray(values,dtype=float)
+    if values.ndim!=2 or values.shape[1]!=10 or not len(values):
+        raise ValueError("Quadratic bounds require ten values per cell")
+    edges=np.array([2*values[:,i+4]-(values[:,a]+values[:,b])/2 for i,(a,b) in enumerate(EDGES)]).T
+    if not np.isfinite(values).all() or not np.isfinite(edges).all():
+        raise ValueError("Quadratic scalar field has nonfinite polynomial bounds")
+    return float(min(values[:,:4].min(),edges.min())),float(max(values[:,:4].max(),edges.max()))
+
+
 def weights_and_gradients(reference):
     bary=np.r_[1-np.sum(reference),reference]
     weights=np.r_[bary*(2*bary-1),[4*bary[a]*bary[b] for a,b in EDGES]]

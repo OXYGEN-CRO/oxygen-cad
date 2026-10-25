@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-4"
+ADAPTER_VERSION="oxygen-canonical-5"
 
 
 def clean(value):
@@ -20,6 +20,10 @@ def numerical_checks(result,study):
     checks=result["checks"]
     failures=[]
     if checks.get("residual",1)>settings.residual_tolerance:failures.append("equation residual")
+    if checks.get("thermal_residual",0)>settings.residual_tolerance:failures.append("thermal equation residual")
+    for body,screen in result.get("constitutive_screening",{}).items():
+        if screen["exceeds_declared_yield"]:failures.append(f"Body {body} integration-point stress exceeds declared elastic yield")
+    if checks.get("maximum_free_thermal_strain_bound",0)>.05:failures.append("linear thermal-strain screening limit exceeded")
     for metric in ("force_balance_error","moment_balance_error","heat_balance_error"):
         if checks.get(metric,0)>settings.balance_tolerance:failures.append(metric)
     if checks.get("energy_balance_error",0)>settings.energy_tolerance:failures.append("energy balance")
@@ -52,12 +56,13 @@ def solve(request,directory,cancel=None):
     if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and any(i.kind=="thermal" for i in study.interfaces):raise ValueError("Thermal interfaces require a thermal or thermal-stress study")
     if study.type in {"steady_thermal","electronics_cooling"} and (case.loads or study.bolts):raise ValueError("Mechanical loads/bolts are not translated into a thermal study")
     if study.type not in {"steady_thermal","electronics_cooling","thermal_stress"} and case.thermal:raise ValueError("Thermal boundaries require a thermal or thermal-stress study")
+    if study.type=="thermal_stress" and any(case.initial_velocity_mm_s):raise ValueError("Thermal stress does not translate initial velocity")
     if study.type=="modal" and case.loads:raise ValueError("Preloaded modal transfer is unavailable; remove mechanical loads for free/constrained modes")
     if study.type not in {"dynamic_event","quasi_static_event","nonlinear_static"} and case.history:raise ValueError("Load histories require an event or nonlinear-static study")
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
     if any(mesh.element_family!=family for mesh in meshes):raise ValueError("Refinement levels must use the same element family")
-    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
+    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
     materials={m.id:m for m in domain.materials}
     iterations=[];result=None;previous=None;converged=False
     previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.
@@ -91,8 +96,20 @@ def solve(request,directory,cancel=None):
             else:result=thermal_solve(system,case,cancel)
             if study.type=="electronics_cooling":result["warnings"]=["Prescribed-film solid electronics thermal model. No air domain, fan-flow, buoyancy or conjugate CFD solve; no fluid result is implied."]
         elif study.type=="thermal_stress":
-            thermal=thermal_solve(system,case,cancel)
-            result=static_solve(system,case,cancel,thermal["temperature"])
+            if family=="C3D10":
+                from .simulation_quadratic_thermal import QuadraticThermalSystem,thermal_solve as quadratic_thermal_solve
+                thermal_system=QuadraticThermalSystem(mesh,study,materials,cancel)
+                thermal_system.qualify(directory/f"mesh-{i}"/"thermal-quality",cancel)
+                thermal_case=case.model_copy(update={"supports":[],"loads":[]})
+                thermal=quadratic_thermal_solve(thermal_system,thermal_case,directory/f"mesh-{i}"/"thermal",cancel)
+                result=calculix_solve(system,case,directory/f"mesh-{i}"/"thermal-stress",cancel,nonlinear=False,temperatures=thermal["field"]["temperature_k"])
+                result["checks"]["thermal_checks"]=thermal["checks"]
+                result["checks"]["temperature_convergence_scale_k"]=thermal["checks"]["temperature_convergence_scale_k"]
+                result["warnings"].extend(thermal["warnings"])
+                result["thermal_transfer"]["phase_split"]={"thermal_boundary_ids":[b.id for b in case.thermal],"structural_support_ids":[b.id for b in case.supports],"structural_load_ids":[b.id for b in case.loads]}
+            else:
+                thermal=thermal_solve(system,case,cancel)
+                result=static_solve(system,case,cancel,thermal["temperature"])
             result["values"].update(thermal["values"])
             result["field"].update(thermal["field"])
             result["checks"]["heat_balance_error"]=thermal["checks"]["heat_balance_error"]
@@ -116,7 +133,7 @@ def solve(request,directory,cancel=None):
         # Element stress maxima are screening fields, not a nonsingular stress-convergence probe.
         convergence_quantities={k:v for k,v in quantities.items() if k!="max_von_mises_mpa"}
         changes={k:abs(v-previous[k])/max(abs(v),1e-12) for k,v in convergence_quantities.items() if previous is not None and k in previous}
-        if family=="C3D10" and study.type in {"steady_thermal","electronics_cooling"}:
+        if family=="C3D10" and study.type in {"steady_thermal","electronics_cooling","thermal_stress"}:
             scale=max(result["checks"]["temperature_convergence_scale_k"],previous_thermal_scale,1e-9)
             for quantity in {"max_temperature_k","min_temperature_k","temperature_rise_k"}:
                 if previous is not None and quantity in previous and quantity in convergence_quantities:
@@ -131,8 +148,8 @@ def solve(request,directory,cancel=None):
     result["field"]["element_connectivity"]={e.id:list(e.nodes) for e in mesh.elements}
     result=clean(result)
     failures=numerical_checks(result,study)
-    if family=="C3D10" and study.type in {"linear_static","nonlinear_static"} and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
-    if family=="C3D10" and study.type=="linear_static" and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")
+    if family=="C3D10" and study.type in {"linear_static","nonlinear_static","thermal_stress"} and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
+    if family=="C3D10" and study.type in {"linear_static","thermal_stress"} and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")
     if result["checks"].get("time_step_change",0)>study.settings.convergence_tolerance:failures.append("time-step sensitivity")
     if result["checks"].get("load_step_change",0)>study.settings.convergence_tolerance:failures.append("load-step sensitivity")
     result["checks"]["residual_tolerance_used"]=study.settings.residual_tolerance
@@ -147,8 +164,9 @@ def solve(request,directory,cancel=None):
         findings.append({"id":limit.id,"quantity":limit.quantity,"value":value,"limit":limit.value,"operator":limit.operator,"satisfied":met,"source":limit.source,"evidence":"screening peak stress; no nonsingular stress probe convergence" if strength_screening else "specified numerical model","verified":not failures and not strength_screening and met is not None})
     result.update({"schema_version":1,"adapter_version":ADAPTER_VERSION,"input_key":request["input_key"],"geometry_key":request["geometry_key"],"revision":request["revision"],"study_id":study.id,"case_id":case.id,"study_type":study.type,"numerical_state":"inconclusive" if failures else "verified_numerically","verification_gaps":failures,"requirements_state":"unassessed" if not findings else "inconclusive" if failures or any(not f["verified"] for f in findings) else "not_satisfied" if any(f["satisfied"] is False for f in findings) else "satisfied","findings":findings,"mesh_iterations":iterations,"software":{"adapter":ADAPTER_VERSION,"numpy":numpy.__version__,"scipy":scipy.__version__,"python":platform.python_version(),"fingerprint":actual_software},"physical_validation":"not_supplied","units":{"length":"mm","force":"N","time":"s","mass":"tonne","temperature":"K","thermal_power":"W","stress":"MPa","heat_flux":"W/mm2"},"field_location":{"stress":"element_constant" if study.type!="nonlinear_static" else "nodal_extrapolated","displacement":"node","temperature":"node","mode_shape":"mass-normalized amplitude; not physical displacement"}})
     if family=="C3D10":
-        if study.type in {"linear_static","nonlinear_static"}:result["field_location"]["stress"]="nodal_extrapolated"
-        else:result["field_location"].update({"heat_flux":"element_volume_average", "temperature_extrema":"conservative Bernstein polynomial bounds"})
+        if study.type in {"linear_static","nonlinear_static","thermal_stress"}:result["field_location"]["stress"]="nodal_extrapolated"
+        if study.type=="thermal_stress":result["field_location"]["integration_point_stress"]="element_integration_point"
+        if study.type in {"steady_thermal","electronics_cooling","thermal_stress"}:result["field_location"].update({"heat_flux":"element_volume_average", "temperature_extrema":"conservative Bernstein polynomial bounds"})
     if software_fingerprint(study.type,family)!=actual_software:raise ValueError("Solver software changed during execution; results refused")
     result.setdefault("solver","Oxygen C3D4 NumPy/SciPy reference worker")
     result.setdefault("warnings",[])

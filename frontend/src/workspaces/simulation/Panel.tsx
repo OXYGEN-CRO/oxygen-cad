@@ -71,6 +71,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
     "nonlinear_static",
     "steady_thermal",
     "electronics_cooling",
+    "thermal_stress",
   ].includes(study?.type);
   const physicalProbeSupported = [
     "linear_static",

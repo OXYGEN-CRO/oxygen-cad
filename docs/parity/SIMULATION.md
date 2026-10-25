@@ -6,12 +6,12 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-4` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-5` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials are tested as separately supported solids;
 this does not establish quadratic contact or general assembly parity. Quadratic steady thermal/prescribed-film electronics conduction also uses these records, without elastic-property prerequisites. Other
-canonical study families still use their C3D4 adapters. Thermal-stress transfer is not yet connected to the quadratic workspace. The separate legacy
+canonical study families still use their C3D4 adapters. Sequential linear thermal-stress transfer is connected with explicit expansion and stress-free temperature. The separate legacy
 quadratic study path is retained pending complete unification/migration.
 
 Quadratic thermal uses full ten-node conduction and volume heat, six-node
@@ -25,6 +25,21 @@ interpolation; nodal/quadrature extrema and volume-average heat flux are labeled
 separately. No airflow/CHT, material calibration or physical passing value is
 inferred. Neutral exports retain thermal solution JSON and numerical meshes;
 there is no executed CalculiX thermal deck from this SciPy adapter.
+
+Quadratic thermal stress uses the same full mesh and sourced materials in
+conduction and a subsequent linear elastic CalculiX solve. Explicit stress-free
+kelvin and expansion are required. Each solved nodal temperature is serialized,
+checked for coverage/precision and written with EXPANSION/INITIAL CONDITIONS/
+TEMPERATURE. Phase IDs and temperature hashes are retained. Mechanical inputs
+remain in the structural phase; no thermal eigenstrain is duplicated as CLOAD.
+Its integrated equivalent vector provides a nonzero verification scale for
+thermal-only reactions. Both phase residuals and temperature/displacement mesh
+convergence are required. Full integration-point stress and mean normal stress
+remain distinct from extrapolated nodal von Mises screening; declared yield
+exceedance or large linear thermal strain makes the result inconclusive. The
+neutral archive includes both phases and the exact executed structural deck.
+General nonlinear/coupled feedback, thermal contacts and calibrated material or
+failure criteria remain unfinished.
 
 Geometry qualification is independent of elastic properties. It checks conforming
 connectivity, rejects point/edge-only connections, checks boundary identity/order,
@@ -57,7 +72,7 @@ Remote force/moment transfer preserves the requested resultant and moment, with
 its nodal idealization explicit. Fixed/world-axis partial supports are translated
 without rotation/MPC approximations, and each independent solid must restrain
 all six rigid motions. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
-modal/buckling and thermal-stress translation remain unavailable and refuse execution. Steady solid thermal transfer is described above.
+modal/buckling translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
 
 User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
 static displacement probe for either canonical family. Outside points refuse;

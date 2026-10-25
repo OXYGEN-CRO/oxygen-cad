@@ -25,7 +25,7 @@ CAPABILITIES=[
     ("SIM-07","Modal","experimental","Lumped mass eigenpairs, rigid modes, participation, residual and mass orthogonality; bonded elastic interfaces; no preload transfer"),
     ("SIM-08","Structural buckling","experimental","Initial-stress generalized eigenproblem with explicit sign/load-factor convention; no imperfect collapse/postbuckling"),
     ("SIM-09","Steady thermal","experimental","C3D4 solid conduction/thermal pair conductance and audited C3D10 conduction, consistent power/flux/body heat/film/radiation with heat balance; quadratic interfaces unavailable"),
-    ("SIM-10","Thermal stress","experimental","Sequential same-mesh temperature/expansion transfer with stress-free reference temperature"),
+    ("SIM-10","Thermal stress","experimental","C3D4 and audited C3D10 sequential same-mesh temperature/expansion transfer, explicit stress-free temperature, both-phase checks and integration-point elastic-range screening"),
     ("SIM-11","Quasi-static Event","experimental","Small-strain explicit transient subset; timestep sensitivity, energy and final kinetic/internal ratio; no large-motion event parity"),
     ("SIM-12","Dynamic Event","experimental","Small-strain lumped-mass central difference, piecewise-linear load histories, initial velocity and frictionless paired contact; no deletion/damage"),
     ("SIM-13","Electronics cooling","experimental","Prescribed-film solid/power thermal subset; no air domain/fan/flow/CHT adapter"),
@@ -72,7 +72,7 @@ def preflight(project,domain,study,model):
     for mesh in [model.mesh,*model.refinements]:
         if mesh and mesh.geometry_key!=current:errors.append(f"Mesh {mesh.id} belongs to stale geometry")
         if mesh and {e.body_id for e in mesh.elements}!=set(model.body_ids):errors.append("Mesh body identifiers do not match the analysis model")
-        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
+        if mesh and mesh.element_family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress"}:errors.append(f"Canonical quadratic {study.type} transfer is not integrated yet; retain the declared study type and use its available adapter")
     if model.mesh and any(mesh.element_family!=model.mesh.element_family for mesh in model.refinements):errors.append("All refinement levels must use the same element family")
     if model.mesh and model.mesh.element_family=="C3D10":
         if study.interfaces or study.bolts or study.settings.inertial_relief:errors.append("Quadratic contact/connector/inertial-relief translation is not integrated; no condition will be discarded")
@@ -80,6 +80,9 @@ def preflight(project,domain,study,model):
         if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
         if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
     if study.type in {"general_cfd","fatigue","harmonic","transient_thermal","injection_molding"}:errors.append(f"No integrated {study.type} adapter; study is unavailable")
+    if study.type=="thermal_stress":
+        if study.stress_free_temperature_k is None:errors.append("Thermal stress requires an explicit stress-free temperature in kelvin")
+        if any(any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Thermal stress does not translate initial velocity")
     if study.type=="nonlinear_static" and not study.settings.large_deformation and not any(m.plastic_curve for m in domain.materials if m.id in {a.material_id for a in study.assignments}):errors.append("Nonlinear study requires large deformation or a sourced plastic constitutive curve")
     return errors
 
@@ -100,7 +103,7 @@ def _latest(store,project,domain,study):
 def _mesh(store,project,domain,study,model,payload,cancel):
     from ..geometry import build
     from ..solver import run_process,mesher_python
-    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling"} else "C3D4"))
+    family=payload.get("element_family",model.mesh.element_family if model.mesh else ("C3D10" if study.type in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress"} else "C3D4"))
     if family not in {"C3D4","C3D10"}:raise ValueError("Choose C3D4 or C3D10 elements")
     gkey=geometry_key(project)
     built=build(store,project)
@@ -306,7 +309,7 @@ def _handoff(store,project,domain,study,model,last):
         from ..simulation_fem import System
         from ..extended_solver import write_calculix
         try:
-            if study.type not in {"linear_static","nonlinear_static"}:raise ValueError("Study type has no handoff deck adapter")
+            if study.type not in {"linear_static","nonlinear_static","thermal_stress"}:raise ValueError("Study type has no handoff deck adapter")
             system=None
             finest=model.refinements[-1] if model.refinements else model.mesh
             solved={r["case_id"] for r in last["results"]}
@@ -315,12 +318,13 @@ def _handoff(store,project,domain,study,model,last):
                     losses.append(f"Case {case.id} was not solved in this run; its neutral inputs are included without a qualified deck")
                     continue
                 path=destination/(digest(case.id)+".inp")
-                leaf="increment-half" if study.type=="nonlinear_static" else "linear"
+                leaf="increment-half" if study.type=="nonlinear_static" else "thermal-stress" if study.type=="thermal_stress" else "linear"
                 actual=run/digest(case.id)/f"mesh-{len(model.refinements)}"/leaf/"analysis.inp"
                 if actual.is_file() and not actual.is_symlink() and actual.resolve().is_relative_to(run.resolve()):
                     path.write_bytes(actual.read_bytes())
                     deck_provenance[case.id]={"kind":"exact executed finest-mesh deck","source":"solver-evidence/"+str(actual.relative_to(run))}
                 else:
+                    if study.type=="thermal_stress":raise ValueError("Executed thermal-stress deck is missing; no temperatures will be regenerated or guessed")
                     if system is None:
                         if finest.element_family=="C3D10":
                             from ..simulation_quadratic import QuadraticSystem

@@ -11,7 +11,7 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse import linalg as sla
 
-from .quadratic import EDGES, surface_quadrature
+from .quadratic import scalar_bounds, surface_quadrature
 from .simulation_quadratic import QuadraticGeometry
 from .solver import Cancelled
 from .store import write_json
@@ -89,12 +89,7 @@ class QuadraticThermalSystem(QuadraticGeometry):
     def temperature_bounds(self, temperature):
         # Bernstein coefficients enclose each complete quadratic temperature
         # polynomial, including values between nodes and inside curved cells.
-        values = temperature[self.connectivity]
-        edges = np.array([2*values[:, i+4]-(values[:, a]+values[:, b])/2
-                          for i, (a, b) in enumerate(EDGES)]).T
-        if not np.isfinite(values).all() or not np.isfinite(edges).all():
-            raise ValueError("Quadratic temperature field has nonfinite polynomial bounds")
-        return float(min(values[:, :4].min(), edges.min())), float(max(values[:, :4].max(), edges.max()))
+        return scalar_bounds(temperature[self.connectivity])
 
 
 def thermal_solve(system, case, directory, cancel=None):

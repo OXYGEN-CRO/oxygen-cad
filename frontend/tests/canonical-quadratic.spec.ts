@@ -103,8 +103,13 @@ test("new study preserves project material values, process and per-property prov
   }
 });
 
-for (const studyType of ["linear_static", "steady_thermal"] as const) {
+for (const studyType of [
+  "linear_static",
+  "steady_thermal",
+  "thermal_stress",
+] as const) {
   const thermal = studyType === "steady_thermal";
+  const coupled = studyType === "thermal_stress";
   test(`native body meshes and solves canonical quadratic ${studyType} and displays the actual field`, async ({
     page,
     request,
@@ -189,6 +194,9 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
                   youngs_modulus_mpa: 200000,
                   poisson_ratio: 0.3,
                   density_g_cm3: 7.8,
+                  ...(coupled
+                    ? { conductivity_w_mk: 20, expansion_per_k: 0.000012 }
+                    : {}),
                 }),
           },
         ],
@@ -197,6 +205,7 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
             id: "acceptance",
             name: "Canonical quadratic acceptance",
             type: studyType,
+            ...(coupled ? { stress_free_temperature_k: 300 } : {}),
             model_id: "model",
             assignments: [{ body_id: body.id, material_id: "synthetic" }],
             assumptions_confirmed: true,
@@ -228,8 +237,23 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
                 ]
               : [
                   {
-                    id: "axial",
-                    name: "Axial SI reference",
+                    id: coupled ? "thermoelastic" : "axial",
+                    name: coupled
+                      ? "Thermoelastic SI reference"
+                      : "Axial SI reference",
+                    ...(coupled
+                      ? {
+                          thermal: [
+                            {
+                              id: "uniform-hot",
+                              kind: "temperature",
+                              region_id: "root",
+                              value: 400,
+                              source: "Declared 400 K thermostat",
+                            },
+                          ],
+                        }
+                      : {}),
                     supports: [
                       {
                         id: "sx",
@@ -250,15 +274,17 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
                         components: [false, false, true],
                       },
                     ],
-                    loads: [
-                      {
-                        id: "force",
-                        kind: "force",
-                        region_id: "tip",
-                        vector: [100, 0, 0],
-                        source: "Declared 100 N analytical force",
-                      },
-                    ],
+                    loads: coupled
+                      ? []
+                      : [
+                          {
+                            id: "force",
+                            kind: "force",
+                            region_id: "tip",
+                            vector: [100, 0, 0],
+                            source: "Declared 100 N analytical force",
+                          },
+                        ],
                   },
                 ],
           },
@@ -279,6 +305,10 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
         await expect(
           page.getByLabel("Displacement probe (mm)", { exact: true }),
         ).toHaveValue("10, 1, 1");
+      if (coupled)
+        await expect(
+          page.getByLabel("Stress-free temperature (K)", { exact: true }),
+        ).toHaveValue("300");
       await page.getByLabel("Initial size (mm)", { exact: true }).fill("1.5");
       await page.getByLabel("Mesh levels", { exact: true }).fill("2");
       await page
@@ -300,7 +330,7 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
         .click();
       await expect(
         page.getByText(
-          `${thermal ? "Thermal" : "Axial"} SI reference · verified numerically`,
+          `${thermal ? "Thermal" : coupled ? "Thermoelastic" : "Axial"} SI reference · verified numerically`,
           {
             exact: true,
           },
@@ -330,7 +360,15 @@ for (const studyType of ["linear_static", "steady_thermal"] as const) {
             (m: number, v: any) => Math.max(m, v[0]),
             0,
           ),
-        ).toBeCloseTo(0.00125, 7);
+        ).toBeCloseTo(coupled ? 0.012 : 0.00125, 7);
+      }
+      if (coupled) {
+        expect(
+          Object.values(field.temperature_k).every((t: any) => t === 400),
+        ).toBeTruthy();
+        expect(Object.keys(field.integration_point_stress_mpa).length).toBe(
+          Object.keys(field.element_connectivity).length,
+        );
       }
       const cornerNodes = new Set<number>(
         (Object.values(field.element_connectivity) as number[][]).flatMap(

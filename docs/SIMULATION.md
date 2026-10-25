@@ -17,7 +17,7 @@ converts the other's inputs or establishes full assembly/physics parity.
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
-versioned body/material/case records. Static, nonlinear-static and steady solid thermal studies default
+versioned body/material/case records. Static, nonlinear-static, steady solid thermal and sequential thermal-stress studies default
 to quadratic meshing; the element-family selector also retains the C3D4 path.
 Existing saved C3D4 models keep their declared family. This is the first shared
 quadratic transfer, not automatic migration of `project.study`/`named_studies`.
@@ -44,7 +44,7 @@ The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
 force/moment idealizations. Disconnected bodies require separately adequate
 supports. Shared points/edges do not become a solid load path. Contact, bolts,
-inertial relief, bearing/hydrostatic loads, modal/buckling and thermal-stress transfer
+inertial relief, bearing/hydrostatic loads and modal/buckling transfer
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately
 listed. Full study/assembly unification remains required.
@@ -69,6 +69,30 @@ quadratic interpolated field. Sampled extrema are separately retained, and heat
 flux is labeled a volume average rather than a constant field. This conservative
 bound also needs mesh convergence. The neutral handoff includes these inputs,
 quality and thermal solution JSON; no executed CalculiX thermal deck is claimed.
+
+Canonical quadratic thermal stress solves conduction first, then transfers every
+exact nodal temperature into a linear isotropic CalculiX structural step on the
+same mesh. Supply elasticity, conductivity, expansion and an explicit uniform
+stress-free temperature in kelvin. Mechanical loads/supports stay in the
+structural phase; thermal boundaries stay in conduction. No connector/contact,
+plastic or nonlinear thermo-mechanical feedback is translated. The deck records
+EXPANSION, INITIAL CONDITIONS and TEMPERATURE, with no duplicate equivalent
+thermal CLOAD. Source/serialized temperatures, node coverage, rounding and phase
+IDs are retained. An unresolvable thermal excursion refuses.
+
+Thermal eigenstrain can create stresses/reactions without applied mechanical
+force. Independently integrated eigenstrain loads scale equilibrium/residual
+checks; they are not applied a second time. Both thermal and mechanical equation
+checks, heat balance, thermal excursion and physical displacement-probe mesh
+changes matter. Large displacement or free thermal strain remains inconclusive
+under the linear screening gates. Complete four-point C3D10 integration-point
+stress tensors and body-wise yield screens are retained alongside extrapolated
+nodal fields. Mean normal stress is reported: a fully restrained heated solid
+can have large hydrostatic stress with zero von Mises stress. A supplied yield
+exceedance marks the elastic model inconclusive; absent calibration/failure
+criteria remain absent. These screens are not nonsingular stress convergence.
+The handoff retains both phases and the exact finest executed structural deck;
+it refuses to regenerate missing thermal temperatures/decks.
 
 Set `settings.probe_point_mm` and, for multiple bodies, `settings.probe_body_id`.
 The workspace edits and saves these fields through the same Store path as CLI

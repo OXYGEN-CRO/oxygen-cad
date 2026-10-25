@@ -18,7 +18,7 @@ def fingerprint_file(path):
 
 def software_fingerprint(study_type,element_family="C3D4"):
     root=Path(__file__).parent
-    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
+    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","simulation_thermoelastic.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)
