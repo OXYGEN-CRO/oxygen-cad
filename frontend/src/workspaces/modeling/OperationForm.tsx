@@ -24,6 +24,14 @@ export default function OperationForm({
     Object.fromEntries(
       operation.fields.map((f) => {
         const value = initial[f.key];
+        if (operation.command === "solid.hole" && f.key === "position") {
+          const placement =
+            selection?.kind === "face" ? selection.point : value;
+          return [
+            f.key,
+            placement === undefined ? "" : JSON.stringify(placement),
+          ];
+        }
         return [
           f.key,
           value === undefined
@@ -42,6 +50,15 @@ export default function OperationForm({
   useEffect(() => {
     setHelp(command?.params ?? "");
   }, [command?.params]);
+  const hole = operation.command === "solid.hole";
+  useEffect(() => {
+    if (hole && selection?.kind === "face") {
+      setValues((previous) => ({
+        ...previous,
+        position: JSON.stringify(selection.point),
+      }));
+    }
+  }, [hole, selection?.id, JSON.stringify(selection?.point)]);
   const useSelection = () => {
     if (!selection) return;
     const point = JSON.stringify(selection.point);
@@ -77,59 +94,82 @@ export default function OperationForm({
       }}
     >
       <h4>{operation.label}</h4>
-      {operation.fields.map((field) => (
-        <label
-          key={field.key}
-          className={field.kind === "boolean" ? "modeling-check" : ""}
-        >
-          {field.kind === "boolean" ? (
-            <>
-              <input
-                type="checkbox"
-                checked={values[field.key] === "true"}
-                onChange={(e) =>
-                  setValues({
-                    ...values,
-                    [field.key]: String(e.target.checked),
-                  })
-                }
-              />
-              {field.label}
-            </>
-          ) : (
-            <>
-              {field.label}
-              {field.optional ? <small>optional</small> : null}
-              {field.options ? (
-                <SelectControl
-                  aria-label={field.label}
-                  value={values[field.key] ?? ""}
+      {operation.fields.map((field) =>
+        hole && field.key === "position" ? (
+          <div
+            className="modeling-placement-prompt"
+            key={field.key}
+            aria-label="Hole placement"
+          >
+            <strong>
+              {values.position
+                ? "Hole position selected"
+                : "Pick a face to place the hole"}
+            </strong>
+            {values.position && (
+              <output aria-label="Selected hole point">
+                {(JSON.parse(values.position) as number[])
+                  .map((value) => value.toFixed(3))
+                  .join(", ")}{" "}
+                mm
+              </output>
+            )}
+          </div>
+        ) : (
+          <label
+            key={field.key}
+            className={field.kind === "boolean" ? "modeling-check" : ""}
+          >
+            {field.kind === "boolean" ? (
+              <>
+                <input
+                  type="checkbox"
+                  checked={values[field.key] === "true"}
                   onChange={(e) =>
-                    setValues({ ...values, [field.key]: e.target.value })
-                  }
-                >
-                  {field.options.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </SelectControl>
-              ) : (
-                <Input
-                  aria-label={field.label}
-                  value={values[field.key] ?? ""}
-                  required={!field.optional}
-                  onChange={(e) =>
-                    setValues({ ...values, [field.key]: e.target.value })
-                  }
-                  placeholder={
-                    field.kind === "names" ? "Name1, Name2" : field.value
+                    setValues({
+                      ...values,
+                      [field.key]: String(e.target.checked),
+                    })
                   }
                 />
-              )}
-            </>
-          )}
-        </label>
-      ))}
-      {selection &&
+                {field.label}
+              </>
+            ) : (
+              <>
+                {field.label}
+                {field.optional ? <small>optional</small> : null}
+                {field.options ? (
+                  <SelectControl
+                    aria-label={field.label}
+                    value={values[field.key] ?? ""}
+                    onChange={(e) =>
+                      setValues({ ...values, [field.key]: e.target.value })
+                    }
+                  >
+                    {field.options.map((option) => (
+                      <option key={option}>{option}</option>
+                    ))}
+                  </SelectControl>
+                ) : (
+                  <Input
+                    aria-label={field.label}
+                    value={values[field.key] ?? ""}
+                    required={!field.optional}
+                    onChange={(e) =>
+                      setValues({ ...values, [field.key]: e.target.value })
+                    }
+                    placeholder={
+                      field.kind === "names" ? "Name1, Name2" : field.value
+                    }
+                  />
+                )}
+              </>
+            )}
+          </label>
+        ),
+      )}
+      {!hole &&
+        selection &&
         operation.fields.some((f) =>
           ["position", "faces", "face"].includes(f.key),
         ) && <Button onClick={useSelection}>Use selected face point</Button>}
@@ -149,7 +189,11 @@ export default function OperationForm({
           {error}
         </p>
       )}
-      <Button type="submit" variant="primary" disabled={busy || unavailable}>
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={busy || unavailable || (hole && !values.position)}
+      >
         Apply {operation.label.toLowerCase()}
       </Button>
       <details>

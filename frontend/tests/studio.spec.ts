@@ -25,6 +25,23 @@ test("minimal studio keeps editing tools accessible across screen sizes", async 
   await expect(page.locator(".verification-panel")).toHaveCount(0);
   const viewport = await page.locator("canvas").boundingBox();
   expect(viewport!.width * viewport!.height).toBeGreaterThan(1512 * 982 * 0.7);
+  // The shipped legacy demo must offer native sketch creation on its first screen too.
+  await page
+    .getByRole("button", { name: "Create sketch", exact: true })
+    .click();
+  await expect(page.getByLabel("Workspace", { exact: true })).toHaveValue(
+    "modeling",
+  );
+  await expect(page.getByLabel("Sketch name", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator("#inspector-sidebar")
+      .getByRole("button", { name: "Create sketch", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Close properties", exact: true })
+    .click();
+  await page.getByLabel("Workspace", { exact: true }).selectOption("design");
   for (const width of [320, 390, 768, 1024, 1512]) {
     await page.setViewportSize({ width, height: 982 });
     for (const view of ["Model", "Study setup", "History", "Source"]) {

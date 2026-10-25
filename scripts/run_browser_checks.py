@@ -20,6 +20,11 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 FIXTURES = {
+    "creation-journey/creation.spec.ts": {
+        "server": "tests/fixtures/creation_server.py", "port": 8974,
+        "port_env": "O3D_TEST_PORT", "host_env": "O3D_TEST_HOST",
+        "enable_env": "O3D_CREATION_JOURNEY", "skip_initial_build": True,
+    },
     "platform-lifecycle.spec.ts": {
         "server": "tests/platform_browser_server.py", "port": 9371,
         "port_env": "O3D_PLATFORM_TEST_PORT", "host_env": "O3D_PLATFORM_TEST_HOST",
@@ -52,7 +57,7 @@ def request_json(base: str, path: str, data: dict | None = None) -> dict:
         return json.load(response)
 
 
-def prepare_fixture(base: str, alive, timeout: int, template: Path | None) -> None:
+def prepare_fixture(base: str, alive, timeout: int, template: Path | None, *, skip_initial_build=False) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not alive():
@@ -64,6 +69,10 @@ def prepare_fixture(base: str, alive, timeout: int, template: Path | None) -> No
             time.sleep(0.25)
     else:
         raise TimeoutError("Disposable fixture did not become ready")
+    if skip_initial_build:
+        if template is not None or current["features"] or current.get("native_document") is not None or current.get("references") or current.get("parameters"):
+            raise RuntimeError("Creation acceptance requires an untouched blank project")
+        return
     if template is not None:
         project = json.loads(template.read_text())
         project["revision"] = current["revision"]
@@ -118,7 +127,8 @@ def fixture(args, directory: Path, env: dict[str, str], template: Path | None, s
                     start_new_session=True,
                 )
                 alive = lambda: process.poll() is None
-            prepare_fixture(base, alive, args.fixture_timeout, template)
+            prepare_fixture(base, alive, args.fixture_timeout, template,
+                            skip_initial_build=bool(settings and settings.get("skip_initial_build")))
             yield base
         finally:
             if args.mode == "docker":
@@ -223,7 +233,7 @@ def main() -> int:
                         command = ["node", str(ROOT / "tests/browser_manufacturing.cjs")]
                     else:
                         fixture_ui = spec.startswith("modeling/") or spec == "simulation-domain.spec.ts"
-                        config = "tests/modeling/playwright.config.ts" if fixture_ui else "playwright.config.ts"
+                        config = "tests/creation-journey/playwright.config.ts" if spec.startswith("creation-journey/") else "tests/modeling/playwright.config.ts" if fixture_ui else "playwright.config.ts"
                         command = ["npx", "--no-install", "playwright", "test", "--config", config,
                                    spec, "--output", str(directory / "artifacts"), "--reporter=list"]
                     result["exit_code"] = run_command(command, browser_env, directory / "browser.log")

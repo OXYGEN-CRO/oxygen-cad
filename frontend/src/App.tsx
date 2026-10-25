@@ -192,6 +192,8 @@ export default function App() {
     [leftOpen, setLeftOpen] = useState(true),
     [rightOpen, setRightOpen] = useState(false);
   const [nativeScene, setNativeScene] = useState<NativeScene | null>(null);
+  const [modelingCanvasHost, setModelingCanvasHost] = useState<HTMLDivElement | null>(null);
+  const initialWorkspace = useRef(false);
   const [modelingNavigation, setModelingNavigation] = useState<ModelingNavigation>();
   const [viewRequest, setViewRequest] = useState({
     name: "isometric" as ViewOrientation,
@@ -256,6 +258,14 @@ export default function App() {
       if (projectRef.current && result.project.revision < projectRef.current.revision) return result;
       const sourceChanged = projectRef.current?.revision !== result.project.revision;
       projectRef.current = result.project;
+      if (!initialWorkspace.current) {
+        initialWorkspace.current = true;
+        const nativeContext = result.project.domains?.modeling?.native_context;
+        if (result.project.native_document || (!result.project.features.length && !result.project.references.length)) {
+          setTab("modeling");
+          if (nativeContext?.active_sketch) setRightOpen(true);
+        }
+      }
       setState((previous) =>
         previous &&
         previous.project.revision === result.project.revision &&
@@ -479,7 +489,7 @@ export default function App() {
     setSelection(s);
     if (!measureMode) {
       setRightOpen(true);
-      if (tab !== "verify") {
+      if (tab !== "verify" && !isWorkspace(tab)) {
         setTab("design");
         setActive("");
       }
@@ -615,6 +625,10 @@ export default function App() {
   const reference = current?.references.find((r) => r.id === active);
   const canonical = Boolean(current?.native_document);
   const treeFeatures = canonical ? (current?.native_document?.features as any[] ?? []) : (current?.features ?? []);
+  const emptyModel = treeFeatures.length === 0 && (current?.references.length ?? 0) === 0;
+  const sketchOnly = canonical && treeFeatures.length > 0 && treeFeatures.every((f) => f.type === "sketch");
+  const activeSketch = tab === "modeling" && Boolean((current?.domains?.modeling?.native_context as JsonObject | undefined)?.active_sketch);
+  const canBuild = canonical ? treeFeatures.some((f) => f.type !== "sketch" && !f.suppressed) : Boolean(current?.features.some((f) => f.type !== "profile" && !f.suppressed));
   const pending = state?.jobs.some((j) =>
     ["queued", "running"].includes(j.state),
   );
@@ -734,6 +748,7 @@ export default function App() {
     domainData={state.project.domains?.[tab] ?? {}}
     native={native} inspectNative={() => api("native/inspect")}
     modelingNavigation={modelingNavigation}
+    modelingCanvasHost={modelingCanvasHost}
     saveDomain={saveDomain} runDomain={runDomain}
     refresh={async () => { await refresh(); }} setError={setError}
   /> : null;
@@ -780,6 +795,7 @@ export default function App() {
             <span className="unsaved-label">Unsaved</span>
           </span>
         )}
+        {!dirty && <span className="save-status" aria-label={`Saved revision ${state.project.revision}`} title="Last accepted project revision. Apply tool changes to save them.">Saved · r{state.project.revision}</span>}
         <div className="top-actions">
           <SelectControl
             aria-label="Workspace"
@@ -981,8 +997,8 @@ export default function App() {
             </span>
             <Button
               onClick={() => {
-                if (canonical) {
-                  openModeling({ tab: "solid" });
+                if (emptyModel || sketchOnly || canonical) {
+                  openModeling({ tab: emptyModel || sketchOnly ? "sketch" : "solid" });
                 } else setAddOpen(!addOpen);
               }}
               aria-label="Add feature"
@@ -1063,8 +1079,9 @@ export default function App() {
         </aside>
         <section className="canvas-panel">
           {centralWorkspace ? <div className="workspace-editor" id="workspace-editor">{workspacePanel}</div> : <>
-          <div className="canvas-toolbar">
+          <div className="canvas-toolbar" style={activeSketch ? { visibility: "hidden" } : undefined}>
             <div>
+              {!emptyModel && !activeSketch && (tab === "design" || tab === "modeling") && <Button className="create-sketch-tool" disabled={dirty || busy} onClick={() => openModeling({ tab: "sketch" })}><Square size={15} />Create sketch</Button>}
               <ToolButton
                 hint="Measure between two surface points"
                 shortcut="M"
@@ -1231,13 +1248,24 @@ export default function App() {
             isolate={isolate}
             nativeScene={nativeScene}
           />
+          <div className="modeling-canvas-host" ref={setModelingCanvasHost} hidden={!activeSketch} aria-label="Active sketch canvas" />
+          {emptyModel && !activeSketch && (
+            <div className="empty-canvas creation-start" aria-label="Start a design">
+              <Square size={28} aria-hidden="true" />
+              <h2>{tab === "modeling" && rightOpen ? "Choose a sketch plane" : "Create your first part"}</h2>
+              <div className="creation-actions">
+                {!(tab === "modeling" && rightOpen) && <Button variant="primary" onClick={() => openModeling({ tab: "sketch" })}><Plus size={15} />Create sketch</Button>}
+                <Button onClick={() => openPanel("interop")}><Upload size={15} />Import CAD</Button>
+              </div>
+            </div>
+          )}
           {state.geometry_state === "stale" && (
             <div className="stale-label">
               <AlertTriangle size={14} />
               {nativeScene ? "Updating measurements…" : "Showing previous geometry · rebuild required"}
             </div>
           )}
-          <div className="model-card">
+          <div className="model-card" hidden={activeSketch || emptyModel}>
             <span
               className={`status-dot ${state.geometry_state === "current" ? "good" : ""}`}
             />
@@ -1309,7 +1337,7 @@ export default function App() {
               </label>
             </div>
           )}
-          {(state.geometry_state !== "current" || pending) && (
+          {!activeSketch && canBuild && (state.geometry_state !== "current" || pending) && (
             <div className="canvas-actions">
               <Button
                 className="build-button"
@@ -1328,10 +1356,11 @@ export default function App() {
           )}
           </>}
         </section>
-        {inspectorVisible && (
+        {(inspectorVisible || activeSketch) && (
           <aside
             id="inspector-sidebar"
-            className={`right-panel ${tab === "source" ? "source-panel" : ""} ${isWorkspace(tab) ? "domain-panel" : ""}`}
+            hidden={!inspectorVisible}
+            className={`right-panel ${tab === "source" ? "source-panel" : ""} ${isWorkspace(tab) ? "domain-panel" : ""} ${activeSketch ? "sketch-tools-panel" : ""}`}
           >
             <div className="panel-heading">
               <span>

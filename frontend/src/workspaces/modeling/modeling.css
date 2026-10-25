@@ -89,6 +89,9 @@
   padding-bottom: 8px;
   flex-wrap: wrap;
 }
+.modeling-sketch-session { position: sticky; top: -16px; z-index: 2; padding-block: 8px; background: var(--surface); }
+.modeling-placement-prompt { padding: 10px; border: 1px solid var(--border-bright); border-radius: var(--radius-control); color: var(--text-secondary); line-height: 1.6; }
+.modeling-placement-prompt output { display: block; color: var(--text); font-variant-numeric: tabular-nums; }
 .modeling-panel button[aria-pressed="true"] {
   background: var(--accent-wash);
   border-color: var(--border-bright);

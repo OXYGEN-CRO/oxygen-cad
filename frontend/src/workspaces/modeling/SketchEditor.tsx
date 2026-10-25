@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button, Input, SelectControl } from "../../components/ui";
 import type { JsonObject } from "../contracts";
 import {
@@ -74,6 +75,7 @@ export default function SketchEditor({
   onProfiles,
   canvases = [],
   nativeSelection = [],
+  canvasHost,
 }: {
   sketch: NativeSketch;
   active: boolean;
@@ -82,6 +84,7 @@ export default function SketchEditor({
   onProfiles: (indices: number[]) => void;
   canvases?: NativeCanvas[];
   nativeSelection?: JsonObject[];
+  canvasHost?: HTMLElement | null;
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
@@ -307,6 +310,296 @@ export default function SketchEditor({
       setPointY(String(y));
     }
   }, [selectedPoint?.id, JSON.stringify(selectedPoint?.at)]);
+  const sketchCanvas = (
+    <svg
+      ref={svg}
+      className={`modeling-sketch-canvas modeling-tool-${tool}`}
+      aria-label={`Sketch canvas ${sketch.name}`}
+      role="img"
+      viewBox={`${bounds.x - size / 2} ${-bounds.y - size / 2} ${size} ${size}`}
+      onPointerDown={down}
+      onPointerMove={(event) => {
+        const p = screenPoint(event);
+        setHover(p);
+        if (drag) setDrag({ ...drag, to: p });
+        if (trimPath && distance(trimPath.at(-1)!, p) > 0.2)
+          setTrimPath([...trimPath, p]);
+      }}
+      onPointerUp={() => {
+        if (drag && distance(drag.from, drag.to) > 0.05)
+          safe(
+            execute("sketch.drag", {
+              entity: drag.id,
+              from: drag.from,
+              to: drag.to,
+            }),
+          );
+        setDrag(null);
+        if (trimPath && trimPath.length > 1) {
+          const points = trimPath;
+          safe(
+            execute("sketch.trim.path", { points, dry_run: true }).then(
+              (result) =>
+                setTrimPreview({
+                  points,
+                  removed: ((result as JsonObject).removed ?? []) as Point2[][],
+                }),
+            ),
+          );
+        }
+        setTrimPath(null);
+      }}
+      onPointerCancel={() => {
+        setDrag(null);
+        setTrimPath(null);
+      }}
+    >
+      {canvases
+        .filter((canvas) => {
+          if (!canvas.visible || canvas.component) return false;
+          let canvasPlane = canvas.plane.plane;
+          if (canvas.plane.type === "origin" && canvas.plane.name === "XY")
+            canvasPlane = {
+              origin: [0, 0, 0],
+              x_dir: [1, 0, 0],
+              y_dir: [0, 1, 0],
+            };
+          return (
+            canvasPlane &&
+            ["origin", "x_dir", "y_dir"].every(
+              (key) =>
+                JSON.stringify((canvasPlane as JsonObject)[key]) ===
+                JSON.stringify(sketch.plane[key]),
+            )
+          );
+        })
+        .map((canvas) => {
+          const [x, y] = point(canvas.center);
+          const height = (canvas.width * canvas.pixels[1]) / canvas.pixels[0];
+          return (
+            <image
+              key={canvas.id}
+              href={`data:image/${canvas.format};base64,${canvas.data}`}
+              x={x - canvas.width / 2}
+              y={-y - height / 2}
+              width={canvas.width}
+              height={height}
+              opacity={canvas.opacity}
+              transform={`rotate(${(-canvas.angle * 180) / Math.PI} ${x} ${-y})${canvas.flip ? ` translate(${2 * x},0) scale(-1,1)` : ""}`}
+              pointerEvents="none"
+            />
+          );
+        })}
+      <defs>
+        <pattern
+          id={`modeling-grid-${sketch.id}`}
+          width="5"
+          height="5"
+          patternUnits="userSpaceOnUse"
+        >
+          <path
+            d="M5 0 H0 V5"
+            fill="none"
+            stroke="var(--border-bright)"
+            strokeWidth={stroke / 3}
+          />
+        </pattern>
+      </defs>
+      <rect
+        x={bounds.x - size / 2}
+        y={-bounds.y - size / 2}
+        width={size}
+        height={size}
+        fill={`url(#modeling-grid-${sketch.id})`}
+      />
+      <path
+        d={`M${bounds.x - size / 2},0 H${bounds.x + size / 2} M0,${-bounds.y - size / 2} V${-bounds.y + size / 2}`}
+        className="modeling-axis"
+        strokeWidth={stroke / 2}
+      />
+      {sketch.curves.map((curve) => {
+        const className = `modeling-curve ${curve.construction ? "is-construction" : ""} ${curve.link ? "is-linked" : ""} ${curve.fully_constrained ? "is-constrained" : ""} ${selected.includes(curve.id) ? "is-selected" : ""} ${curve.type === "spline" ? "is-control-polygon" : ""}`;
+        const path = curvePath(curve);
+        const props = {
+          "data-entity": curve.id,
+          className,
+          strokeWidth: stroke,
+          fill: "none",
+        };
+        if (curve.type === "circle") {
+          const [x, y] = point(curve.center_at);
+          return (
+            <circle
+              key={curve.id}
+              {...props}
+              cx={x}
+              cy={-y}
+              r={Number(curve.radius)}
+            >
+              <title>{curve.id}</title>
+            </circle>
+          );
+        }
+        if (curve.type === "ellipse") {
+          const c = point(curve.center_at),
+            m = point(curve.major_at);
+          return (
+            <ellipse
+              key={curve.id}
+              {...props}
+              cx={c[0]}
+              cy={-c[1]}
+              rx={distance(c, m)}
+              ry={Number(curve.minor_radius)}
+              transform={`rotate(${(-Math.atan2(m[1] - c[1], m[0] - c[0]) * 180) / Math.PI} ${c[0]} ${-c[1]})`}
+            />
+          );
+        }
+        return (
+          path && (
+            <path key={curve.id} {...props} d={path}>
+              <title>
+                {curve.id}
+                {curve.type === "spline" ? " (fit/control polygon)" : ""}
+              </title>
+            </path>
+          )
+        );
+      })}
+      {sketch.points.map((p) => {
+        const [x, y] = point(p.at);
+        return (
+          <circle
+            key={p.id}
+            data-entity={p.id}
+            className={`modeling-point ${selected.includes(p.id) ? "is-selected" : ""} ${p.fully_constrained ? "is-constrained" : ""}`}
+            cx={x}
+            cy={-y}
+            r={stroke * 1.5}
+          >
+            <title>
+              {p.id} · {x}, {y} mm
+            </title>
+          </circle>
+        );
+      })}
+      {sketch.profiles.map((p) => {
+        const [x, y] = point(p.centroid_sketch);
+        return (
+          <g
+            key={p.index}
+            className="modeling-profile"
+            role="button"
+            aria-label={`Select profile ${p.index}`}
+            tabIndex={0}
+            onPointerDown={(e) => {
+              if (tool !== "select") return;
+              e.stopPropagation();
+              const ids = profileIds.includes(p.index)
+                ? profileIds.filter((i) => i !== p.index)
+                : [...profileIds, p.index];
+              selectProfiles(ids);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                selectProfiles(
+                  profileIds.includes(p.index)
+                    ? profileIds.filter((i) => i !== p.index)
+                    : [...profileIds, p.index],
+                );
+              }
+            }}
+          >
+            <circle
+              cx={x}
+              cy={-y}
+              r={stroke * 3}
+              className={profileIds.includes(p.index) ? "is-selected" : ""}
+            />
+            <text
+              x={x}
+              y={-y + stroke}
+              textAnchor="middle"
+              fontSize={stroke * 3}
+            >
+              {p.index}
+            </text>
+          </g>
+        );
+      })}
+      {preview.length > 1 && ["line", "arc", "spline"].includes(tool) && (
+        <polyline
+          points={preview.map(at).join(" ")}
+          className="modeling-placement"
+          strokeWidth={stroke}
+        />
+      )}
+      {preview.length === 2 && ["rectangle", "rounded"].includes(tool) && (
+        <rect
+          x={Math.min(preview[0][0], preview[1][0])}
+          y={-Math.max(preview[0][1], preview[1][1])}
+          width={Math.abs(preview[1][0] - preview[0][0])}
+          height={Math.abs(preview[1][1] - preview[0][1])}
+          className="modeling-placement"
+          strokeWidth={stroke}
+        />
+      )}
+      {preview.length === 2 && tool === "circle" && (
+        <circle
+          cx={preview[0][0]}
+          cy={-preview[0][1]}
+          r={distance(preview[0], preview[1])}
+          className="modeling-placement"
+          strokeWidth={stroke}
+        />
+      )}
+      {drag && (
+        <path
+          d={`M${at(drag.from)} L${at(drag.to)}`}
+          className="modeling-placement"
+          strokeWidth={stroke}
+        />
+      )}
+      {trimPath && (
+        <polyline
+          points={trimPath.map(at).join(" ")}
+          className="modeling-placement"
+          strokeWidth={stroke}
+        />
+      )}
+      {trimPreview?.removed.map((polyline, index) => (
+        <polyline
+          key={index}
+          points={polyline.map(at).join(" ")}
+          className="modeling-trim-preview"
+          strokeWidth={stroke * 2}
+        />
+      ))}
+      {glyphs.map((glyph) => {
+        const [x, y] = point(glyph.at);
+        const constraint = sketch.constraints.find((c) => c.id === glyph.id);
+        return (
+          <text
+            key={glyph.id}
+            x={x + stroke * 3}
+            y={-y - stroke * 3}
+            fontSize={stroke * 4}
+            className={`modeling-glyph ${glyph.failing ? "is-failing" : ""}`}
+          >
+            <title>
+              {glyph.id} · {glyph.name}
+            </title>
+            {glyph.dimension
+              ? (constraint?.expression ??
+                glyph.value?.toFixed(2) ??
+                glyph.name)
+              : glyph.name}
+          </text>
+        );
+      })}
+    </svg>
+  );
   return (
     <div className="modeling-sketch">
       <div className="modeling-row">
@@ -359,295 +652,9 @@ export default function SketchEditor({
           <Input value={radius} onChange={(e) => setRadius(e.target.value)} />
         </label>
       )}
-      <svg
-        ref={svg}
-        className={`modeling-sketch-canvas modeling-tool-${tool}`}
-        aria-label={`Sketch canvas ${sketch.name}`}
-        role="img"
-        viewBox={`${bounds.x - size / 2} ${-bounds.y - size / 2} ${size} ${size}`}
-        onPointerDown={down}
-        onPointerMove={(event) => {
-          const p = screenPoint(event);
-          setHover(p);
-          if (drag) setDrag({ ...drag, to: p });
-          if (trimPath && distance(trimPath.at(-1)!, p) > 0.2)
-            setTrimPath([...trimPath, p]);
-        }}
-        onPointerUp={() => {
-          if (drag && distance(drag.from, drag.to) > 0.05)
-            safe(
-              execute("sketch.drag", {
-                entity: drag.id,
-                from: drag.from,
-                to: drag.to,
-              }),
-            );
-          setDrag(null);
-          if (trimPath && trimPath.length > 1) {
-            const points = trimPath;
-            safe(
-              execute("sketch.trim.path", { points, dry_run: true }).then(
-                (result) =>
-                  setTrimPreview({
-                    points,
-                    removed: ((result as JsonObject).removed ??
-                      []) as Point2[][],
-                  }),
-              ),
-            );
-          }
-          setTrimPath(null);
-        }}
-        onPointerCancel={() => {
-          setDrag(null);
-          setTrimPath(null);
-        }}
-      >
-        {canvases
-          .filter((canvas) => {
-            if (!canvas.visible || canvas.component) return false;
-            let canvasPlane = canvas.plane.plane;
-            if (canvas.plane.type === "origin" && canvas.plane.name === "XY")
-              canvasPlane = {
-                origin: [0, 0, 0],
-                x_dir: [1, 0, 0],
-                y_dir: [0, 1, 0],
-              };
-            return (
-              canvasPlane &&
-              ["origin", "x_dir", "y_dir"].every(
-                (key) =>
-                  JSON.stringify((canvasPlane as JsonObject)[key]) ===
-                  JSON.stringify(sketch.plane[key]),
-              )
-            );
-          })
-          .map((canvas) => {
-            const [x, y] = point(canvas.center);
-            const height = (canvas.width * canvas.pixels[1]) / canvas.pixels[0];
-            return (
-              <image
-                key={canvas.id}
-                href={`data:image/${canvas.format};base64,${canvas.data}`}
-                x={x - canvas.width / 2}
-                y={-y - height / 2}
-                width={canvas.width}
-                height={height}
-                opacity={canvas.opacity}
-                transform={`rotate(${(-canvas.angle * 180) / Math.PI} ${x} ${-y})${canvas.flip ? ` translate(${2 * x},0) scale(-1,1)` : ""}`}
-                pointerEvents="none"
-              />
-            );
-          })}
-        <defs>
-          <pattern
-            id={`modeling-grid-${sketch.id}`}
-            width="5"
-            height="5"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M5 0 H0 V5"
-              fill="none"
-              stroke="var(--border-bright)"
-              strokeWidth={stroke / 3}
-            />
-          </pattern>
-        </defs>
-        <rect
-          x={bounds.x - size / 2}
-          y={-bounds.y - size / 2}
-          width={size}
-          height={size}
-          fill={`url(#modeling-grid-${sketch.id})`}
-        />
-        <path
-          d={`M${bounds.x - size / 2},0 H${bounds.x + size / 2} M0,${-bounds.y - size / 2} V${-bounds.y + size / 2}`}
-          className="modeling-axis"
-          strokeWidth={stroke / 2}
-        />
-        {sketch.curves.map((curve) => {
-          const className = `modeling-curve ${curve.construction ? "is-construction" : ""} ${curve.link ? "is-linked" : ""} ${curve.fully_constrained ? "is-constrained" : ""} ${selected.includes(curve.id) ? "is-selected" : ""} ${curve.type === "spline" ? "is-control-polygon" : ""}`;
-          const path = curvePath(curve);
-          const props = {
-            "data-entity": curve.id,
-            className,
-            strokeWidth: stroke,
-            fill: "none",
-          };
-          if (curve.type === "circle") {
-            const [x, y] = point(curve.center_at);
-            return (
-              <circle
-                key={curve.id}
-                {...props}
-                cx={x}
-                cy={-y}
-                r={Number(curve.radius)}
-              >
-                <title>{curve.id}</title>
-              </circle>
-            );
-          }
-          if (curve.type === "ellipse") {
-            const c = point(curve.center_at),
-              m = point(curve.major_at);
-            return (
-              <ellipse
-                key={curve.id}
-                {...props}
-                cx={c[0]}
-                cy={-c[1]}
-                rx={distance(c, m)}
-                ry={Number(curve.minor_radius)}
-                transform={`rotate(${(-Math.atan2(m[1] - c[1], m[0] - c[0]) * 180) / Math.PI} ${c[0]} ${-c[1]})`}
-              />
-            );
-          }
-          return (
-            path && (
-              <path key={curve.id} {...props} d={path}>
-                <title>
-                  {curve.id}
-                  {curve.type === "spline" ? " (fit/control polygon)" : ""}
-                </title>
-              </path>
-            )
-          );
-        })}
-        {sketch.points.map((p) => {
-          const [x, y] = point(p.at);
-          return (
-            <circle
-              key={p.id}
-              data-entity={p.id}
-              className={`modeling-point ${selected.includes(p.id) ? "is-selected" : ""} ${p.fully_constrained ? "is-constrained" : ""}`}
-              cx={x}
-              cy={-y}
-              r={stroke * 1.5}
-            >
-              <title>
-                {p.id} · {x}, {y} mm
-              </title>
-            </circle>
-          );
-        })}
-        {sketch.profiles.map((p) => {
-          const [x, y] = point(p.centroid_sketch);
-          return (
-            <g
-              key={p.index}
-              className="modeling-profile"
-              role="button"
-              aria-label={`Select profile ${p.index}`}
-              tabIndex={0}
-              onPointerDown={(e) => {
-                if (tool !== "select") return;
-                e.stopPropagation();
-                const ids = profileIds.includes(p.index)
-                  ? profileIds.filter((i) => i !== p.index)
-                  : [...profileIds, p.index];
-                selectProfiles(ids);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  selectProfiles(
-                    profileIds.includes(p.index)
-                      ? profileIds.filter((i) => i !== p.index)
-                      : [...profileIds, p.index],
-                  );
-                }
-              }}
-            >
-              <circle
-                cx={x}
-                cy={-y}
-                r={stroke * 3}
-                className={profileIds.includes(p.index) ? "is-selected" : ""}
-              />
-              <text
-                x={x}
-                y={-y + stroke}
-                textAnchor="middle"
-                fontSize={stroke * 3}
-              >
-                {p.index}
-              </text>
-            </g>
-          );
-        })}
-        {preview.length > 1 && ["line", "arc", "spline"].includes(tool) && (
-          <polyline
-            points={preview.map(at).join(" ")}
-            className="modeling-placement"
-            strokeWidth={stroke}
-          />
-        )}
-        {preview.length === 2 && ["rectangle", "rounded"].includes(tool) && (
-          <rect
-            x={Math.min(preview[0][0], preview[1][0])}
-            y={-Math.max(preview[0][1], preview[1][1])}
-            width={Math.abs(preview[1][0] - preview[0][0])}
-            height={Math.abs(preview[1][1] - preview[0][1])}
-            className="modeling-placement"
-            strokeWidth={stroke}
-          />
-        )}
-        {preview.length === 2 && tool === "circle" && (
-          <circle
-            cx={preview[0][0]}
-            cy={-preview[0][1]}
-            r={distance(preview[0], preview[1])}
-            className="modeling-placement"
-            strokeWidth={stroke}
-          />
-        )}
-        {drag && (
-          <path
-            d={`M${at(drag.from)} L${at(drag.to)}`}
-            className="modeling-placement"
-            strokeWidth={stroke}
-          />
-        )}
-        {trimPath && (
-          <polyline
-            points={trimPath.map(at).join(" ")}
-            className="modeling-placement"
-            strokeWidth={stroke}
-          />
-        )}
-        {trimPreview?.removed.map((polyline, index) => (
-          <polyline
-            key={index}
-            points={polyline.map(at).join(" ")}
-            className="modeling-trim-preview"
-            strokeWidth={stroke * 2}
-          />
-        ))}
-        {glyphs.map((glyph) => {
-          const [x, y] = point(glyph.at);
-          const constraint = sketch.constraints.find((c) => c.id === glyph.id);
-          return (
-            <text
-              key={glyph.id}
-              x={x + stroke * 3}
-              y={-y - stroke * 3}
-              fontSize={stroke * 4}
-              className={`modeling-glyph ${glyph.failing ? "is-failing" : ""}`}
-            >
-              <title>
-                {glyph.id} · {glyph.name}
-              </title>
-              {glyph.dimension
-                ? (constraint?.expression ??
-                  glyph.value?.toFixed(2) ??
-                  glyph.name)
-                : glyph.name}
-            </text>
-          );
-        })}
-      </svg>
+      {active && canvasHost
+        ? createPortal(sketchCanvas, canvasHost)
+        : sketchCanvas}
       {trimPreview && (
         <div className="modeling-row">
           <span className="modeling-muted">

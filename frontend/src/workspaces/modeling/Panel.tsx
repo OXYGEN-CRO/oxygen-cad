@@ -38,6 +38,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
   const [offset, setOffset] = useState("0 mm");
   const [sketchId, setSketchId] = useState<number | null>(null);
   const [profileIds, setProfileIds] = useState<number[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [operationId, setOperationId] = useState("solid.extrude");
   const [sketchOperationId, setSketchOperationId] = useState("sketch.offset");
   const [projection, setProjection] = useState('["origin"]');
@@ -63,6 +64,8 @@ export default function ModelingPanel(props: DomainPanelProps) {
       } as Record<string, Tab>
     )[detail?.tab?.toLowerCase() ?? ""];
     if (nextTab) setTab(nextTab);
+    if (nextTab === "Sketch" && detail.feature === undefined)
+      setCreateOpen(true);
     if (detail?.feature !== undefined) {
       setFocusedFeature(Number(detail.feature));
       if (!nextTab) setTab("History");
@@ -175,6 +178,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
     const params: JsonObject = { plane, offset };
     if (name.trim()) params.name = name.trim();
     const created = (await execute("sketch.create", params)) as JsonObject;
+    setCreateOpen(false);
     setSketchId(Number(created.sketch ?? created.id));
     setProfileIds([]);
   };
@@ -226,7 +230,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
       {tab === "Sketch" && (
         <>
           {activeId ? (
-            <div className="modeling-row">
+            <div className="modeling-row modeling-sketch-session">
               <span className="modeling-muted">
                 Editing {sketch?.name ?? activeId}
               </span>
@@ -239,7 +243,10 @@ export default function ModelingPanel(props: DomainPanelProps) {
               </Button>
             </div>
           ) : (
-            <details open={!sketches.length}>
+            <details
+              open={createOpen || !sketches.length}
+              onToggle={(event) => setCreateOpen(event.currentTarget.open)}
+            >
               <summary>Create sketch</summary>
               <form
                 className="modeling-form"
@@ -336,6 +343,7 @@ export default function ModelingPanel(props: DomainPanelProps) {
               onProfiles={setProfileIds}
               canvases={canvases}
               nativeSelection={(inspection?.selection ?? []) as JsonObject[]}
+              canvasHost={props.modelingCanvasHost}
             />
           )}
           {sketch && !activeId && (

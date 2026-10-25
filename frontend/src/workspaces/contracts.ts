@@ -6,6 +6,7 @@ export interface NativeReply { project: Project; result: unknown; }
 export interface ModelingNavigation { feature?: number | string; tab?: string; version: number; }
 export interface DomainPanelProps {
   modelingNavigation?: ModelingNavigation;
+  modelingCanvasHost?: HTMLElement | null;
   project: Project;
   state: State;
   selection: Selection | null;

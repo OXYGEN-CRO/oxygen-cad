@@ -18,7 +18,11 @@ if (new URL(fixtureUrl).port === "8787") {
 }
 export default defineConfig({
   testDir: "./tests",
-  testIgnore: ["**/modeling/**", "**/simulation-domain.spec.ts"],
+  testIgnore: [
+    "**/modeling/**",
+    "**/creation-journey/**",
+    "**/simulation-domain.spec.ts",
+  ],
   workers: 1,
   timeout: 60000,
   use: {
