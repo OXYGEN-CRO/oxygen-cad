@@ -1551,10 +1551,20 @@ export default function SimulationPanel(props: DomainPanelProps) {
                           }
                         </p>
                       )}
+                      {r.checks.contact_current_state_audit
+                        .full_frozen_operator && (
+                        <p className="sim-help">
+                          {r.checks.contact_current_state_audit
+                            .full_frozen_operator.performed
+                            ? `Full deformable model: ${r.checks.contact_current_state_audit.full_frozen_operator.free_dofs} free degrees of freedom across ${r.checks.contact_current_state_audit.full_frozen_operator.frames} increments; ${r.checks.contact_current_state_audit.full_frozen_operator.complete_frames} have unambiguous contact states. Largest estimated condition number: ${format(r.checks.contact_current_state_audit.full_frozen_operator.maximum_condition_number_1_estimate)}. Large estimates indicate numerical sensitivity; a small estimate cannot prove stability.`
+                            : `Full deformable audit unavailable: ${r.checks.contact_current_state_audit.full_frozen_operator.reason}`}
+                        </p>
+                      )}
                       <p className="sim-help">
                         Download Contact interface fields for the increment
-                        history. Changing contact patches, deformable modes and
-                        physical stability require further qualification.
+                        history. Changing contact patches, nonlinear materials,
+                        dynamic and physical stability require further
+                        qualification.
                       </p>
                     </details>
                   )}

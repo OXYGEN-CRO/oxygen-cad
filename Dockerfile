@@ -61,9 +61,9 @@ ENV O3D_DRAWING_FONT=/usr/share/fonts/truetype/freefont/FreeSerif.ttf \
 COPY --from=contact-solver /opt/contact-solver /opt/contact-solver
 COPY --from=contact-solver /opt/solver/lib /opt/solver/lib
 COPY --from=contact-solver /opt/solver/usr/share/doc/libspooles2.2t64/copyright /usr/share/doc/oxygen-spooles/copyright
-COPY --from=contact-solver /opt/contact-kernel/result.json /usr/share/oxygen-cad-verification/contact-kernel.json
+COPY --from=contact-solver /opt/contact-kernel /usr/share/oxygen-cad-verification/contact-kernel
 ENV CCX_BINARY=/opt/contact-solver/ccx LD_LIBRARY_PATH=/opt/solver/lib
-ENV O3D_CONTACT_KERNEL_EVIDENCE=/usr/share/oxygen-cad-verification/contact-kernel.json
+ENV O3D_CONTACT_KERNEL_EVIDENCE=/usr/share/oxygen-cad-verification/contact-kernel/result.json
 COPY --from=engine /build/engine/target/release/oxygen-engine /usr/local/bin/oxygen-engine
 COPY third_party/solidcraft/LICENSE-MIT third_party/solidcraft/LICENSE-APACHE third_party/solidcraft/NOTICE third_party/solidcraft/THIRD-PARTY-LICENSES.txt /usr/share/doc/oxygen-solidcraft/
 COPY third_party/solidcraft/assets/fonts/liberation-sans/OFL.txt /usr/share/doc/oxygen-solidcraft/OFL.txt
@@ -76,7 +76,7 @@ COPY src/ src/
 RUN /opt/cad/bin/pip install --no-deps -e .
 COPY examples/ examples/
 COPY o3d ./
-COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/contact_kernel_probe.f90 scripts/
+COPY scripts/agent_skills.py scripts/qualify_mesh.py scripts/reference_fem.py scripts/reference_thermoelastic.py scripts/reference_buckling.py scripts/reference_bonded.py scripts/reference_contact_kernel.py scripts/reference_contact_global.py scripts/contact_kernel_probe.f90 scripts/
 COPY verification-requirements.lock ./
 COPY skills/ skills/
 COPY .claude-plugin/ .claude-plugin/

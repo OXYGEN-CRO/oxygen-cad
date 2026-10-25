@@ -161,7 +161,9 @@ def audit_contact(directory,contact,case,result,force):
                 expected_dissipation=float(tau@(state[:3]-old[:3]))*area
                 state_error=max(state_error,float(np.linalg.norm(state[3:6]-(a@su-b@mu))))
             if loaded:
-                stability.point(record,normal,area,float(values[0]),a@su-b@mu,pressure,tau,old,state,a@sx,b@mx)
+                stability.point(record,normal,area,float(values[0]),a@su-b@mu,pressure,tau,old,state,a@sx,b@mx,
+                    trace={'secondary_nodes':sn,'primary_nodes':mn,'secondary_weights':a.tolist(),'primary_weights':b.tolist(),
+                           'secondary_uv':uv[:2].tolist(),'primary_uv':muv[:2].tolist()})
             stated_dissipation=float(finite(point['friction_increment_n_mm']));slip_error+=abs(expected_dissipation-stated_dissipation);diss+=expected_dissipation
             traction=area*(pressure*normal-tau);force_by_pair[record['id']]+=traction
             secondary_moment[record['id']]+=np.cross(xs,traction);primary_moment[record['id']]+=np.cross(xm,-traction)

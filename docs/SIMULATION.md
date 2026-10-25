@@ -218,8 +218,27 @@ trial. The audit is capped at 32 connected solids; exceeding it records an
 unperformed audit. Geometric/material nonlinearities do not inherit the linear
 bulk positivity check.
 
-These diagnostics do **not** qualify full contact stability. Deformable-mode
-conditioning and coupling, nonconservative sliding stability, changing
+The full deformable frozen-map operator is also assembled at every accepted
+increment when the bulk is linear isotropic. It uses the native four C3D10
+quadrature points, every signed six-node trace coefficient, exact support DOFs
+and the nonsymmetric normal-to-shear friction coupling. It is capped at 12,000
+total DOFs and eight million assembly entries; missing traces, one-sided states,
+resource limits and nonlinear bulk are explicit incomplete/unperformed audits.
+
+`contact-global.json` records each operator hash, LU outcome, solve backward
+error and one-norm condition estimate. This estimate is a lower bound, not an
+exact condition number or a stability certificate. The worst estimated-condition
+frame retains bulk/contact/reduced CSR matrices, node/free/fixed DOF order,
+quadratic point traces and an inverse-action displacement witness. Its symmetric
+part is inspected with a dense lowest eigenpair for at most 2,048 free DOFs; a
+negative direction diagnoses loss of symmetric coercivity, not dynamic friction
+instability. Other frames are not assigned that spectral result. Witness
+amplitudes are arbitrary, not a predicted physical displacement. Handoff retains
+these files for every trial; independent scikit-fem and unmodified native-contact
+kernel comparisons check full operators and force derivatives separately.
+
+These diagnostics do **not** qualify full contact stability. Nonconservative
+sliding stability, changing
 projections/normals/areas, one-sided opening or stick/slip transitions and exported
 nonlinear bulk tangents remain outstanding. Full-rank rigid restraint is not a
 passing physical-stability result. All contact results remain inconclusive.

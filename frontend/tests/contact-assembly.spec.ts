@@ -251,6 +251,19 @@ test("native solids preserve explicit experimental contact and downloadable evid
     expect(evidence.current_state_audit.minimum_normal_restraint_rank).toBe(12);
     expect(evidence.current_state_audit.minimum_constitutive_rank).toBe(12);
     expect(evidence.current_state_audit.sliding_frames).toBe(0);
+    expect(evidence.current_state_audit.full_frozen_operator.performed).toBe(
+      true,
+    );
+    expect(
+      evidence.current_state_audit.full_frozen_operator.complete_frames,
+    ).toBe(evidence.current_state_audit.frames);
+    expect(
+      evidence.current_state_audit.full_frozen_operator.free_dofs,
+    ).toBeGreaterThan(0);
+    expect(
+      evidence.current_state_audit.full_frozen_operator
+        .full_contact_stability_qualified,
+    ).toBe(false);
     expect(evidence.current_state_audit.full_contact_stability_qualified).toBe(
       false,
     );
@@ -466,6 +479,13 @@ test("native solids preserve explicit experimental contact and downloadable evid
       await restraintSummary.click();
     await expect(restraintDetails).toContainText(
       `Sliding increments: ${cycleEvidence.current_state_audit.sliding_frames}`,
+    );
+    expect(
+      cycleEvidence.current_state_audit.full_frozen_operator.performed,
+    ).toBe(true);
+    await expect(restraintDetails).toContainText("Full deformable model:");
+    await expect(restraintDetails).toContainText(
+      "a small estimate cannot prove stability",
     );
     for (const [time, shear] of [
       [1, 0],

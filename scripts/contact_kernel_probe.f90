@@ -11,7 +11,8 @@ program contact_kernel_probe
   real(8) :: t1(3),t2(3),uv(2,6),matrix(3,3),fd(3,3),plus(3),minus(3),h
   integer :: nelcon(2,1),nplicon(0:1,1),mi(3),konl(26),i,j,k,l
   character(8) :: lakon
-  read(*,*) normal,jump,old,kn,kt,friction,area
+  read(*,*) normal,jump,old,kn,kt,friction,area,h
+  if(h.le.0.d0) stop 'Finite difference step must be positive'
   t1=[1.d0,0.d0,0.d0]
   if(abs(normal(1))>.9d0) t1=[0.d0,0.d0,1.d0]
   t1=t1-dot_product(t1,normal)*normal;t1=t1/sqrt(dot_product(t1,t1))
@@ -47,7 +48,6 @@ program contact_kernel_probe
   do i=1,3
     write(*,'(3ES26.17E3)') matrix(i,:)
   enddo
-  h=1.d-8
   do j=1,3
     t1=jump;t1(j)=t1(j)+h;call force(t1,plus)
     t1=jump;t1(j)=t1(j)-h;call force(t1,minus)

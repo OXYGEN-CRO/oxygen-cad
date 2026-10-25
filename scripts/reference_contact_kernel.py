@@ -61,7 +61,7 @@ def main():
     subprocess.run(command,check=True,capture_output=True,text=True)
     results=[]
     for case in cases():
-        values=[*case['normal'],*case['relative_displacement_mm'],*case['initial_state'],case['normal_penalty_n_mm3'],case['tangential_penalty_n_mm3'],case['friction_coefficient'],case['area_mm2']]
+        values=[*case['normal'],*case['relative_displacement_mm'],*case['initial_state'],case['normal_penalty_n_mm3'],case['tangential_penalty_n_mm3'],case['friction_coefficient'],case['area_mm2'],1e-8]
         output=subprocess.run([str(binary)],input=' '.join(format(v,'.17g') for v in values)+'\n',text=True,capture_output=True,check=True).stdout
         numbers=[float(v.replace('D','E')) for v in output.split()]
         if len(numbers)!=36 or not all(math.isfinite(v) for v in numbers):raise ValueError('Native contact probe output is incomplete/nonfinite')

@@ -102,7 +102,10 @@ class Rows:
 class ContactStateAudit:
     def __init__(self,system,case):
         self.system=system;self.case=case;self.dimension=6*len(system.solid_components);self.history=[];self.snapshots={}
+        from .simulation_contact_global import GlobalContactAudit
+        self.global_audit=GlobalContactAudit(system,case)
         self.enabled=len(system.solid_components)<=32
+        if not self.enabled and not self.global_audit.reason:self.global_audit.reason='Current contact audit exceeds 32 solids'
         self.bulk=bulk_kernel(system) if self.enabled else {'checked':False,'reason':'Current rigid-space audit exceeds 32 solids'}
         self.centers=[];self.lengths=[]
         self.worst=None
@@ -123,11 +126,12 @@ class ContactStateAudit:
 
     def start(self,meta):
         if not self.enabled:return
+        self.global_audit.start()
         self.meta=meta;self.normal=Rows(self.dimension,self.supports);self.actual=Rows(self.dimension,self.supports);self.possible=Rows(self.dimension,self.supports)
         self.projected=np.zeros((self.dimension,self.dimension));self.counts={'normal':0,'stick':0,'slip':0,'boundary':0}
         self.force_error=0.;self.state_error=0.;self.asymmetry=0.
 
-    def point(self,record,normal,area,gap,relative,pressure,tau,initial,state,secondary,primary):
+    def point(self,record,normal,area,gap,relative,pressure,tau,initial,state,secondary,primary,*,trace=None):
         if not self.enabled:return
         jump=np.zeros((3,self.dimension))
         for role,sign,point in [('secondary',1,secondary),('primary',-1,primary)]:
@@ -139,7 +143,12 @@ class ContactStateAudit:
         first=axis-float(axis@normal)*normal;first/=np.linalg.norm(first)
         second=np.cross(normal,first);second/=np.linalg.norm(second)
         tangent_rows=np.array([first@jump,second@jump])
+        if trace is not None:
+            trace=trace|{'normal':normal.tolist(),'area_mm2':area,'gap_mm':gap,'relative_mm':relative.tolist(),
+                'initial_state':None if initial is None else initial.tolist(),'normal_penalty_n_mm3':kn,
+                'tangential_penalty_n_mm3':kt,'friction_coefficient':friction}
         if pressure<=pressure_resolution:
+            self.global_audit.point(np.zeros((3,3)),trace,boundary=True)
             self.counts['boundary']+=1
             if friction:
                 for row in tangent_rows:self.possible.add(row)
@@ -152,10 +161,14 @@ class ContactStateAudit:
             self.state_error=max(self.state_error,float(np.linalg.norm(response['state']-state))/extent)
         self.normal.add(normal_row);self.actual.add(normal_row);self.counts['normal']+=1
         derivative=response['tangent_n_mm'];self.projected+=jump.T@derivative@jump
-        self.asymmetry=max(self.asymmetry,float(np.linalg.norm(derivative-derivative.T)/np.linalg.norm(derivative)))
+        constitutive_boundary=False
         if friction:
             margin=response['trial_shear_mpa']-response['friction_limit_mpa']
             resolution=max(kt*extent*np.finfo(float).eps*128,pressure_resolution*friction)
+            constitutive_boundary=abs(margin)<=resolution or (margin>0 and np.linalg.norm(tau)==0)
+        self.global_audit.point(derivative,trace,boundary=constitutive_boundary)
+        self.asymmetry=max(self.asymmetry,float(np.linalg.norm(derivative-derivative.T)/np.linalg.norm(derivative)))
+        if friction:
             if abs(margin)<=resolution:
                 self.counts['boundary']+=1
                 for row in tangent_rows:self.possible.add(row)
@@ -195,6 +208,7 @@ class ContactStateAudit:
                 'possible':self.possible.matrix.copy(),'supported_rigid_tangent':operator,'allowed_rigid_basis':self.allowed.copy(),
                 'mechanism_witnesses':witness[:,:6].copy()};self.worst_time=time
         self.history.append(row)
+        row['full_frozen_operator']=self.global_audit.finish(time)
 
     def write(self,directory):
         rows=self.history
@@ -208,6 +222,7 @@ class ContactStateAudit:
                'all_frozen_operator_kernel_structures_positive':bool(rows) and all(row['positive_frozen_operator_kernel_structure'] for row in rows),
                'full_contact_stability_qualified':False,'rank_tolerance':RANK_TOLERANCE,
                'scope':'Accepted frozen-map local derivatives and current bulk rigid-space restraint only. Nonsymmetric sliding, deformable-mode conditioning/coupling, changing-map/one-sided transitions, nonlinear bulk and physical stability remain distinct and unqualified.'}
+        value['full_frozen_operator']=self.global_audit.write(directory)
         write_json(directory/'contact-stability.json',{'summary':value,'history':rows,
             'worst_operator_time':getattr(self,'worst_time',None),'component_count':len(self.system.solid_components),
             'component_nodes':[sorted(nodes) for nodes in self.system.solid_components] if self.enabled else [],

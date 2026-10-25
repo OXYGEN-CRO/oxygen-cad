@@ -35,7 +35,7 @@ jobs:
         run: >-
           docker run --rm oxygen-cad sh -c
           'python -m pip install --no-deps --require-hashes -r verification-requirements.lock &&
-          O3D_REFERENCE_PYTHON=/opt/cad/bin/python pytest -q tests/test_reference_solver.py tests/test_canonical_thermal_reference.py tests/test_thermoelastic_reference.py tests/test_canonical_modal_reference.py tests/test_canonical_buckling_reference.py tests/test_canonical_bonded_reference.py'
+          O3D_REFERENCE_PYTHON=/opt/cad/bin/python pytest -q tests/test_reference_solver.py tests/test_canonical_thermal_reference.py tests/test_thermoelastic_reference.py tests/test_canonical_modal_reference.py tests/test_canonical_buckling_reference.py tests/test_canonical_bonded_reference.py tests/test_contact_global.py'
       - name: Package the local desktop runtime
         run: |
           docker tag oxygen-cad oxygen-cad:desktop-runtime
