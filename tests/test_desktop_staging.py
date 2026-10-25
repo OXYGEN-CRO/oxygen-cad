@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,18 @@ if not Path(SPEC.origin).is_file():
     pytest.skip("Desktop staging is a host release-tool test; staging script is not installed in the runtime image", allow_module_level=True)
 staging = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(staging)
+
+
+def test_independent_checker_entrypoints_are_in_the_actual_runtime_closure():
+    root=Path(__file__).resolve().parents[1]
+    required=set()
+    for path in (root/"tests").glob("test*reference*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node,ast.Constant) and isinstance(node.value,str) and node.value.startswith("scripts/") and node.value.endswith(".py"):
+                required.add(node.value)
+    assert len(required)>=2,"Reference entrypoint discovery must cover the actual independent verification suites"
+    selected=set(staging.source_files(root))
+    assert required<=selected,f"Independent verification entrypoints missing from runtime closure: {sorted(required-selected)}"
 
 
 def test_staging_closure_tracks_new_source_without_local_data(tmp_path, monkeypatch):

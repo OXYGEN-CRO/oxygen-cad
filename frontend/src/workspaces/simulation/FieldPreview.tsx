@@ -14,6 +14,8 @@ export interface FieldData {
   boundary_triangles?: number[][];
   element_connectivity?: Record<string, number[]>;
   modes?: {
+    rigid_body?: boolean;
+    frequency_hz?: number;
     shape?: Record<string, number[]>;
     mass_normalized_displacement?: Record<string, number[]>;
   }[];
@@ -50,8 +52,8 @@ export default function FieldPreview({
     const controls = new OrbitControls(camera, renderer.domElement);
     const displacement =
       quantity === "mode"
-        ? (field.modes?.[mode]?.mass_normalized_displacement ??
-          field.modes?.[mode]?.shape)
+        ? (field.modes?.[mode]?.shape ??
+          field.modes?.[mode]?.mass_normalized_displacement)
         : field.displacements_mm;
     const values: Record<string, number> =
       quantity === "temperature"

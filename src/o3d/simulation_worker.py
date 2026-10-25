@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-5"
+ADAPTER_VERSION="oxygen-canonical-6"
 
 
 def clean(value):
@@ -62,10 +62,10 @@ def solve(request,directory,cancel=None):
     meshes=[model.mesh,*model.refinements]
     if meshes[0] is None:raise ValueError("Generate or supply a volume mesh before solving")
     if any(mesh.element_family!=family for mesh in meshes):raise ValueError("Refinement levels must use the same element family")
-    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
+    if family=="C3D10" and study.type not in {"linear_static","nonlinear_static","steady_thermal","electronics_cooling","thermal_stress","modal"}:raise ValueError(f"Canonical quadratic {study.type} transfer is not integrated; no corner-only fallback is permitted")
     materials={m.id:m for m in domain.materials}
     iterations=[];result=None;previous=None;converged=False
-    previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.
+    previous_resolution=None;seen_discretizations=set();previous_thermal_scale=0.;previous_eigen=None
     for i,mesh in enumerate(meshes):
         validate_boundary(mesh)
         if family=="C3D10":
@@ -73,6 +73,9 @@ def solve(request,directory,cancel=None):
             if study.type in {"steady_thermal","electronics_cooling"}:
                 from .simulation_quadratic_thermal import QuadraticThermalSystem
                 system=QuadraticThermalSystem(mesh,study,materials,cancel)
+            elif study.type=="modal":
+                from .simulation_eigen import QuadraticEigenSystem
+                system=QuadraticEigenSystem(mesh,study,materials,cancel)
             else:system=QuadraticSystem(mesh,study,materials,cancel)
             system.qualify(directory/f"mesh-{i}"/"quality",cancel)
         else:
@@ -114,7 +117,11 @@ def solve(request,directory,cancel=None):
             result["field"].update(thermal["field"])
             result["checks"]["heat_balance_error"]=thermal["checks"]["heat_balance_error"]
             result["checks"]["thermal_residual"]=thermal["checks"]["residual"]
-        elif study.type=="modal":result=modal_solve(system,case,cancel)
+        elif study.type=="modal":
+            if family=="C3D10":
+                from .simulation_eigen import modal_solve as quadratic_modal_solve
+                result=quadratic_modal_solve(system,case,directory/f"mesh-{i}"/"modal",cancel)
+            else:result=modal_solve(system,case,cancel)
         elif study.type=="buckling":result=buckling_solve(system,case,cancel)
         elif study.type=="nonlinear_static":
             result=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-1",cancel)
@@ -139,7 +146,21 @@ def solve(request,directory,cancel=None):
                 if previous is not None and quantity in previous and quantity in convergence_quantities:
                     changes[quantity]=abs(convergence_quantities[quantity]-previous[quantity])/scale
             previous_thermal_scale=result["checks"]["temperature_convergence_scale_k"]
+        if family=="C3D10" and study.type=="modal":
+            bundle=result.pop("_mode_bundle")
+            tracking={"passed":False,"reason":"A second genuinely finer mesh is required"}
+            if previous_eigen is not None:
+                from .simulation_mode_tracking import track_modes
+                try:tracking=track_modes(previous_eigen,bundle,study.settings.mode_count,cancel)
+                except (ValueError,numpy.linalg.LinAlgError) as error:tracking={"passed":False,"reason":str(error)}
+            previous_eigen=bundle
+            result["mode_tracking"]=tracking
+            result["checks"]["mode_tracking_passed"]=tracking["passed"]
+            from .store import write_json
+            write_json(directory/f"mesh-{i}"/"modal"/"mode-tracking.json",tracking)
+            changes={f"elastic_mode_{j+1}_frequency_hz":v for j,v in enumerate(tracking.get("quantity_changes",[]))}
         converged=bool(changes) and all(v<=study.settings.convergence_tolerance for v in changes.values())
+        if family=="C3D10" and study.type=="modal":converged=converged and result["checks"]["mode_tracking_passed"]
         iterations.append({"mesh_id":mesh.id,"nodes":len(mesh.nodes),"elements":len(mesh.elements),"element_family":family,"mesh_size_mm":mesh.mesh_size_mm,("minimum_mean_ratio_quality" if family=="C3D4" else "minimum_corner_determinant_edge_ratio"):system.quality,"values":quantities,"relative_changes":changes})
         previous=convergence_quantities
     from .simulation_mesh import display_triangles,exterior_triangles
@@ -150,6 +171,7 @@ def solve(request,directory,cancel=None):
     failures=numerical_checks(result,study)
     if family=="C3D10" and study.type in {"linear_static","nonlinear_static","thermal_stress"} and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
     if family=="C3D10" and study.type in {"linear_static","thermal_stress"} and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")
+    if family=="C3D10" and study.type=="modal" and not result["checks"].get("mode_tracking_passed",False):failures.append("physical mass-weighted elastic mode correlation not established")
     if result["checks"].get("time_step_change",0)>study.settings.convergence_tolerance:failures.append("time-step sensitivity")
     if result["checks"].get("load_step_change",0)>study.settings.convergence_tolerance:failures.append("load-step sensitivity")
     result["checks"]["residual_tolerance_used"]=study.settings.residual_tolerance

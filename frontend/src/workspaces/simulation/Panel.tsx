@@ -72,6 +72,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
     "steady_thermal",
     "electronics_cooling",
     "thermal_stress",
+    "modal",
   ].includes(study?.type);
   const physicalProbeSupported = [
     "linear_static",
@@ -322,6 +323,9 @@ export default function SimulationPanel(props: DomainPanelProps) {
       if (!response.ok) throw new Error(await response.text());
       const value: FieldData = await response.json();
       setField(value);
+      setMode(
+        Math.max(0, value.modes?.findIndex((m) => m.rigid_body !== true) ?? 0),
+      );
       setQuantity(
         value.element_density
           ? "density"
@@ -430,6 +434,31 @@ export default function SimulationPanel(props: DomainPanelProps) {
               ))}
             </SelectControl>
           </label>
+          {(study.type === "modal" || study.type === "buckling") && (
+            <label>
+              {study.type === "modal" && elementFamily === "C3D10"
+                ? "Requested elastic modes"
+                : "Requested modes"}
+              <Input
+                type="number"
+                min="1"
+                max="30"
+                step="1"
+                value={study.settings.mode_count ?? 6}
+                onChange={(e) =>
+                  editStudy((s) => {
+                    s.settings.mode_count = Number(e.target.value);
+                  })
+                }
+              />
+            </label>
+          )}
+          {study.type === "modal" && elementFamily === "C3D10" && (
+            <p className="sim-help">
+              Rigid motions are reported separately. Mode amplitudes do not
+              predict a forced response.
+            </p>
+          )}
           <div className="sim-toolbar">
             <Button
               disabled={dirty || !!busy}
@@ -1299,6 +1328,15 @@ export default function SimulationPanel(props: DomainPanelProps) {
                   />
                 </label>
               )}
+              {quantity === "mode" &&
+                field.modes?.[mode]?.frequency_hz !== undefined && (
+                  <p className="sim-help">
+                    {field.modes[mode].rigid_body
+                      ? "Rigid-body mode"
+                      : "Elastic mode"}{" "}
+                    · {field.modes[mode].frequency_hz?.toPrecision(6)} Hz
+                  </p>
+                )}
               <label>
                 Deformation display scale ×
                 <Input

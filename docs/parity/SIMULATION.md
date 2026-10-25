@@ -6,7 +6,7 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-5` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-6` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
 invented. Multiple bodies/materials are tested as separately supported solids;
@@ -41,6 +41,20 @@ neutral archive includes both phases and the exact executed structural deck.
 General nonlinear/coupled feedback, thermal contacts and calibrated material or
 failure criteria remain unfinished.
 
+Quadratic unloaded modal analysis now uses consistent ten-node mass/stiffness,
+positive sourced density on each body, order-sensitive curved integration and
+exact rigid spaces from each component's fixed/partial constraints. Elastic
+spectra use LAPACK/ARPACK with rigid projection, Rayleigh-Ritz extraction,
+equation residuals and physical mass orthogonality. Mode count requests elastic
+modes; remaining rigid modes and four elastic guards are additional. Refinement
+requires body-preserving, density-weighted physical MAC and repeated-family
+subspaces with strict coverage/window/quadrature checks. Display shapes have
+separate unit amplitude; mass normalization never means real motion. The neutral
+archive retains matrices/DOF order/full fields and correlation evidence, without
+claiming a CalculiX modal deck. Preload/thermal/contact/connector/history/velocity
+transfer, larger-model qualification and physical modal correlation remain open.
+Assembly/output/solver/correlation budgets are documented in the main ledger.
+
 Geometry qualification is independent of elastic properties. It checks conforming
 connectivity, rejects point/edge-only connections, checks boundary identity/order,
 uses isolated Gmsh whole-element Jacobian bounds and independently compares
@@ -70,9 +84,9 @@ normals with Gauss6/Gauss8 sensitivity checks. Body gravity integrates signed
 quadratic weights with sourced density; negative corner weights are genuine.
 Remote force/moment transfer preserves the requested resultant and moment, with
 its nodal idealization explicit. Fixed/world-axis partial supports are translated
-without rotation/MPC approximations, and each independent solid must restrain
-all six rigid motions. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
-modal/buckling translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
+without rotation/MPC approximations. Each independent static solid must restrain
+all six rigid motions; modal analysis retains the remaining rigid space. Quadratic contact/bolts/inertial relief, bearing/hydrostatic,
+buckling translation remains unavailable and refuses execution. Steady solid thermal transfer is described above.
 
 User-declared `probe_point_mm`/`probe_body_id` settings identify a stable physical
 static displacement probe for either canonical family. Outside points refuse;

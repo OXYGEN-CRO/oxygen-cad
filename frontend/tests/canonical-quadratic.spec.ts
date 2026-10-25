@@ -103,14 +103,17 @@ test("new study preserves project material values, process and per-property prov
   }
 });
 
-for (const studyType of [
-  "linear_static",
-  "steady_thermal",
-  "thermal_stress",
+for (const [studyType, free] of [
+  ["linear_static", false],
+  ["steady_thermal", false],
+  ["thermal_stress", false],
+  ["modal", false],
+  ["modal", true],
 ] as const) {
   const thermal = studyType === "steady_thermal";
   const coupled = studyType === "thermal_stress";
-  test(`native body meshes and solves canonical quadratic ${studyType} and displays the actual field`, async ({
+  const modal = studyType === "modal";
+  test(`native body meshes and solves canonical quadratic ${studyType}${free ? " free body" : ""} and displays the actual field`, async ({
     page,
     request,
   }) => {
@@ -211,7 +214,9 @@ for (const studyType of [
             assumptions_confirmed: true,
             settings: thermal
               ? {}
-              : { probe_point_mm: [10, 1, 1], probe_body_id: body.id },
+              : modal
+                ? { mode_count: 2 }
+                : { probe_point_mm: [10, 1, 1], probe_body_id: body.id },
             cases: thermal
               ? [
                   {
@@ -237,10 +242,12 @@ for (const studyType of [
                 ]
               : [
                   {
-                    id: coupled ? "thermoelastic" : "axial",
+                    id: coupled ? "thermoelastic" : modal ? "modal" : "axial",
                     name: coupled
                       ? "Thermoelastic SI reference"
-                      : "Axial SI reference",
+                      : modal
+                        ? "Modal SI reference"
+                        : "Axial SI reference",
                     ...(coupled
                       ? {
                           thermal: [
@@ -254,37 +261,42 @@ for (const studyType of [
                           ],
                         }
                       : {}),
-                    supports: [
-                      {
-                        id: "sx",
-                        region_id: "root",
-                        kind: "partial",
-                        components: [true, false, false],
-                      },
-                      {
-                        id: "sy",
-                        region_id: "y",
-                        kind: "partial",
-                        components: [false, true, false],
-                      },
-                      {
-                        id: "sz",
-                        region_id: "z",
-                        kind: "partial",
-                        components: [false, false, true],
-                      },
-                    ],
-                    loads: coupled
-                      ? []
+                    supports: modal
+                      ? free
+                        ? []
+                        : [{ id: "clamp", region_id: "root", kind: "fixed" }]
                       : [
                           {
-                            id: "force",
-                            kind: "force",
-                            region_id: "tip",
-                            vector: [100, 0, 0],
-                            source: "Declared 100 N analytical force",
+                            id: "sx",
+                            region_id: "root",
+                            kind: "partial",
+                            components: [true, false, false],
+                          },
+                          {
+                            id: "sy",
+                            region_id: "y",
+                            kind: "partial",
+                            components: [false, true, false],
+                          },
+                          {
+                            id: "sz",
+                            region_id: "z",
+                            kind: "partial",
+                            components: [false, false, true],
                           },
                         ],
+                    loads:
+                      coupled || modal
+                        ? []
+                        : [
+                            {
+                              id: "force",
+                              kind: "force",
+                              region_id: "tip",
+                              vector: [100, 0, 0],
+                              source: "Declared 100 N analytical force",
+                            },
+                          ],
                   },
                 ],
           },
@@ -301,7 +313,7 @@ for (const studyType of [
       await expect(
         page.getByLabel("Element family", { exact: true }),
       ).toHaveValue("C3D10");
-      if (!thermal)
+      if (!thermal && !modal)
         await expect(
           page.getByLabel("Displacement probe (mm)", { exact: true }),
         ).toHaveValue("10, 1, 1");
@@ -309,7 +321,39 @@ for (const studyType of [
         await expect(
           page.getByLabel("Stress-free temperature (K)", { exact: true }),
         ).toHaveValue("300");
-      await page.getByLabel("Initial size (mm)", { exact: true }).fill("1.5");
+      if (modal)
+        await expect(
+          page.getByLabel("Requested elastic modes", { exact: true }),
+        ).toHaveValue("2");
+      if (modal) {
+        for (const count of [3, 2]) {
+          await page
+            .getByLabel("Requested elastic modes", { exact: true })
+            .fill(String(count));
+          await page
+            .getByRole("button", { name: "Save setup", exact: true })
+            .click();
+          await expect
+            .poll(
+              async () =>
+                (await (await request.get("/api/project")).json()).domains
+                  .simulation.studies[0].settings.mode_count,
+            )
+            .toBe(count);
+          await expect(
+            page.getByRole("status").filter({ hasText: /^Saving/ }),
+          ).toHaveCount(0);
+          await expect(
+            page.getByLabel("Requested elastic modes", { exact: true }),
+          ).toHaveValue(String(count));
+          await expect(
+            page.getByRole("button", { name: "Save setup", exact: true }),
+          ).toBeDisabled();
+        }
+      }
+      await page
+        .getByLabel("Initial size (mm)", { exact: true })
+        .fill(modal ? "1.0" : "1.5");
       await page.getByLabel("Mesh levels", { exact: true }).fill("2");
       await page
         .getByRole("button", { name: "Generate mesh", exact: true })
@@ -330,7 +374,7 @@ for (const studyType of [
         .click();
       await expect(
         page.getByText(
-          `${thermal ? "Thermal" : coupled ? "Thermoelastic" : "Axial"} SI reference · verified numerically`,
+          `${thermal ? "Thermal" : coupled ? "Thermoelastic" : modal ? "Modal" : "Axial"} SI reference · verified numerically`,
           {
             exact: true,
           },
@@ -354,6 +398,23 @@ for (const studyType of [
         for (const [n, value] of Object.entries(field.temperature_k)) {
           expect(value as number).toBeCloseTo(300 + 10 * field.nodes[n][0], 5);
         }
+      } else if (modal) {
+        expect(field.modes.length).toBe(free ? 8 : 2);
+        expect(field.modes.filter((m: any) => m.rigid_body).length).toBe(
+          free ? 6 : 0,
+        );
+        expect(
+          field.modes
+            .filter((m: any) => !m.rigid_body)
+            .every((m: any) => m.frequency_hz > 0),
+        ).toBeTruthy();
+        expect(
+          Math.max(
+            ...Object.values(field.modes[0].shape).map((v: any) =>
+              Math.hypot(...v),
+            ),
+          ),
+        ).toBeCloseTo(1, 10);
       } else {
         expect(
           Object.values(field.displacements_mm).reduce(
@@ -385,7 +446,11 @@ for (const studyType of [
         .click();
       await expect(
         page.getByLabel("Field quantity", { exact: true }),
-      ).toHaveValue(thermal ? "temperature" : "displacement");
+      ).toHaveValue(thermal ? "temperature" : modal ? "mode" : "displacement");
+      if (modal)
+        await expect(page.getByLabel("Mode", { exact: true })).toHaveValue(
+          free ? "7" : "1",
+        );
       const preview = page.getByLabel(
         "Numerical finite element field preview",
         {
@@ -396,10 +461,10 @@ for (const studyType of [
       await expect(preview.locator("canvas")).toBeVisible();
       await expect(preview).toBeInViewport();
       await preview.screenshot({
-        path: `test-results/canonical-quadratic-${studyType}-preview.png`,
+        path: `test-results/canonical-quadratic-${studyType}${free ? "-free" : ""}-preview.png`,
       });
       await page.screenshot({
-        path: `test-results/canonical-quadratic-${studyType}-field.png`,
+        path: `test-results/canonical-quadratic-${studyType}${free ? "-free" : ""}-field.png`,
       });
     } finally {
       const current = await (await request.get("/api/project")).json();

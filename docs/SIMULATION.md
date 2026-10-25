@@ -17,7 +17,7 @@ converts the other's inputs or establishes full assembly/physics parity.
 ## Canonical quadratic study integration
 
 The Simulate workspace can generate and solve `C3D10` meshes directly from its
-versioned body/material/case records. Static, nonlinear-static, steady solid thermal and sequential thermal-stress studies default
+versioned body/material/case records. Static, nonlinear-static, steady solid thermal, sequential thermal-stress and unloaded modal studies default
 to quadratic meshing; the element-family selector also retains the C3D4 path.
 Existing saved C3D4 models keep their declared family. This is the first shared
 quadratic transfer, not automatic migration of `project.study`/`named_studies`.
@@ -26,7 +26,7 @@ All ten element nodes and six boundary nodes reach the solver. Native body IDs,
 exact per-body STEP regions and distinct sourced material assignments are
 preserved. Regions require matching plane, integrated area and centroid. Every
 quadratic mesh receives an isolated whole-element curved-Jacobian audit, including
-the precise coordinate values serialized into the CalculiX deck. A smaller
+the precise numerical coordinates consumed by each solver and any exported CalculiX deck. A smaller
 requested mesh size alone does not count as refinement: generation checks node/
 cell counts and maximum integrated cell volume, with at most four bounded size
 attempts per level. The worker independently checks those conditions again.
@@ -42,12 +42,42 @@ declared inputs; recording a process does not calibrate an isotropic material la
 
 The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
-force/moment idealizations. Disconnected bodies require separately adequate
-supports. Shared points/edges do not become a solid load path. Contact, bolts,
-inertial relief, bearing/hydrostatic loads and modal/buckling transfer
+force/moment idealizations. Disconnected static bodies require separately adequate
+supports; modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Contact, bolts,
+inertial relief, bearing/hydrostatic loads and buckling transfer
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately
 listed. Full study/assembly unification remains required.
+
+Canonical C3D10 modal studies assemble full consistent mass and isotropic
+stiffness using all ten nodes. Signed quadratic row sums are never lumped.
+Source density is required on every body. Matrix integration compares orders
+4/6, escalating to 6/8 when necessary; invalid geometry/integration refuses.
+Each independent solid's constraints define its remaining analytical rigid
+space. Free bodies retain six rigid modes and partial constraints retain the
+appropriate subset. No arbitrary frequency threshold classifies them. Elastic
+spectra use LAPACK or scaled ARPACK shift-invert, with rigid-space projection,
+Rayleigh-Ritz extraction, residuals and physical mass orthogonality checks.
+
+Mode count means requested elastic modes; rigid modes are additionally reported,
+with four elastic guard modes. Shape pairing uses positive physical mass
+quadrature for each declared body/density, never cross-body interpolation.
+Repeated-family principal angles, complete spectral windows, full geometric
+coverage and two-order integration sensitivity are required for convergence.
+A frequency-only match is insufficient. Source and loaded scientific-library
+hashes invalidate changed results. Preloads, thermal fields, interfaces,
+connectors, histories and initial velocity are not translated into this unloaded
+quadratic study. Existing C3D4 capabilities remain separate.
+
+Mass-normalized vectors and participation retain their engineering meaning;
+separate unit-amplitude display shapes avoid magnifying mass normalization into
+apparent physical motion. The viewer starts at the first elastic mode and allows
+rigid-mode inspection with a type/frequency label. Neutral handoff includes CSR
+stiffness/consistent-mass NPZ, DOF order, all guard/rigid/elastic fields and raw
+correlation/quality evidence; no executed CalculiX modal deck is claimed.
+Current resource budgets: 40 million element-matrix entries, 60,000 unconstrained
+DOFs per independent component, 12 million stored field components and one
+million correlation quadrature points. Larger-model qualification remains open.
 
 Canonical C3D10 steady thermal and prescribed-film electronics thermal studies
 use sourced conductivity without requiring elasticity. They integrate all ten
