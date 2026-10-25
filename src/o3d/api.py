@@ -73,7 +73,10 @@ def create_app(root=None, *, project_windows=True):
 
     @app.get("/api/state")
     def state():
-        return store.state() | {"jobs": jobs.list()}
+        from fastapi.responses import JSONResponse
+        # Store already returns JSON-native values; avoid a second recursive
+        # framework walk over a large editable canonical document.
+        return JSONResponse(store.state(compact_geometry=True) | {"jobs": jobs.list()})
 
     @app.get("/api/project")
     def project():

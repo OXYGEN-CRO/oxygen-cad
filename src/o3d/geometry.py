@@ -346,6 +346,10 @@ def build(store: Store, project: Project):
         result["artifacts"].update({"native_design": f"builds/{key}/part.solidcraft", "engine_script": f"builds/{key}/engine-script.json"})
     write_json(destination / "build.json", result)
     write_json(store.cache / "last-build.json", result)
+    if project.native_document is not None:
+        from .build_summary import publish_build_summary
+        publish_build_summary(destination / "build.json", result)
+        publish_build_summary(store.cache / "last-build.json", result)
     return result
 
 

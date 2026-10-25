@@ -2,6 +2,7 @@
 from typing import Literal
 
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .native_document import execute_native, inspect_native, query_native
@@ -21,7 +22,9 @@ def mount_native_routes(app, store, jobs):
     def native_scene():
         try:
             project = store.load()
-            return {"revision": project.revision, "scene": query_native(project, "oxygen.scene", {"mesh": True}, store)}
+            # Engine replies already contain JSON primitives. Do not walk every
+            # triangle a second time in FastAPI's generic object encoder.
+            return JSONResponse({"revision": project.revision, "scene": query_native(project, "oxygen.scene", {"mesh": True}, store)})
         except (ValueError, RuntimeError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 

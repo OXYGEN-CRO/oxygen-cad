@@ -354,13 +354,23 @@ class Store:
             raise ValueError("Artifact does not exist")
         return path
 
-    def state(self):
+    def state(self, *, compact_geometry=False):
         from .analysis import capabilities
         from .joints import status as joint_status
         project = self.load()
         gkey, skey = geometry_key(project), study_key(project)
         build_path = self.cache / "builds" / gkey / "build.json"
-        build = json.loads(build_path.read_text()) if build_path.exists() else None
+        # Native meshes and picking are served once by /api/native/scene. Keep
+        # old reference overlays and legacy study face markers on their full
+        # geometry path until those consumers explicitly use native identities.
+        compact = (compact_geometry and project.native_document is not None
+                   and not project.references
+                   and not any(s.fixed_faces for s in [project.study, *project.named_studies.values()]))
+        if compact:
+            from .build_summary import load_build_summary
+            build = load_build_summary(build_path, expected_key=gkey)
+        else:
+            build = json.loads(build_path.read_text()) if build_path.exists() else None
         studies = self.study_states(project)
         active = studies[project.active_study_id]
         analysis = active["result"]
@@ -369,7 +379,11 @@ class Store:
         if checks and checks.get("input_key") != verification_key(project):
             checks = None
         last = self.cache / "last-build.json"
-        last_build = json.loads(last.read_text()) if last.exists() else None
+        last_build = (load_build_summary(last) if compact else
+                      json.loads(last.read_text()) if last.exists() else None)
+        if compact and build and last_build and last_build.get("key") == build.get("key"):
+            # The current build is already present; do not duplicate its payload.
+            last_build = None
         context_path = self.cache / "context.json"
         context = json.loads(context_path.read_text()) if context_path.exists() else {}
         return {"project": project.model_dump(mode="json"), "geometry_key": gkey, "study_key": skey,
