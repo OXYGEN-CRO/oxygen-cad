@@ -177,7 +177,7 @@ def init(ctx: typer.Context, template: Path | None = None, json_output: bool = t
 
 @app.command()
 def inspect(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
-    state = ctx.obj.state()
+    state = ctx.obj.state(compact_geometry=True)
     for name in ("build", "last_build"):
         if state.get(name):
             value = dict(state[name])
@@ -189,7 +189,7 @@ def inspect(ctx: typer.Context, json_output: bool = typer.Option(False, "--json"
 
 @app.command()
 def context(ctx: typer.Context, json_output: bool = typer.Option(False, "--json")):
-    emit(ctx.obj.state()["context"])
+    emit(ctx.obj.state(compact_geometry=True)["context"])
 
 
 @app.command()

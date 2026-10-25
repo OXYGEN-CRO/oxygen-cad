@@ -154,3 +154,28 @@ def test_compact_scene_transport_keeps_exact_triangles_picking_and_full_default(
     unmapped = {"bodies": [{"id": "unknown", "geometry_kind": "mesh",
                             "mesh": dict(mesh, tri_face=[])}]}
     assert "faces" in compact_native_scene(unmapped)["bodies"][0]["mesh"]
+
+
+def test_agent_cli_inspection_keeps_source_without_copying_native_scene(tmp_path):
+    from typer.testing import CliRunner
+    from o3d.cli import app
+
+    store = native_store(tmp_path)
+    project = store.load()
+    build(store, project)
+    selection = {"revision": project.revision, "selection": {"id": "reviewed-face"}}
+    write_json(store.cache / "context.json", selection)
+    runner = CliRunner()
+    inspected = runner.invoke(app, ["--project", str(store.root), "inspect", "--json"])
+    assert inspected.exit_code == 0, inspected.output
+    result = json.loads(inspected.output)
+    assert result["project"]["native_document"] == project.native_document
+    assert result["geometry_state"] == "current"
+    assert result["build"]["scene_summary"]["body_count"] == 2
+    assert "scene" not in result["build"]
+    assert result["build"]["faces"] == []
+    assert result["last_build"] is None
+    context = runner.invoke(app, ["--project", str(store.root), "context", "--json"])
+    assert context.exit_code == 0, context.output
+    assert json.loads(context.output) == selection
+    assert store.load() == project

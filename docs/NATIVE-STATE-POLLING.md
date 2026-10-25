@@ -8,6 +8,12 @@ the original geometry key/revision, measurements, artifact paths and geometry
 kind counts, without any face/edge descriptors or mesh arrays. The actual
 native scene and complete source remain available, unchanged.
 
+Agent CLI `inspect` and `context` use the same bounded native metadata path.
+Inspection retains the complete editable source, measurements and artifact
+identities without copying the potentially much larger derived scene twice.
+Full geometry remains in the native scene endpoint and saved build artifacts;
+legacy/reference/study fallbacks retain their existing behavior.
+
 Build publication writes `build-state.json` and `last-build-state.json` after
 their complete geometry files. Each sidecar records the full file's size,
 mtime, ctime and inode; a changed or damaged source/sidecar cannot reuse earlier
