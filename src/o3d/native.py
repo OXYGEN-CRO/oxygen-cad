@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from .model import EdgeTreatment, Extrude, Hole, NativeFeature, Profile, Project
+from .native_limits import MAX_NATIVE_REQUEST_BYTES
 
 UPSTREAM_COMMIT = "0520910bfd4ff6d24c850f4a20a604f6128f87bf"
 
@@ -42,9 +43,10 @@ class NativeSession:
 
     def execute(self, command: str, params=None):
         request = {"command": command, "params": params or {}}
-        encoded = json.dumps(request, allow_nan=False)
-        if len(encoded.encode()) > 16 * 1024 * 1024:
-            raise ValueError("Engine request exceeds 16 MiB")
+        encoded = json.dumps(request, allow_nan=False, separators=(",", ":"))
+        # The adapter counts the JSON-lines newline in its bounded read.
+        if len(encoded.encode()) + 1 > MAX_NATIVE_REQUEST_BYTES:
+            raise ValueError("Engine request exceeds 34 MiB")
         try:
             self.process.stdin.write(encoded + "\n")
             self.process.stdin.flush()

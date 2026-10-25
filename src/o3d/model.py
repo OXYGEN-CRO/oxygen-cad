@@ -283,8 +283,9 @@ class Project(Model):
                 raise ValueError("Expected an upstream native document with features and params")
             if any(self.placement.translation) or any(self.placement.rotation):
                 raise ValueError("Canonical native documents store placement in their native timeline; use solid.move")
-            if len(json.dumps(self.native_document, allow_nan=False).encode()) > 15 * 1024 * 1024:
-                raise ValueError("Native document exceeds 15 MiB")
+            from .native_limits import MAX_NATIVE_DOCUMENT_BYTES
+            if len(json.dumps(self.native_document, allow_nan=False).encode()) > MAX_NATIVE_DOCUMENT_BYTES:
+                raise ValueError("Native document exceeds 32 MiB")
         if "default" in self.named_studies:
             raise ValueError("The default study is stored in study, not named_studies")
         if self.active_study_id != "default" and self.active_study_id not in self.named_studies:

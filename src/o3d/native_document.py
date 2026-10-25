@@ -17,6 +17,7 @@ import zipfile
 from .model import Command, Placement, Project
 from .native import NativeSession, UPSTREAM_COMMIT, add_legacy_parameters, compile_native
 from .store import Conflict
+from .native_limits import MAX_NATIVE_DOCUMENT_BYTES
 
 # Command registration/enablement remains upstream-owned. These groups are host-exposed;
 # process/file/resource commands require a specific trusted adapter instead.
@@ -89,8 +90,8 @@ def _check_imported_design(path: Path):
     if path.suffix.lower() == ".solidcraft":
         with zipfile.ZipFile(path) as archive:
             info = archive.getinfo("document.json")
-            if info.file_size > 15 * 1024 * 1024:
-                raise ValueError("Imported native document exceeds 15 MiB")
+            if info.file_size > MAX_NATIVE_DOCUMENT_BYTES:
+                raise ValueError("Imported native document exceeds 32 MiB")
             document = json.loads(archive.read(info))
     else:
         document = json.loads(path.read_text())

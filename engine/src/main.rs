@@ -6,6 +6,9 @@ use solidcraft_engine::Session;
 use std::io::{self, BufRead, Read, Write};
 
 const REVISION: &str = "0520910bfd4ff6d24c850f4a20a604f6128f87bf";
+// Match the bounded host transport budget, leaving room above its 32 MiB
+// canonical document limit for request fields and transient edit context.
+const MAX_REQUEST_BYTES: usize = 34 * 1024 * 1024;
 
 fn new_session(document: solidcraft_engine::doc::Document) -> Result<Session, String> {
     let mut session = Session::new(document);
@@ -162,16 +165,16 @@ fn main() -> io::Result<()> {
         let mut line = Vec::new();
         let read = input
             .by_ref()
-            .take((solidcraft_engine::MAX_LINE + 1) as u64)
+            .take((MAX_REQUEST_BYTES + 1) as u64)
             .read_until(b'\n', &mut line)?;
         if read == 0 {
             break;
         }
-        if line.len() > solidcraft_engine::MAX_LINE {
+        if line.len() > MAX_REQUEST_BYTES {
             writeln!(
                 output,
                 "{}",
-                json!({"ok":false,"error":"Request exceeds 16 MiB"})
+                json!({"ok":false,"error":"Request exceeds 34 MiB"})
             )?;
             output.flush()?;
             break;
