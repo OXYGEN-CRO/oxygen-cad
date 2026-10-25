@@ -72,7 +72,7 @@ def replay_requests(system,data):
     return requests
 
 
-def run_replay(probe,requests,directory):
+def run_replay(probe,requests,directory,*,timeout=60):
     """One bounded native process; original material state resets for every call."""
     if not requests or len(requests)>MAX_POINTS:raise ValueError('Material replay exceeds the 4096-point budget')
     lines=[]
@@ -91,7 +91,7 @@ def run_replay(probe,requests,directory):
     input_path.write_bytes(content)
     environment=dict(os.environ,LD_LIBRARY_PATH=probe['runtime_library_path'],OMP_NUM_THREADS='1')
     with input_path.open('rb') as source,output_path.open('wb') as target,error_path.open('wb') as errors:
-        run=subprocess.run([probe['binary']],stdin=source,stdout=target,stderr=errors,env=environment,cwd=directory,timeout=60,check=False)
+        run=subprocess.run([probe['binary']],stdin=source,stdout=target,stderr=errors,env=environment,cwd=directory,timeout=min(60,timeout),check=False)
     if run.returncode:raise ValueError('Native material replay did not complete')
     if output_path.stat().st_size>MAX_OUTPUT_BYTES:raise ValueError('Material replay output exceeds its budget')
     words=output_path.read_text().replace('D','E').split()
@@ -145,7 +145,7 @@ def assess_point(values,stress,state,packed):
     return row,fd[selected]
 
 
-def audit_final_material(provider,result):
+def audit_final_material(provider,result,*,scope=None,timeout=60,evidence_root=None):
     """Audit every plastic point in the final accepted frame within explicit bounds.
 
     The separate candidate operator is evidence only. Runtime native-algorithmic
@@ -158,6 +158,8 @@ def audit_final_material(provider,result):
         'native_algorithmic_tensor_qualified_points':0,'candidate_operator_available':False,
         'full_contact_stability_qualified':False,'accepted_state_tangent_qualified':False}
     rows=[];identity=None;extra={}
+    if scope is not None:summary['scope']=scope
+    if evidence_root is not None:extra['accepted_bulk_evidence_root']=evidence_root
     if provider.reason:summary['reason']=provider.reason
     else:
         frame=provider.frames[provider.order[-1]];identity={'step':frame['step'],'increment':frame['increment']}
@@ -173,11 +175,11 @@ def audit_final_material(provider,result):
                 probe=validated_material_probe(provider.build)
                 if probe is None:summary['reason']='Source-bound native material replay tool is unavailable'
                 else:
-                    extra={'tool':{k:v for k,v in probe.items() if k not in ('binary','runtime_library_path')},'accepted_bulk_file':frame['file'],'accepted_bulk_file_sha256':data['file_sha256']}
+                    extra.update({'tool':{k:v for k,v in probe.items() if k not in ('binary','runtime_library_path')},'accepted_bulk_file':frame['file'],'accepted_bulk_file_sha256':data['file_sha256']})
                     try:
                         requests=replay_requests(provider.system,data)
                         summary['native_execution_attempted']=True
-                        values,receipt=run_replay(probe,requests,provider.directory);extra['run']=receipt
+                        values,receipt=run_replay(probe,requests,provider.directory,timeout=timeout);extra['run']=receipt
                         tensors=np.empty((data['header']['points'],6,6));offset=0
                         for record in data['records']:
                             for q in range(int(record[2])):tensors[offset+q]=native_material_tensor(data['tangent'][offset+q],int(record[3]))

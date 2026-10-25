@@ -1575,6 +1575,11 @@ export default function SimulationPanel(props: DomainPanelProps) {
                       </p>
                     </details>
                   )}
+                  {r.checks.material_derivative_history?.plastic_frames > 0 && (
+                    <p className="sim-help">
+                      {`Material history: ${r.checks.material_derivative_history.qualified_plastic_frames}/${r.checks.material_derivative_history.plastic_frames} accepted plastic increments have bound, refined force derivatives. ${r.checks.material_derivative_history.unresolved_plastic_frames} have unresolved material derivatives; ${r.checks.material_derivative_history.unperformed_plastic_frames} are unavailable or outside the verification budget. Changing contact maps, stability and physical materials require further qualification.`}
+                    </p>
+                  )}
                   {r.findings?.map((f: Row) => (
                     <p key={f.id}>
                       {f.id}: {format(f.value)}{" "}

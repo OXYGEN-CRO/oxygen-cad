@@ -15,6 +15,7 @@ def software_fingerprint(study_type,element_family="C3D4"):
     sources['simulation_native_tangent.py']=fingerprint_file(root/'simulation_native_tangent.py')
     sources['simulation_accepted_bulk.py']=fingerprint_file(root/'simulation_accepted_bulk.py')
     sources['simulation_material_derivatives.py']=fingerprint_file(root/'simulation_material_derivatives.py')
+    sources['simulation_material_history.py']=fingerprint_file(root/'simulation_material_history.py')
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)

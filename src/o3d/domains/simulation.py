@@ -354,6 +354,9 @@ def _handoff(store,project,domain,study,model,last):
                 decks[case.id]=path
         except ValueError as exc:losses.append("CalculiX deck unavailable: "+str(exc))
     evidence=[]
+    from ..simulation_material_history import verify_material_history
+    for material_index in sorted(run.rglob('material-derivative-history.json')):
+        verify_material_history(material_index.parent)
     def file_hash(path):
         value=hashlib.sha256()
         with path.open("rb") as stream:

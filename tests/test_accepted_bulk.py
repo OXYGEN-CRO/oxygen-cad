@@ -177,6 +177,22 @@ def test_native_nonlinear_contact_keeps_state_force_and_derivative_qualification
     assert (operator['complete_frames']==10)==(kind=='large')
     assert not bulk['accepted_state_tangent_qualified'] and not operator['full_contact_stability_qualified']
     assert (result['values']['max_equivalent_plastic_strain']>0)==(kind!='large')
+    from o3d.simulation_contact_global import matrix_hash
+    from scipy import sparse
+    history=json.loads((tmp_path/'material-derivative-history.json').read_text())
+    states={r['accepted_bulk_file_sha256']:r for r in history['history']}
+    global_history=json.loads((tmp_path/'contact-global.json').read_text())['history']
+    for row in global_history:
+        state=states[row['accepted_bulk_file_sha256']]
+        assert row['bulk_force_jacobian_complete']==state['available']
+        assert row['bulk_operator_kind']==state['operator_kind']
+        assert row['material_derivative_audit_sha256']==state.get('audit_file_sha256')
+    snapshot=json.loads((tmp_path/'contact-global-dofs.json').read_text())['snapshot']
+    native=sparse.load_npz(tmp_path/'contact-global-native-algorithmic-bulk.npz')
+    selected=sparse.load_npz(tmp_path/'contact-global-bulk.npz')
+    assert matrix_hash(native)==snapshot['native_algorithmic_bulk_operator_sha256']
+    state=states[snapshot['accepted_bulk_file_sha256']]
+    assert matrix_hash(selected)==(state['operator_sha256'] if state['available'] and state['plastic_points'] else matrix_hash(native))
 
 
 @pytest.mark.skipif(not os.environ.get('O3D_BULK_KERNEL_EVIDENCE'),reason='Configure native bulk kernel receipt')

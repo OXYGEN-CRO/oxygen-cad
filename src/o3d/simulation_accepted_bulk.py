@@ -154,6 +154,8 @@ class AcceptedBulkAudit:
         self.directory=Path(directory);self.system=system;self.case=case;self.build=build
         self.elements={e.id:e for e in system.mesh.elements}
         self.frames={};self.rows={};self.cache=None;self.reason=None
+        from .simulation_material_history import MaterialHistory
+        self.material_history=MaterialHistory(self)
         self.path=self.directory/'analysis.accepted-bulk.jsonl'
         if not self.path.exists():self.reason='Native accepted constitutive/force export is unavailable';return
         if len(system.ids)*3>MAX_DOFS or len(system.mesh.elements)*len(system.mesh.elements[0].nodes)**2*9>MAX_ENTRIES:
@@ -189,6 +191,7 @@ class AcceptedBulkAudit:
         frame=self.frames.get(identity)
         if frame is None:raise ValueError('Missing accepted bulk frame for contact increment')
         if not frame['available']:
+            self.material_history.unavailable(identity,frame['reason'])
             self.rows[identity]={'step':identity[0],'increment':identity[1],'available':False,'reason':frame['reason']};return None
         if self.cache is not None and self.cache[0]==identity:return self.cache[1:]
         data=read_bulk_frame(self.directory,frame)
@@ -223,8 +226,19 @@ class AcceptedBulkAudit:
             'material_derivative_limit':None if derivative_complete else 'Plastic algorithmic tensors require per-state two-sided material derivative qualification; finite-strain J2 has a measured native tangent discrepancy',
             'geometric_nonlinearity':bool(data['header']['iperturb'][1]),'operator_sha256':matrix_hash(matrix),
             'file':frame['file'],'file_sha256':data['file_sha256']})
-        self.rows[identity]=row;self.cache=(identity,matrix,force,data)
+        self.rows[identity]=row
+        entry=self.material_history.record(frame,data,matrix,force)
+        row.update(force_derivative_operator_available=entry['available'],force_derivative_operator_kind=entry['operator_kind'])
+        self.cache=(identity,matrix,force,data)
         return self.cache[1:]
+
+    def force_operator(self,meta):
+        value=self.get(meta)
+        if value is None:return None
+        native,_,data=value;identity=(meta['step'],meta['increment'])
+        entry=self.material_history.entries[identity]
+        candidate=self.material_history.candidate(identity,data)
+        return native if candidate is None else candidate,entry
 
     def check_force(self,meta,contact_force=None):
         value=self.get(meta)
@@ -259,12 +273,15 @@ class AcceptedBulkAudit:
         summary={'performed':bool(available),'reason':self.reason,'accepted_frames':len(rows),'state_bound_frames':len(available),
             'all_accepted_states_bound':bool(rows) and len(available)==len(rows),'force_checked_frames':len(checked),
             'force_jacobian_complete_frames':sum(r['bulk_force_jacobian_complete'] for r in available),
+            'native_algorithmic_force_jacobian_complete_frames':sum(r['bulk_force_jacobian_complete'] for r in available),
+            'qualified_force_derivative_operator_frames':sum(r['force_derivative_operator_available'] for r in available),
             'maximum_native_force_relative_error':max((r['native_internal_force_relative_error'] for r in checked),default=None),
             'full_contact_stability_qualified':False,'accepted_state_tangent_qualified':False,
             'scope':'Exact post-correction/accepted displacement and material-history binding; native Gauss material tensors and geometric stiffness. Frozen contact maps, changing-map derivatives and physical stability remain distinct.'}
         if self.build:summary.update(binary_sha256=self.build['binary_sha256'],receipt_sha256=self.build['receipt_sha256'])
         write_json(self.directory/'accepted-bulk-audit.json',{'schema':1,'summary':summary,'history':rows})
         result['checks']['accepted_bulk_state_audit']=summary
+        self.material_history.write(result)
         from .simulation_material_derivatives import audit_final_material
         audit_final_material(self,result)
         if has_contact:

@@ -106,6 +106,8 @@ class GlobalContactAudit:
             if value is None:
                 self.reason='Native accepted bulk frame is unavailable';return
             self.bulk,self.bulk_force,self.bulk_data=value
+            self.native_bulk=self.bulk
+            self.bulk,self.material_entry=self.provider.force_operator(meta)
             self.contact_force=np.zeros_like(self.bulk_force)
         self.rows = []; self.columns = []; self.values = []; self.traces = []
         self.missing = 0; self.boundaries = 0; self.entries = 0
@@ -159,8 +161,13 @@ class GlobalContactAudit:
             row.update(accepted_bulk_file_sha256=self.bulk_data['file_sha256'],
                 native_internal_force_relative_error=self.provider.check_force(self.meta,self.contact_force))
             bound=self.provider.rows[(self.meta['step'],self.meta['increment'])]
-            row['bulk_force_jacobian_complete']=bound['bulk_force_jacobian_complete']
-            row['complete_frozen_operator'] &= bound['bulk_force_jacobian_complete']
+            row.update(bulk_force_jacobian_complete=self.material_entry['available'],
+                native_algorithmic_force_jacobian_complete=bound['bulk_force_jacobian_complete'],
+                bulk_operator_kind=self.material_entry['operator_kind'],
+                native_algorithmic_bulk_operator_sha256=bound['operator_sha256'],
+                material_derivative_audit_file=self.material_entry.get('audit_file'),
+                material_derivative_audit_sha256=self.material_entry.get('audit_file_sha256'))
+            row['complete_frozen_operator'] &= self.material_entry['available']
         witness = np.zeros(len(self.free))
         if len(self.free):
             try:
@@ -183,6 +190,7 @@ class GlobalContactAudit:
         if self.worst is None or score > self.worst:
             self.worst = score
             self.snapshot = {'bulk': self.bulk.copy(), 'contact': contact, 'reduced': reduced, 'witness': witness, 'row': row.copy(), 'traces': self.traces.copy()}
+            if self.provider is not None:self.snapshot['native_algorithmic_bulk']=self.native_bulk.copy()
         self.history.append(row)
         return row
 
@@ -192,7 +200,8 @@ class GlobalContactAudit:
                    'full_contact_stability_qualified': False,
                    'scope': 'Full linear-bulk frozen-map operator, exact supported DOFs and nonsymmetric contact coupling. Condition estimates are lower bounds, not stability or physical certificates.'}
         if self.provider is not None:
-            summary['scope']='Native accepted bulk algorithmic/geometric tangent and frozen-map contact operator with exact supports; unchecked plastic material derivatives remain incomplete. Conditioning and symmetric witnesses do not establish changing-map, dynamic or physical stability.'
+            summary['scope']='Accepted bulk force Jacobian from qualified state-specific native stress derivatives where available, otherwise explicitly incomplete native algorithmic tensors; frozen-map contact and exact supports. No changing-map, dynamic or physical stability qualification.'
+            summary['refined_material_force_derivative_frames']=sum(r['bulk_operator_kind']=='refined-native-stress-force-jacobian' for r in self.history)
         if self.reason:
             write_json(directory / 'contact-global.json', {'summary': summary, 'history': self.history})
             return summary
@@ -204,6 +213,7 @@ class GlobalContactAudit:
         if self.snapshot:
             snapshot = self.snapshot; reduced = snapshot['reduced']
             sparse.save_npz(directory / 'contact-global-bulk.npz', snapshot['bulk'])
+            if 'native_algorithmic_bulk' in snapshot:sparse.save_npz(directory/'contact-global-native-algorithmic-bulk.npz',snapshot['native_algorithmic_bulk'])
             sparse.save_npz(directory / 'contact-global-contact.npz', snapshot['contact'])
             sparse.save_npz(directory / 'contact-global-reduced.npz', reduced)
             np.savez_compressed(directory / 'contact-global-witness.npz', inverse_action_displacement=snapshot['witness'])
@@ -222,7 +232,7 @@ class GlobalContactAudit:
                 spectral['reason'] = 'Symmetric spectrum is limited to 2048 free DOFs or there are no free DOFs'
             write_json(directory / 'contact-global-dofs.json', {'node_ids': self.system.ids, 'components': ['X', 'Y', 'Z'],
                 'ordering': 'node then world component', 'fixed_dofs': self.fixed, 'free_dofs': self.free.tolist(),
-                'snapshot': snapshot['row'], 'bulk_quadrature': 'four native C3D10 points; accepted material/geometric tensor' if self.provider is not None else 'four native C3D10 points; full ten-node isotropic Kelvin strain',
+                'snapshot': snapshot['row'], 'bulk_quadrature': 'four native C3D10 points; state-specific selected force derivative plus geometric stiffness; original algorithmic bulk retained separately' if self.provider is not None else 'four native C3D10 points; full ten-node isotropic Kelvin strain',
                 'symmetric_part': spectral})
         summary['worst_frame_symmetric_part'] = spectral
         write_json(directory / 'contact-global.json', {'summary': summary, 'history': self.history})

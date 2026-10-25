@@ -357,6 +357,48 @@ qualification flags remain separate and conservative. The audit is bounded to
 60 seconds, 32 MiB input and 128 MiB output; unsupported history, missing source,
 resource limits and native failures retain explicit unavailable diagnostics.
 
+### Accepted-increment material history
+
+Adapter `oxygen-canonical-17` applies the same source-bound replay and unchanged
+derivative tolerances to every committed accepted increment. Each frame has its
+own displacement/history binding, point qualifications and force matrix; a final
+state cannot qualify an earlier state. `material-derivative-history.json` indexes
+the complete accepted-increment coverage, including unavailable and unresolved
+states. Each `material-history/step-…-increment-…/` directory retains the point
+audit, tensor masks and conditional candidate. The audit's
+`accepted_bulk_evidence_root` resolves its original state file two directories
+above. Original native replay streams are stored with deterministic gzip, exact
+uncompressed hashes and separate compressed hashes.
+
+The contact audit selects a qualified state-specific force Jacobian where all
+plastic points pass; otherwise it retains the original native algorithmic tensor
+with incomplete derivative status. Pure supported elastic states use the native
+elastic/geometric operator. The selected operator kind, bound Gauss hash and
+material-audit identity accompany every contact frame. The retained worst-frame
+`contact-global-bulk.npz` and contact/reduced triplet belong to that same state;
+`contact-global-native-algorithmic-bulk.npz` preserves its original native bulk
+separately. The native Newton solver and its matrices are unchanged.
+
+Supporting audit/stream/tensor/matrix hashes are checked before candidate reuse,
+including cached candidates. A changed or neighbouring state cannot inherit a
+force derivative. Missing tools, unsupported frames, hardening/yield transitions,
+unresolved refinement and budget limits stay explicit. Qualification does not
+follow from a small condition estimate or a favourable symmetric eigenvalue.
+The Studio shows the qualified, unresolved and unperformed increment counts;
+full contact stability and physical qualification remain false/unqualified.
+
+History replay is bounded per trial to 4,096 points per frame, 65,536 reserved
+point evaluations, 256 MiB retained replay evidence and 240 seconds of replay,
+assembly and compression work; its complete index has a separate 64 MiB bound.
+The native process retains its 60-second and
+per-frame input/output bounds. A conservative preflight leaves room for the next
+uncompressed input/output before it starts. The independent final-state audit
+remains a separate bounded diagnostic for compatibility; it cannot promote an
+unperformed history frame. Native constitutive data, compressed stream identities
+and all per-increment artifacts accompany the handoff. These bounds and numerical
+derivatives do not establish nonsmooth directional laws, changing contact maps,
+dynamic stability or measured material/assembly reliability.
+
 ## Canonical quadratic study integration
 
 Simulation jobs share the platform's guarded status publication. A polling-cache
