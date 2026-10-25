@@ -50,6 +50,7 @@ import {
   type DisplayField,
 } from "./api";
 import { JointPanel } from "./JointPanel";
+import { EngineeringPanel } from "./EngineeringPanel";
 import { FeatureNavigator } from "./components/FeatureNavigator";
 import { InspectorSection } from "./components/InspectorSection";
 import { StudyPanel } from "./components/StudyPanel";
@@ -628,7 +629,7 @@ export default function App() {
     }
   }
   const panelLabel =
-    isWorkspace(tab) ? workspaceNames[tab] : tab === "verify"
+    isWorkspace(tab) ? workspaceNames[tab] : tab === "engineering" ? "Engineering" : tab === "verify"
       ? "Study"
       : tab === "source"
         ? "Source"
@@ -848,6 +849,7 @@ export default function App() {
                 ["joints", Activity, "Joint selection"],
                 ["source", Code2, "Source"],
                 ["history", History, "History"],
+                ["engineering", ShieldCheck, "Engineering workflow"],
               ].map(([id, Icon, label]: any) => (
                 <MenuItem
                   className="ui-menu-item"
@@ -1324,7 +1326,7 @@ export default function App() {
           >
             <div className="panel-heading">
               <span>
-                {isWorkspace(tab) ? workspaceNames[tab] : tab === "joints"
+                {isWorkspace(tab) ? workspaceNames[tab] : tab === "engineering" ? "Engineering workflow" : tab === "joints"
                   ? "Joint selection"
                   : tab === "verify"
                     ? "Engineering study"
@@ -1347,6 +1349,25 @@ export default function App() {
             </div>
             <div className="properties">
               {workspacePanel}
+              {tab === "engineering" && (
+                <EngineeringPanel
+                  project={current}
+                  dirty={dirty}
+                  blocked={Boolean(busy || pending)}
+                  onEdit={edit}
+                  onBind={() => queueMutation(async () => {
+                    if (dirtyRef.current) throw new Error("Save edits before binding evidence");
+                    if (!projectRef.current) throw new Error("Project is opening");
+                    const reply = await post("engineering/brief/bind", {
+                      expected_revision: projectRef.current.revision,
+                      actor: "human",
+                    });
+                    acceptProject(reply.project);
+                    await refresh();
+                    return reply.traceability;
+                  })}
+                />
+              )}
               {tab === "joints" && (
                 <JointPanel
                   project={current}

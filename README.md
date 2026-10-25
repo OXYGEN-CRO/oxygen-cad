@@ -59,6 +59,16 @@ For an agent workspace without the plugin, install the instructions with Python 
 
 Use `--agent claude` for `.claude/skills`, or `--agent portable` for `.agents/skills`. Omit `--workspace` to install in this checkout. Setup can be rerun to update managed copies; it refuses to overwrite existing unowned skills or local edits. If the plugin already supplies the skills, use that route alone. See [agent setup and plugin installation](docs/AGENT-SKILLS.md).
 
+## Engineering workflow
+
+Open **Project tools → Engineering workflow** for persistent requirement briefs,
+explicit evidence binding, sourced mounting-interface comparison, canonical
+editable adapter proposals, transient purchase-offer assessments and manual
+supplier request packages. JSON CLI groups `brief`, `compatibility`, `procurement`
+and `supplier` use the same services. Existing joint selection and CAD workspaces
+remain available. Missing or stale evidence never establishes fit, physical
+performance, live availability or supplier approval. See the [workflow guide](docs/ENGINEERING-WORKFLOW.md).
+
 ## Discover off-the-shelf components
 
 For custom-part production, the [manufacturing catalog](docs/MANUFACTURING.md)

@@ -406,5 +406,5 @@ def study_key(project: Project, study_id: str | None = None) -> str:
 
 
 def verification_key(project: Project) -> str:
-    return digest({"geometry": geometry_key(project), "material": project.material.model_dump() if project.material else None,
+    return digest({"checker": "canonical-mass-v1", "geometry": geometry_key(project), "material": project.material.model_dump() if project.material else None,
                    "requirements": [r.model_dump() for r in project.requirements]})

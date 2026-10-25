@@ -1,0 +1,63 @@
+.engineering-workflow {
+  min-width: 0;
+}
+.engineering-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.engineering-tabs button[aria-pressed="true"] {
+  border-color: var(--text-muted, #888);
+}
+.engineering-example {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.engineering-example small {
+  opacity: 0.65;
+}
+.engineering-workflow textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 9px;
+  color: inherit;
+  background: var(--input-bg, transparent);
+  border: 1px solid var(--border, #5555);
+  border-radius: 7px;
+  font: 12px/1.6 var(--font-mono, monospace);
+}
+.engineering-workflow pre {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 11px;
+}
+.engineering-workflow table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.engineering-workflow td,
+.engineering-workflow th {
+  padding: 7px 4px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border, #5555);
+}
+.engineering-workflow details {
+  padding: 8px 0;
+}
+.engineering-workflow [role="alert"] {
+  color: var(--danger, #b55);
+  overflow-wrap: anywhere;
+}
+.engineering-workflow p {
+  font-size: 12px;
+  line-height: 1.6;
+}

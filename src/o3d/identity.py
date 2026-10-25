@@ -135,6 +135,8 @@ class Identity:
 
 
 def action_for_request(method, path):
+    if path in {"/api/engineering/supplier/prepare", "/api/engineering/supplier/package"}:
+        return "export"
     if path.startswith("/api/artifacts/") or path.startswith("/api/platform/portable") or path == "/api/jobs/export":
         return "export"
     if path.startswith("/api/platform/identity"):

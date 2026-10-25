@@ -193,6 +193,8 @@ def create_app(root=None, *, project_windows=True):
         app.mount("/p", windows)
     from .joint_routes import mount as mount_joints
     mount_joints(app, store)
+    from .engineering_routes import mount_engineering
+    mount_engineering(app, store)
 
     frontend = Path(os.environ.get("O3D_FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend/dist"))
     if frontend.exists():

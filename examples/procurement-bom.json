@@ -1,0 +1,66 @@
+{
+  "bom": {
+    "lines": [
+      {
+        "id": "rail",
+        "name": "Extrusion",
+        "classification": "purchased",
+        "quantity": 12,
+        "identity": {
+          "provider": "rev",
+          "sku": "REV-41-1300",
+          "asset_id": "https://www.revrobotics.com/content/cad/REV-41-1300.step",
+          "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "id": "bracket",
+        "name": "Custom mounting bracket",
+        "classification": "custom",
+        "quantity": 2
+      },
+      {
+        "id": "connector",
+        "name": "Connector awaiting classification",
+        "classification": "unknown",
+        "quantity": null
+      }
+    ]
+  },
+  "region": "DE",
+  "as_of": "2026-10-24T12:00:00Z",
+  "offers": [
+    {
+      "id": "supplied-fixture",
+      "identity": {
+        "provider": "rev",
+        "sku": "REV-41-1300",
+        "asset_id": "https://www.revrobotics.com/content/cad/REV-41-1300.step",
+        "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "provenance": {
+        "source_url": "https://www.revrobotics.com/rev-41-1300/",
+        "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "observed_at": "2026-10-24T10:00:00Z",
+      "expires_at": "2026-10-25T10:00:00Z",
+      "currency": "EUR",
+      "regions": ["DE"],
+      "minimum_order_quantity": 2,
+      "quantity_breaks": [
+        {
+          "minimum_quantity": 1,
+          "unit_price": "3.10"
+        },
+        {
+          "minimum_quantity": 10,
+          "unit_price": "2.90"
+        }
+      ],
+      "stock_state": "in_stock",
+      "stock_quantity": 100,
+      "lead_time_state": "known",
+      "lead_time_days": 3
+    }
+  ]
+}

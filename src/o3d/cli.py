@@ -16,6 +16,11 @@ from .catalog.cli import app as parts_app
 app.add_typer(parts_app, name="parts")
 from .joint_cli import app as joint_app
 app.add_typer(joint_app, name="joint")
+from .engineering_cli import brief_app, compatibility_app, procurement_app, supplier_app
+app.add_typer(brief_app, name="brief")
+app.add_typer(compatibility_app, name="compatibility")
+app.add_typer(procurement_app, name="procurement")
+app.add_typer(supplier_app, name="supplier")
 
 
 def emit(value, machine=True):
