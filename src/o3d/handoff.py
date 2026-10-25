@@ -6,6 +6,9 @@ import html
 import importlib.metadata
 import importlib.util
 import json
+import io
+import math
+import stat
 from pathlib import Path
 import shutil
 import tempfile
@@ -13,7 +16,9 @@ import zipfile
 
 from .artifacts import export_bundle, render
 from .model import geometry_key
-from .store import Store, write_json
+from .store import Conflict, Store, write_json
+from .identity import authorized
+from .projects import contained, declared_artifacts, verify_assets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,24 +37,23 @@ def project_signature(store: Store) -> str:
 
 
 def input_assets(store: Store) -> dict[str, str]:
-    result = {}
-    for asset in store.load().references:
-        path = (store.root / asset.file).resolve()
-        if not path.is_relative_to(store.root) or not path.is_file():
-            raise ValueError(f"Missing or invalid reference asset: {asset.id}")
-        actual = digest(path)
-        if actual != asset.sha256:
-            raise ValueError(f"Reference asset content changed: {asset.id}")
-        result[asset.file] = actual
+    """Canonical immutable inputs, linked/native assets and declared cached evidence."""
+    project = store.load()
+    document = project.model_dump(mode="json")
+    result = dict(verify_assets(store.root, [document]))
+    for relative in declared_artifacts(document):
+        name = ".o3d/" + relative
+        result[name] = digest(contained(store.root, name))
+    for relative in list(result):
+        path = contained(store.root, relative)
         for suffix in (".LICENSE.txt", ".catalog.json"):
             sidecar = path.with_name(path.name + suffix)
-            if sidecar.is_file():
-                if sidecar.is_symlink(): raise ValueError("Reference provenance cannot be a symlink")
-                result[str(sidecar.relative_to(store.root))] = digest(sidecar)
+            if sidecar.exists() or sidecar.is_symlink():
+                name = sidecar.relative_to(store.root).as_posix()
+                result[name] = digest(contained(store.root, name))
     for path in sorted((store.cache / "catalog-links").glob("*.json")):
-        if path.is_symlink():
-            raise ValueError("Catalog provenance cannot be a symlink")
-        result[str(path.relative_to(store.root))] = digest(path)
+        name = path.relative_to(store.root).as_posix()
+        result[name] = digest(contained(store.root, name))
     return result
 
 
@@ -74,69 +78,129 @@ def helper(folder: str, name: str):
     return module
 
 
-def create(store: Store, section_z: float, overhang_degrees: float = 45) -> dict:
-    """Build a frozen handoff from already built geometry; no source edits or solve."""
-    if not 0 < overhang_degrees < 90:
-        raise ValueError("overhang-degrees must be between 0 and 90; select it from applicable process rules")
-    project = store.load()
+def _release(store, release):
+    """Freeze only canonical manifest-listed bytes, never stale export-directory files."""
+    archive_path = contained(store.cache, release["artifact"])
+    if archive_path.stat().st_size > 512 * 1024 * 1024:
+        raise ValueError("Canonical release exceeds the 512 MiB handoff limit")
+    content = archive_path.read_bytes()
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        entries = archive.infolist()
+        names = [entry.filename for entry in entries]
+        if len(names) != len(set(names)) or len(names) > 10000 or sum(entry.file_size for entry in entries) > 512 * 1024 * 1024:
+            raise ValueError("Invalid or oversized canonical release archive")
+        for entry in entries:
+            contained(store.cache, entry.filename, exists=False)
+            if entry.is_dir() or stat.S_ISLNK(entry.external_attr >> 16):
+                raise ValueError("Canonical release entries must be regular files")
+        manifest = json.loads(archive.read("release-manifest.json"))
+        if manifest.get("format") != "oxygen-cad-release" or manifest.get("schema_version") != 1:
+            raise ValueError("Expected a current canonical CAD release")
+        if set(names) != set(manifest["files"]) | {"release-manifest.json"}:
+            raise ValueError("Canonical release has unlisted or missing files")
+        files = {}
+        for name, metadata in manifest["files"].items():
+            raw = archive.read(name)
+            if metadata != {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}:
+                raise ValueError("Canonical release file hash changed: " + name)
+            files[name] = raw
+        files["release-manifest.json"] = archive.read("release-manifest.json")
+    return content, files
+
+
+def single_solid_scope(report):
+    """Derivative and supplier checks deliberately support exactly one exact solid."""
+    geometry = report.get("geometry", {})
+    bodies = geometry.get("bodies", [])
+    if geometry.get("body_count") != 1 or not geometry.get("all_solid") or len(bodies) != 1 or bodies[0].get("geometry_kind") != "solid":
+        raise ValueError("Handoff derivatives and supplier preflight currently require exactly one closed exact solid. "
+                         "This scene has multiple bodies, surfaces, meshes or no solid. Export the complete canonical CAD release "
+                         "for assembly review, or create a separate single-body project; bodies are never flattened into one part.")
+    body_ids = [bodies[0]["id"]]
+    exports = report.get("geometry_artifacts", {})
+    aggregate = report.get("scope", {}).get("aggregate_exports", {})
+    if not all(kind in exports and aggregate.get(kind, {}).get("body_ids") == body_ids for kind in ("step", "stl")):
+        raise ValueError("Single-solid handoff requires complete report-scoped STEP and STL exports; rebuild and export current geometry")
+    selectable = {"native/" + exports[kind]: {"format": kind, "body_ids": body_ids, "scope": "complete_single_solid"}
+                  for kind in ("step", "stl")}
+    for kind, path in bodies[0].get("artifacts", {}).items():
+        if kind in {"step", "stl"}:
+            selectable["native/" + path] = {"format": kind, "body_ids": body_ids, "scope": "complete_single_solid"}
+    return {"mode": "single_exact_solid", "body_ids": body_ids, "bodies": bodies,
+            "step": "native/" + exports["step"], "stl": "native/" + exports["stl"],
+            "selectable_artifacts": selectable, "canonical_scope": report["scope"]}
+
+
+def create(store: Store, section_z: float, overhang_degrees: float = 45, *, expected_revision: int | None = None) -> dict:
+    """Freeze the complete canonical release; derivatives support one exact solid."""
+    if not math.isfinite(section_z) or not 0 < overhang_degrees < 90:
+        raise ValueError("section-z must be finite and overhang-degrees must be between 0 and 90; select applicable process rules")
+    with store.lock(), authorized(store, "export"):
+        project = store._load()
+        if expected_revision is not None and project.revision != expected_revision:
+            raise Conflict(f"Revision conflict: expected {expected_revision}, current {project.revision}. Re-inspect before creating a handoff.")
     signature, assets, tools = document_signature(project), input_assets(store), toolchain()
     if store.state()["geometry_state"] != "current":
         raise ValueError("Build current geometry before creating a handoff")
     release = export_bundle(store, project)
+    release_bytes, frozen = _release(store, release)
+    report = json.loads(frozen["report.json"])
+    scope = single_solid_scope(report)
+    if report["revision"] != project.revision or report["geometry_key"] != geometry_key(project):
+        raise Conflict("Canonical export differs from selected handoff snapshot")
     preview = render(store, project)
-    parent = store.cache / "handoffs"
-    parent.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(prefix=f"r{project.revision}-", dir=parent))
+    parent = contained(store.cache, "handoffs", exists=False)
+    with store.lock(), authorized(store, "export"):
+        if document_signature(store._load()) != signature:
+            raise Conflict("Project changed while generating the handoff; regenerate from a current revision")
+        parent.mkdir(parents=True, exist_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix=f"r{project.revision}-", dir=parent))
     try:
-        # The native exporter creates a fresh trusted folder; copy its portable contents.
-        source = store.artifact(release["artifact"]).parent
-        for item in source.iterdir():
-            if item.name != "release.zip":
-                destination = folder / "native" / item.name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                if item.is_dir():
-                    shutil.copytree(item, destination)
-                else:
-                    shutil.copy2(item, destination)
-        shutil.copy2(store.artifact(release["artifact"]), folder / "native-release.zip")
+        for name, raw in frozen.items():
+            destination = contained(folder, "native/" + name, exists=False)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+        (folder / "native-release.zip").write_bytes(release_bytes)
         shutil.copy2(store.artifact(preview["artifact"]), folder / "preview.png")
         derivatives = folder / "derivatives"
         derivatives.mkdir()
         drawing = helper("oxygen-cad-drawing", "drawing.py").drawing(
-            source / "part.step", derivatives / "drawing.pdf", project.name, str(project.revision))
-        section = helper("oxygen-cad-dxf", "profiles.py").section(source / "part.step", section_z, derivatives / "section.dxf")
-        mesh = helper("oxygen-cad-dfam", "mesh_review.py").measure(source / "part.stl", overhang=overhang_degrees)
-        # Do not bake server-specific temporary paths into the portable derivative evidence.
-        drawing.update(output="derivatives/drawing.pdf", source="native/part.step")
+            folder / scope["step"], derivatives / "drawing.pdf", project.name, str(project.revision))
+        section = helper("oxygen-cad-dxf", "profiles.py").section(folder / scope["step"], section_z, derivatives / "section.dxf")
+        mesh = helper("oxygen-cad-dfam", "mesh_review.py").measure(folder / scope["stl"], overhang=overhang_degrees)
+        drawing.update(output="derivatives/drawing.pdf", source=scope["step"])
         section["file"] = "derivatives/section.dxf"
-        mesh["file"] = "native/part.stl"
-        write_json(folder / "derivative-report.json", {"drawing": drawing, "section": section, "mesh_screen": mesh})
-        # Include immutable reference assets and attribution, so the project can be reopened.
+        mesh["file"] = scope["stl"]
+        write_json(folder / "derivative-report.json", {"drawing": drawing, "section": section, "mesh_screen": mesh, "geometry_scope": scope})
         for relative in assets:
-            destination = folder / relative
+            destination = contained(folder, relative, exists=False)
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(store.root / relative, destination)
-        shutil.copy2(source / "o3d.json", folder / "o3d.json")
+            shutil.copy2(contained(store.root, relative), destination)
+            if digest(destination) != assets[relative]:
+                raise Conflict("Source dependency changed while copying handoff: " + relative)
+        (folder / "o3d.json").write_bytes(frozen["o3d.json"])
         for name in ("AGENTS.md", "project.schema.json"):
-            if (store.root / name).is_file(): shutil.copy2(store.root / name, folder / name)
-        report = json.loads((source / "report.json").read_text())
+            if (store.root / name).is_file():
+                shutil.copy2(contained(store.root, name), folder / name)
         findings = {"geometry_checks": report["geometry_checks"], "analysis_state": report["analysis_state"],
+                    "geometry_scope": scope,
                     "unverified": ["physical fit and strength", "complete minimum-wall/tool-access analysis", "supplier acceptance", "slicing/printing"]}
         write_json(folder / "findings.json", findings)
         (folder / "index.html").write_text(
             "<!doctype html><meta charset='utf-8'><title>Oxygen handoff</title>"
             "<style>body{font:16px system-ui;max-width:1000px;margin:40px auto}img{max-width:100%}pre{white-space:pre-wrap}</style>"
             f"<h1>{html.escape(project.name)}</h1><p>Frozen project revision {project.revision}. "
-            "Check current status with o3d handoff status before using this package for a changed design. "
-            "For unpacked files use o3d handoff status --manifest manifest.json.</p>"
-            "<img src='preview.png' alt='Native part preview'><p><a href='derivatives/drawing.pdf'>Nominal drawing</a> · "
+            "Check current status before using this package for a changed design. "
+            "Reopen the complete project from native/project.oxygen.zip to retain native documents, history, studies and dependencies.</p>"
+            "<img src='preview.png' alt='Native solid preview'><p><a href='derivatives/drawing.pdf'>Nominal drawing</a> · "
             "<a href='derivatives/section.dxf'>Planar section DXF</a> · <a href='native/report.html'>Engineering report</a></p>"
             f"<pre>{html.escape(json.dumps(findings, indent=2))}</pre>")
         if project_signature(store) != signature or input_assets(store) != assets:
-            raise ValueError("Project changed while generating the handoff; regenerate from a current revision")
+            raise Conflict("Project changed while generating the handoff; regenerate from a current revision")
         files = {str(p.relative_to(folder)): digest(p) for p in sorted(folder.rglob("*")) if p.is_file()}
         manifest = {"schema_version": 1, "revision": project.revision, "project_sha256": signature,
                     "geometry_key": geometry_key(project), "reference_inputs": assets, "toolchain": tools,
+                    "geometry_scope": scope, "canonical_project_archive": "native/project.oxygen.zip",
                     "parameters": {"section_z_mm": section_z, "overhang_degrees": overhang_degrees},
                     "files": files, "findings": findings}
         write_json(folder / "manifest.json", manifest)
@@ -147,10 +211,16 @@ def create(store: Store, section_z: float, overhang_degrees: float = 45) -> dict
         write_json(folder / "receipt.json", {"archive_sha256": digest(folder / "handoff.zip"),
                                              "manifest_sha256": digest(folder / "manifest.json")})
         manifest_relative = str((folder / "manifest.json").relative_to(store.cache))
-        write_json(parent / "latest.json", {"manifest": manifest_relative})
         result = status(store, manifest_relative)
-        result.update(artifact=str((folder / "handoff.zip").relative_to(store.cache)), report=str((folder / "index.html").relative_to(store.cache)))
+        with store.lock(), authorized(store, "export"):
+            if document_signature(store._load()) != signature or result["state"] != "current":
+                raise Conflict("Project changed while generating the handoff; regenerate from a current revision")
+            write_json(parent / "latest.json", {"manifest": manifest_relative})
+        result.update(artifact=str((folder / "handoff.zip").relative_to(store.cache)), report=str((folder / "index.html").relative_to(store.cache)), geometry_scope=scope)
         return result
+    except PermissionError:
+        shutil.rmtree(folder)
+        raise
     except Exception as error:
         write_json(folder / "failure.json", {"error": str(error), "revision": project.revision})
         raise
