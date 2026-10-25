@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 import math
+import re
 from pathlib import Path
 
 from .brief_models import BriefEvidence, EngineeringBrief
@@ -39,6 +40,51 @@ def _study_id(requirement, link):
     return link.study_id or requirement.study_id
 
 
+def _parameter_issue(project, name):
+    """Keep host aliases honest without inferring new native parameter mirrors.
+
+    Native expressions beyond explicit numeric/unit literals remain unresolved.
+    A retained legacy parameter is provenance, not proof its native target exists.
+    """
+    parameter = project.parameters.get(name)
+    if project.native_document is None:
+        return None if parameter is not None else ("missing_parameter", f"Parameter {name} does not exist")
+    aliases = project.domains.get("modeling", {}).get("legacy_parameter_map", {})
+    if not isinstance(aliases, dict):
+        return "ambiguous_parameter", f"Canonical parameter aliases for {name} are invalid"
+    native_name = aliases.get(name, name)
+    rows = [p for p in project.native_document.get("params", []) if isinstance(p, dict) and p.get("name") == native_name]
+    if not rows:
+        return "missing_parameter", f"Canonical parameter {native_name} no longer exists; retained host mirror {name} is not an active reference"
+    if len(rows) != 1 or len([alias for alias, target in aliases.items() if target == native_name]) > 1:
+        return "ambiguous_parameter", f"Canonical parameter {native_name} has ambiguous definitions or host aliases"
+    if parameter is None:
+        return "unresolved_parameter", f"Native parameter {native_name} has no explicit host value/unit mirror; native-only expression bindings are not supported"
+    native = rows[0]
+    match = re.fullmatch(r"\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(mm|cm|m|in|ft|deg|rad)?\s*", str(native.get("expr", "")))
+    if match is None:
+        return "unresolved_parameter", f"Native parameter {native_name} is an expression; its host mirror requires explicit native expression evaluation"
+    declared = native.get("unit")
+    supplied = match.group(2) or declared
+    lengths = {"mm": 1, "cm": 10, "m": 1000, "in": 25.4, "ft": 304.8}
+    angles = {"deg": 1, "rad": 180 / math.pi}
+    if parameter.unit == "mm" and declared in lengths and supplied in lengths:
+        scale = lengths[supplied]
+    elif parameter.unit == "deg" and declared in angles and supplied in angles:
+        scale = angles[supplied]
+    elif declared == supplied == "" and (parameter.unit == "dimensionless" or
+            (name in aliases and parameter.unit in {"g", "N", "MPa"})):
+        # Explicit legacy aliases preserve host physical metadata (g/N/MPa) that
+        # the native expression grammar represents as unitless numerical inputs.
+        scale = 1
+    else:
+        return "unit_mismatch", f"Canonical parameter {native_name} unit {declared!r} cannot establish host {parameter.unit}"
+    value = float(match.group(1)) * scale
+    if not math.isfinite(value) or not math.isclose(value, parameter.value, rel_tol=1e-12, abs_tol=1e-12):
+        return "parameter_mirror_mismatch", f"Host parameter {name} differs from canonical parameter {native_name}"
+    return None
+
+
 def validate_brief(project: Project, brief=None) -> dict:
     """Semantic reference validation. Invalid schema raises Pydantic ValidationError.
 
@@ -61,8 +107,9 @@ def validate_brief(project: Project, brief=None) -> dict:
     for item in brief.inputs:
         if item.parameter is not None:
             parameter = project.parameters.get(item.parameter)
-            if parameter is None:
-                issue("missing_parameter", f"Parameter {item.parameter} does not exist", input_id=item.id)
+            problem = _parameter_issue(project, item.parameter)
+            if problem is not None:
+                issue(*problem, input_id=item.id)
             elif item.unit is not None and item.unit != parameter.unit:
                 issue("unit_mismatch", f"{item.unit} does not match parameter {item.parameter} unit {parameter.unit}; no implicit conversion", input_id=item.id)
             elif item.value is not None and item.value != parameter.value:
@@ -85,8 +132,9 @@ def validate_brief(project: Project, brief=None) -> dict:
             elif requirement.study_id is not None and selected != requirement.study_id:
                 issue("study_scope_mismatch", f"Requirement is scoped to {requirement.study_id}", link.id)
         for name in link.parameter_refs:
-            if name not in project.parameters:
-                issue("missing_parameter", f"Parameter {name} does not exist", link.id)
+            problem = _parameter_issue(project, name)
+            if problem is not None:
+                issue(*problem, link.id)
         for identifier in link.input_refs:
             if identifier not in inputs:
                 issue("missing_input", f"Brief input {identifier} does not exist", link.id)
@@ -99,6 +147,10 @@ def _signatures(project, brief, link, requirement):
     intent = {"task": brief.task, "inputs": [i.model_dump() for i in brief.inputs],
               "link": link.model_dump(exclude={"evidence"}),
               "parameters": {name: project.parameters[name].model_dump() for name in link.parameter_refs}}
+    if project.native_document is not None:
+        aliases = project.domains.get("modeling", {}).get("legacy_parameter_map", {})
+        names = set(link.parameter_refs) | {item.parameter for item in brief.inputs if item.parameter is not None}
+        intent["native_parameter_targets"] = {name: aliases.get(name, name) for name in names}
     return {"geometry_signature": geometry_key(project),
             "material_signature": digest(project.material.model_dump() if project.material else None),
             "requirement_signature": digest(requirement.model_dump()),
@@ -136,6 +188,14 @@ def _measurement(project, requirement, link, source, data):
     if source == "checks":
         if data.get("key") != geometry_key(project) or data.get("input_key") != verification_key(project):
             return "stale", "Native checks have changed inputs", None
+        if requirement.kind == "max_mass" and project.native_document is not None:
+            evidence = data.get("mass_evidence")
+            if not isinstance(evidence, dict) or evidence.get("basis") != "canonical-native-body-materials-v1":
+                return "unknown", "Rerun checks: canonical mass needs explicit per-body native material evidence", None
+            if evidence.get("geometry_key") != geometry_key(project) or evidence.get("native_document_sha256") != digest(project.native_document):
+                return "stale", "Canonical material mass evidence belongs to a different native document", None
+            if evidence.get("state") != "complete" or evidence.get("mass_g") != data.get("mass_g"):
+                return "unknown", "Canonical material mass evidence is incomplete", None
         findings = data.get("findings")
         if not isinstance(findings, list):
             return "unknown", "Native evidence has no finding list", None
@@ -160,6 +220,8 @@ def _measurement(project, requirement, link, source, data):
         return "unknown", "Requirement has no finite measured value", None
     if finding.get("limit") != requirement.value:
         return "stale", "Measured finding uses a different limit", None
+    if source == "checks" and requirement.kind == "max_mass" and project.native_document is not None and value != data.get("mass_g"):
+        return "unknown", "Requirement finding differs from measured canonical material mass", None
     passed = value >= requirement.value if requirement.kind.startswith("min_") else value <= requirement.value
     if source == "checks":
         consistent = finding.get("severity") == ("info" if passed else "error")

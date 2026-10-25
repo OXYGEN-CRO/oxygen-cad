@@ -24,6 +24,16 @@ ambiguous or mismatched references remain visible for repair. Brief input/link
 IDs and reference lists must be unique; duplicated project requirement IDs are
 reported as ambiguous instead of selecting an arbitrary requirement.
 
+For canonical native documents, a retained host parameter is only usable when
+its unique native target still exists and its value/unit agree. Explicit legacy
+aliases, including renamed parameters, are checked against the native timeline.
+Deleted targets, divergent mirrors and ambiguous aliases cannot validate or
+rebind. Native-only parameters have no inferred host mirror. This bounded
+adapter resolves explicit numeric/unit literals; general native expressions
+remain unresolved until an explicit expression binding adapter is available.
+Simulation links refer to the project's saved default/named studies, not the
+separate Simulate workspace's study/case requirement records.
+
 ## Native evidence and explicit binding
 
 Run the existing native geometry check or simulation first. Binding records
@@ -47,6 +57,23 @@ unmeasured, nonfinite, failed or inconclusive evidence cannot certify a pass.
 Measured failures remain failures. Other links within an overall failed native
 result remain unknown. Bind skips unknown, disabled and stale evidence, and
 refuses broken references. No generated receipt is evidence of physical safety.
+
+Canonical mass checks use a fresh native measurement for every exact solid body,
+the body's explicit material assignment, and that native material's density.
+Each body's volume is checked against its independent exact STEP solid before
+the body masses are summed. The check records body/definition identities, material,
+density, volume, mass, native document identity and native measurement identity.
+The selected density comes from the pinned native material library or the saved
+native user-material record; it is not a material certificate or calibration.
+
+Every canonical body needs an explicit usable material. The kernel's unassigned
+`Default` material has a display density, which cannot serve as engineering input.
+Missing assignments or incomplete/invalid body measurements produce unknown mass
+and a `needs_input` mass requirement check. Canonical checks never substitute
+the unrelated legacy `Project.material` density, including for mixed-material
+assemblies. Pre-fix canonical mass check receipts without this per-body evidence
+basis cannot bind or pass; rerun checks. Legacy feature documents continue to use
+their explicit project material density.
 
 Binding is an explicit association between intent and measured requirements.
 Only explicit parameter bindings check numerical input agreement. Descriptive

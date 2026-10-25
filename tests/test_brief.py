@@ -250,3 +250,78 @@ def test_scoped_study_deleted_missing_and_wrong_scope(measured_store):
     project.requirements[0].study_id = None
     project.named_studies = {}
     assert validate_brief(project)["issues"][0]["code"] == "missing_study"
+
+
+def test_deleted_canonical_parameter_mirror_cannot_validate_or_rebind(tmp_path):
+    from o3d.native_document import execute_native
+    store = Store(tmp_path / "deleted-native-parameter")
+    store.init(Project(parameters={"spare": Parameter(value=5)}, requirements=[
+        Requirement(id="width_limit", kind="max_dimension", axis="X", value=25)],
+        engineering_brief=EngineeringBrief(task="Explicit parameter reference", links=[
+            BriefLink(id="fit", requirement_id="width_limit", parameter_refs=["spare"])])))
+    execute_native(store, 1, "human", "solid.box", {"length": 20, "width": 10, "height": 5})
+    check(store, store.load())
+    bind_and_save(store)
+    assert evaluate(store)["state"] == "passed"
+    execute_native(store, store.load().revision, "human", "parameters.delete", {"name": "spare"})
+    project = store.load()
+    assert "spare" in project.parameters and not any(p["name"] == "spare" for p in project.native_document["params"])
+    check(store, project)
+    assert evaluate(store)["state"] == "unknown"
+    assert validate_brief(project)["issues"][0]["code"] == "missing_parameter"
+    with pytest.raises(ValueError, match="Canonical parameter spare no longer exists"):
+        bind_evidence(store)
+
+
+def test_canonical_parameter_alias_mirrors_preserve_values_and_detect_ambiguity(tmp_path):
+    from o3d.native_document import execute_native
+    store = Store(tmp_path / "canonical-aliases")
+    store.init(Project(parameters={"reach": Parameter(value=20)},
+        requirements=[Requirement(id="limit", kind="max_dimension", value=25)],
+        engineering_brief=EngineeringBrief(task="Check a mirrored native parameter", inputs=[
+            BriefInput(id="reach_input", kind="envelope", description="Reach", value=20, unit="mm", provenance="Numerical fixture", parameter="reach")],
+            links=[BriefLink(id="fit", requirement_id="limit", parameter_refs=["reach"])])))
+    execute_native(store, 1, "human", "solid.box", {"length": 20, "width": 10, "height": 5})
+    execute_native(store, 2, "human", "parameters.rename", {"name": "reach", "new_name": "span"})
+    baseline = store.load()
+    assert baseline.domains["modeling"]["legacy_parameter_map"]["reach"] == "span"
+    assert validate_brief(baseline)["valid"]
+    divergent = baseline.model_copy(deep=True)
+    divergent.parameters["reach"].value = 21
+    assert "parameter_mirror_mismatch" in {i["code"] for i in validate_brief(divergent)["issues"]}
+    ambiguous = baseline.model_copy(deep=True)
+    ambiguous.native_document["params"].append(next(p.copy() for p in ambiguous.native_document["params"] if p["name"] == "span"))
+    assert "ambiguous_parameter" in {i["code"] for i in validate_brief(ambiguous)["issues"]}
+    aliases = baseline.model_copy(deep=True)
+    aliases.parameters["other"] = Parameter(value=99)
+    aliases.domains["modeling"]["legacy_parameter_map"]["other"] = "span"
+    assert "ambiguous_parameter" in {i["code"] for i in validate_brief(aliases)["issues"]}
+    execute_native(store, 3, "human", "parameters.add", {"name": "native_only", "expression": "20 mm"})
+    unmatched = store.load()
+    unmatched.engineering_brief.links[0].parameter_refs = ["native_only"]
+    assert validate_brief(unmatched)["issues"][0]["code"] == "unresolved_parameter"
+    formula = baseline.model_copy(deep=True)
+    next(p for p in formula.native_document["params"] if p["name"] == "span")["expr"] = "10 + 10"
+    assert "unresolved_parameter" in {i["code"] for i in validate_brief(formula)["issues"]}
+    wrong_units = baseline.model_copy(deep=True)
+    next(p for p in wrong_units.native_document["params"] if p["name"] == "span")["unit"] = ""
+    assert "unit_mismatch" in {i["code"] for i in validate_brief(wrong_units)["issues"]}
+    current = store.load()
+    check(store, current)
+    bind_and_save(store)
+    assert evaluate(store)["state"] == "passed"
+    retargeted = store.load()
+    retargeted.domains["modeling"]["legacy_parameter_map"]["reach"] = "native_only"
+    before = geometry_key(retargeted)
+    retargeted = save(store, retargeted)
+    assert geometry_key(retargeted) == before and validate_brief(retargeted)["valid"]
+    assert evaluate(store)["state"] == "stale"  # Equal numeric values do not preserve target identity.
+    # A source-level native edit may retain a divergent host mirror; saving the
+    # snapshot must never let this link rebind to an unrelated passing check.
+    divergent_snapshot = store.load()
+    next(p for p in divergent_snapshot.native_document["params"] if p["name"] == "native_only")["expr"] = "21 mm"
+    divergent_snapshot = save(store, divergent_snapshot)
+    check(store, divergent_snapshot)
+    assert evaluate(store)["state"] == "unknown"
+    with pytest.raises(ValueError, match="differs from canonical"):
+        bind_evidence(store)

@@ -9,7 +9,7 @@ from pathlib import Path
 import build123d as bd
 import numpy as np
 
-from .model import EdgeTreatment, Extrude, Finding, Hole, Profile, Project, geometry_key, verification_key
+from .model import EdgeTreatment, Extrude, Finding, Hole, Profile, Project, digest, geometry_key, verification_key
 from .store import Store, write_json
 
 
@@ -349,6 +349,80 @@ def build(store: Store, project: Project):
     return result
 
 
+CANONICAL_MASS_BASIS = "canonical-native-body-materials-v1"
+
+
+def canonical_mass(store: Store, project: Project, cached: dict, shape):
+    """Measure assigned native materials; the engine's Default density is not input.
+
+    A fresh native query avoids trusting an old build's material measurements.
+    Each current world body must map uniquely to an explicitly assigned definition
+    and an independently exported exact solid. No partial total can certify mass.
+    """
+    from .native import UPSTREAM_COMMIT
+    from .native_document import query_native
+
+    evidence = {"basis": CANONICAL_MASS_BASIS, "geometry_key": geometry_key(project),
+                "native_document_sha256": digest(project.native_document),
+                "native_engine": {"upstream_commit": UPSTREAM_COMMIT, "protocol": 1},
+                "source": "Current native inspect.measure and explicit native_document.materials assignments",
+                "bodies": [], "issues": [], "state": "needs_input"}
+    try:
+        if cached.get("key") != evidence["geometry_key"]:
+            raise ValueError("Cached solid belongs to different geometry")
+        measured = query_native(project, "inspect.measure", store=store)
+        evidence["measurements_sha256"] = digest(measured)
+        bodies = (cached.get("scene") or {}).get("bodies", [])
+        rows = measured.get("bodies", [])
+        if not bodies or not isinstance(rows, list) or len(bodies) != len(rows):
+            raise ValueError("Native mass measurements do not cover every current solid body")
+        if len({b["name"] for b in bodies}) != len(bodies) or len({r["name"] for r in rows}) != len(rows):
+            raise ValueError("Native mass body identities are ambiguous")
+        assignments = project.native_document.get("materials", {})
+        if not isinstance(assignments, dict):
+            raise ValueError("Native material assignments are unavailable")
+        for body in bodies:
+            name = body["name"]
+            definition = body.get("definition_name") or name
+            row = next((r for r in rows if r.get("name") == name), None)
+            assigned = assignments.get(definition)
+            if (row is None or not isinstance(assigned, str) or not assigned.strip()
+                    or assigned.casefold() == "default" or row.get("material", "").casefold() == "default"):
+                evidence["issues"].append(f"Body {name} needs an explicit usable native material assignment; Default is not engineering input")
+                continue
+            if row.get("material", "").casefold() != assigned.casefold():
+                evidence["issues"].append(f"Body {name} material differs from its canonical assignment")
+                continue
+            values = [row.get(k) for k in ("volume_mm3", "density_g_cm3", "mass_g")]
+            if any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v) or v <= 0 for v in values):
+                evidence["issues"].append(f"Body {name} has no finite positive measured volume, assigned density and mass")
+                continue
+            volume, density, mass = values
+            if row.get("geometry_kind") != "solid" or not math.isclose(mass, volume * density / 1000, rel_tol=1e-9, abs_tol=1e-12):
+                evidence["issues"].append(f"Body {name} has inconsistent native solid mass measurements")
+                continue
+            independent = bd.import_step(store.artifact(body["artifacts"]["step"]))
+            if not independent.solids() or not math.isclose(volume, independent.volume, rel_tol=1e-3, abs_tol=1e-8):
+                evidence["issues"].append(f"Body {name} native volume disagrees with its independent exact solid")
+                continue
+            evidence["bodies"].append({"body_id": body["id"], "name": name, "definition_name": definition,
+                "material": row["material"], "density_g_cm3": density, "volume_mm3": volume, "mass_g": mass,
+                "assignment_source": f"native_document.materials[{definition}]",
+                "density_source": "Explicitly selected material in the pinned native library or saved native user_materials; not a material certificate"})
+        if evidence["issues"] or len(evidence["bodies"]) != len(bodies):
+            return None, evidence
+        if not math.isclose(sum(b["volume_mm3"] for b in evidence["bodies"]), shape.volume, rel_tol=1e-3, abs_tol=1e-8):
+            raise ValueError("Native body volumes disagree with the checked aggregate solid")
+        mass = sum(b["mass_g"] for b in evidence["bodies"])
+        if not math.isfinite(mass) or mass <= 0:
+            raise ValueError("Canonical total mass is not finite and positive")
+        evidence.update(state="complete", mass_g=mass)
+        return mass, evidence
+    except (ValueError, RuntimeError, OSError, KeyError, TypeError) as error:
+        evidence["issues"].append(f"Canonical mass evidence unavailable: {error}")
+        return None, evidence
+
+
 def check(store: Store, project: Project):
     key = geometry_key(project)
     path = store.cache / "builds" / key
@@ -362,6 +436,11 @@ def check(store: Store, project: Project):
     shape = bd.import_brep(path / "part.brep")
     if not shape.solids() or shape.volume <= 0:
         raise ValueError("Solid engineering checks require positive-volume solid bodies; use surface diagnostics for open surfaces")
+    mass_evidence = None
+    if project.native_document is not None:
+        mass_g, mass_evidence = canonical_mass(store, project, cached, shape)
+    else:
+        mass_g = shape.volume * project.material.density_g_cm3 / 1000 if project.material else None
     findings = [Finding(code="valid_solid", severity="info", message=f"{len(shape.solids())} valid solid bodies", value=shape.volume)]
     import trimesh
     mesh = trimesh.load(path / "part.stl", force="mesh")
@@ -383,10 +462,11 @@ def check(store: Store, project: Project):
         if not req.enabled or req.kind in ("max_displacement", "max_temperature", "min_frequency", "min_buckling_factor", "max_stress"):
             continue
         if req.kind == "max_mass":
-            if project.material is None:
-                findings.append(Finding(code="missing_material", severity="warning", feature=req.id, message="Mass requirement needs material density"))
+            if mass_g is None:
+                reason = "; ".join(mass_evidence["issues"]) if mass_evidence else "Mass requirement needs material density"
+                findings.append(Finding(code="missing_material", severity="warning", feature=req.id, message=reason))
                 continue
-            value = shape.volume * project.material.density_g_cm3 / 1000
+            value = mass_g
             passed = value <= req.value
         elif req.kind == "max_dimension":
             value = vector(shape.bounding_box().size)["XYZ".index(req.axis)]
@@ -400,6 +480,8 @@ def check(store: Store, project: Project):
         findings.append(Finding(code=req.kind, severity="info" if passed else "error", feature=req.id, message=f"{req.id}: {'passed' if passed else 'failed'}", value=value, limit=req.value))
     result = {"revision": project.revision, "key": key, "input_key": verification_key(project), "state": "failed" if any(f.severity == "error" for f in findings) else "needs_input" if any(f.severity == "warning" for f in findings) else "passed",
               "findings": [f.model_dump() for f in findings], "references": refs, "mesh_volume_relative_error": mesh_error,
-              "mass_g": shape.volume * project.material.density_g_cm3 / 1000 if project.material else None}
+              "mass_g": mass_g}
+    if mass_evidence is not None:
+        result["mass_evidence"] = mass_evidence
     write_json(path / "checks.json", result)
     return result
