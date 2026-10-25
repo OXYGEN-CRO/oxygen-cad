@@ -191,13 +191,26 @@ class Interface(Record):
     conductance_w_k: float | None = Field(default=None, gt=0)
     initial_gap_mm: float = Field(default=0, ge=0)
     source: str = Field(min_length=1)
-    formulation: Literal["paired_node_penalty", "quadratic_surface_mortar"] = "paired_node_penalty"
+    formulation: Literal["paired_node_penalty", "quadratic_surface_mortar", "surface_to_surface_penalty"] = "paired_node_penalty"
     primary_region_id: str | None = None
     secondary_region_id: str | None = None
     position_tolerance_mm: float | None = Field(default=None, gt=0)
+    normal_penalty_n_mm3: float | None = Field(default=None, gt=0)
+    friction_coefficient: float | None = Field(default=None, ge=0)
+    tangential_penalty_n_mm3: float | None = Field(default=None, gt=0)
+    maximum_penetration_mm: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def surface_contract(self):
+        contact_fields=(self.normal_penalty_n_mm3,self.friction_coefficient,self.tangential_penalty_n_mm3,self.maximum_penetration_mm)
+        if self.formulation == "surface_to_surface_penalty":
+            if self.kind not in {"separation","disabled"}:raise ValueError("Surface penalty contact requires separation semantics")
+            if not self.primary_region_id or not self.secondary_region_id or self.primary_region_id==self.secondary_region_id or self.position_tolerance_mm is None:raise ValueError("Surface contact requires distinct regions and an explicit initial-contact geometry tolerance")
+            if self.normal_penalty_n_mm3 is None or self.friction_coefficient is None or self.maximum_penetration_mm is None:raise ValueError("Surface contact requires explicit normal penalty, friction coefficient (including zero), and penetration limit")
+            if (self.friction_coefficient>0)!=(self.tangential_penalty_n_mm3 is not None):raise ValueError("Positive friction requires an explicit tangential penalty; frictionless contact must not supply one")
+            if self.node_pairs or self.normal is not None or self.stiffness_n_mm is not None or self.conductance_w_k is not None or self.initial_gap_mm:raise ValueError("Surface contact consumes actual mesh geometry, not paired-node springs or artificial gap offsets")
+            return self
+        if any(v is not None for v in contact_fields):raise ValueError("Surface contact parameters require surface_to_surface_penalty; N/mm and N/mm3 are not interchangeable")
         if self.formulation == "quadratic_surface_mortar":
             if self.kind not in {"bonded", "disabled"}:raise ValueError("Quadratic surface mortar represents a perfect bond, not separation or thermal conductance")
             if not self.primary_region_id or not self.secondary_region_id or self.primary_region_id==self.secondary_region_id or self.position_tolerance_mm is None:raise ValueError("Surface bond requires distinct primary/secondary regions and an explicit mapping tolerance")

@@ -1,14 +1,14 @@
 """CalculiX adapter for canonical structural solids.
 
 An explicit, bounded subset: C3D4/C3D10, isotropic elasticity/J2 tabular isotropic
-hardening, world-axis zero supports and dead nodal loads. Unsupported contact,
-connector and follower semantics refuse before writing an input deck.
+hardening, world-axis zero supports, dead nodal loads and explicit experimental
+quadratic face penalty contact. Unsupported connector/follower semantics refuse.
 """
 from __future__ import annotations
 import re
 from pathlib import Path
 import numpy as np
-from .solver import run_process, solver_binary, parse_stress, calculix_number
+from .solver import run_process, solver_binary, parse_stress, calculix_number,calculix_float,CALCULIX_REAL_PATTERN
 from .simulation_fem import System
 from .simulation_units import density_tonne_mm3
 
@@ -17,11 +17,18 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     study=system.study
     if max(system.ids)>100000 or any(e.id>150000 for e in system.mesh.elements):
         raise ValueError("CalculiX label budget exceeded; compact imported node/element labels before solving")
-    if study.interfaces or study.bolts or study.settings.inertial_relief:
-        raise ValueError("CalculiX nonlinear adapter does not yet translate interfaces, bolts or inertial relief")
+    if study.bolts or study.settings.inertial_relief:
+        raise ValueError("CalculiX nonlinear adapter does not yet translate bolts or inertial relief")
+    contact=None
+    if any(i.kind!='disabled' for i in study.interfaces):
+        if not nonlinear:raise ValueError("CalculiX linear adapter does not translate interfaces; use the explicit bonded adapter")
+        from .simulation_contact import SurfaceContact
+        contact=SurfaceContact(system)
+    system._contact_definition=contact
     if any(s.kind not in {"fixed","partial"} for s in case.supports):
         raise ValueError("CalculiX adapter accepts fixed/world-axis partial supports only")
     if not case.supports:raise ValueError("CalculiX nonlinear solve requires mechanical supports")
+    if any(case.initial_velocity_mm_s):raise ValueError("Static CalculiX studies do not translate initial velocity; use an event study")
     transfer=None
     if temperatures is not None:
         if nonlinear or study.settings.large_deformation or case.history:
@@ -29,7 +36,8 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
         from .simulation_thermoelastic import prepare_transfer
         transfer=prepare_transfer(system,temperatures)
     elif case.thermal:raise ValueError("Thermal boundaries require an explicit solved-temperature transfer")
-    if hasattr(system,"validate_supports"):system.validate_supports(case)
+    if contact is not None:contact.validate_supports(case)
+    elif hasattr(system,"validate_supports"):system.validate_supports(case)
     force=system.loads(case)
     lines=["*HEADING","Oxygen versioned study: mm N s tonne; dead-load small-strain or NLGEOM", "*NODE"]
     for n in system.ids:
@@ -56,6 +64,7 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     lines.append("*ELSET,ELSET=ALL_ELEMENTS")
     element_ids=[e.id for e in system.mesh.elements]
     for i in range(0,len(element_ids),16):lines.append(",".join(map(str,element_ids[i:i+16])))
+    if contact is not None:lines.extend(contact.deck)
     lines.append("*BOUNDARY")
     fixed=set()
     for support in case.supports:
@@ -69,6 +78,17 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
     increment=study.settings.nonlinear_initial_increment*increment_scale
     history=case.history or [(0.,0.),(1.,1.)]
     if history[0]!=(0.,0.):raise ValueError("Nonlinear load history must start at time zero and zero multiplier")
+    if contact is not None:
+        # CalculiX 2.23 gencontelem_f2f removes current penetration during
+        # increments of the FIRST step. Finish an unloaded initialization step
+        # before applying the physical load path; otherwise intermediate gaps
+        # differ from the declared pressure/overclosure law despite a correct
+        # final frame. This adds no support, force or coordinate adjustment.
+        contact.initialization_period=min(b[0]-a[0] for a,b in zip(history,history[1:]))
+        period=calculix_number(contact.initialization_period)
+        lines.extend(['*STEP,INC=100'+(',NLGEOM' if study.settings.large_deformation else ''),'*STATIC',f'{period},{period}',
+            '*NODE PRINT,NSET=ALLNODES,FREQUENCY=1','U','*NODE PRINT,NSET=ALLNODES,FREQUENCY=1','RF',
+            '*EL PRINT,ELSET=ALL_ELEMENTS,FREQUENCY=1','ENER',*contact.output,'*END STEP'])
     for (previous_time,_),(time,factor) in zip(history,history[1:]):
         duration=time-previous_time
         lines.extend(["*STEP,INC=1000"+(",NLGEOM" if study.settings.large_deformation else ""),"*STATIC",",".join(calculix_number(v) for v in (increment*duration,duration,1e-7*duration,increment*duration))])
@@ -79,7 +99,9 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
         for i,n in enumerate(system.ids):
             for axis in range(3):
                 if force[i*3+axis]!=0:lines.append(f"{n},{axis+1},{calculix_number(force[i*3+axis]*factor)}")
-        lines.extend(["*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","U","*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","RF","*EL PRINT,ELSET=ALL_ELEMENTS,FREQUENCY=1","S,PEEQ,ENER","*NODE FILE,FREQUENCY=1","U,RF","*EL FILE,FREQUENCY=1","S,PEEQ","*END STEP"])
+        lines.extend(["*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","U","*NODE PRINT,NSET=ALLNODES,FREQUENCY=1","RF","*EL PRINT,ELSET=ALL_ELEMENTS,FREQUENCY=1","S,PEEQ,ENER","*NODE FILE,FREQUENCY=1","U,RF","*EL FILE,FREQUENCY=1","S,PEEQ"])
+        if contact is not None:lines.extend(contact.output)
+        lines.append("*END STEP")
     path.write_text("\n".join(lines)+"\n")
     return force
 
@@ -120,7 +142,7 @@ def _parse_node_print(path):
         elif target is not None:
             parts=line.split()
             if len(parts)==4 and parts[0].isdigit():
-                target[int(parts[0])]=[float(v.replace("D","E")) for v in parts[1:]];started=True
+                target[int(parts[0])]=[calculix_float(v) for v in parts[1:]];started=True
             elif started:
                 target=None
     if not displacement or not reactions:raise RuntimeError("Missing CalculiX displacement/reaction fields")
@@ -135,7 +157,7 @@ def _displacement_history(path):
             rows.append(current)
         elif current is not None:
             parts=line.split()
-            if len(parts)==4 and parts[0].isdigit():current["max_displacement_mm"]=max(current["max_displacement_mm"],float(np.linalg.norm([float(v.replace("D","E")) for v in parts[1:]])))
+            if len(parts)==4 and parts[0].isdigit():current["max_displacement_mm"]=max(current["max_displacement_mm"],float(np.linalg.norm([calculix_float(v) for v in parts[1:]])))
             elif parts:current=None
     if not rows:raise RuntimeError("Missing load-displacement history")
     return rows
@@ -153,7 +175,7 @@ def integration_point_stress(path, system, final_time):
             if len(parts)==8 and parts[0].isdigit() and parts[1].isdigit():
                 element,point=int(parts[0]),int(parts[1])
                 # DAT uses xx yy zz xy xz yz; expose the same order as FRD.
-                values=[float(v.replace("D","E")) for v in parts[2:]]
+                values=[calculix_float(v) for v in parts[2:]]
                 values=[*values[:4],values[5],values[4]]
                 samples=current["samples"].setdefault(element,{})
                 if point in samples:raise RuntimeError("Duplicate integration-point stress output")
@@ -172,6 +194,8 @@ def integration_point_stress(path, system, final_time):
 def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increment_scale=1.,temperatures=None):
     directory.mkdir(parents=True,exist_ok=True)
     force=write_calculix(directory/"analysis.inp",system,case,nonlinear,increment_scale,temperatures)
+    contact=system._contact_definition
+    offset=contact.initialization_period if contact is not None else 0.
     transfer=None
     if temperatures is not None:
         from .simulation_thermoelastic import prepare_transfer
@@ -184,7 +208,7 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     log=(directory/"solver.log").read_text(errors="replace")
     if "*ERROR" in log.upper() or "JOB FINISHED" not in log.upper():
         raise RuntimeError("CalculiX did not report a completed job; inspect solver.log")
-    increments=_last_increment(directory/"analysis.sta",case.history[-1][0] if case.history else 1.)
+    increments=_last_increment(directory/"analysis.sta",(case.history[-1][0] if case.history else 1.)+offset)
     convergence=_convergence(directory/"analysis.cvg")
     displacement,reactions=_parse_node_print(directory/"analysis.dat")
     if set(displacement)!=set(system.ids):raise RuntimeError("CalculiX result misses mesh nodes")
@@ -223,13 +247,24 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     for line in (directory/"analysis.frd").read_text(errors="replace").splitlines():
         if line.startswith(" -4"):active="PE" in line and "DISP" not in line
         elif active and line.startswith(" -1"):
-            values=re.findall(r"[+-]?\d\.\d+(?:[ED][+-]\d+)",line[13:])
-            plastic_values.extend(float(v.replace("D","E")) for v in values)
+            values=re.findall(CALCULIX_REAL_PATTERN,line[13:])
+            plastic_values.extend(calculix_float(v) for v in values)
     history=_displacement_history(directory/"analysis.dat")
     result = {"load_displacement_history":history,"values":{"max_displacement_mm":max(h["max_displacement_mm"] for h in history),"final_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(stress.values()),"max_equivalent_plastic_strain":max(plastic_values,default=0.)},"checks":{"residual":float(residual),"force_balance_error":force_error,"moment_balance_error":moment_error,"increments":increments,"nonlinear_convergence":convergence},"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":displacement,"nodal_extrapolated_von_mises_mpa":stress,"support_reactions_n":{n:reacted[i].tolist() for i,n in enumerate(system.ids)},"solver_external_forces_n":reactions,"applied_nodal_forces_n":{n:applied[i].tolist() for i,n in enumerate(system.ids)}},"solver":"CalculiX","reaction_convention":"support reaction = CalculiX RF - final applied CLOAD on each constrained DOF","warnings":["Nodal stress is extrapolated; fixture peaks can be singular.","J2 isotropic hardening follows supplied true-stress/plastic-strain data; no cyclic/rate calibration is inferred."]}
     from .analysis import parse_frd,parse_vector_history
-    frames=parse_frd(directory/"analysis.frd")
+    # CalculiX emits an empty CELS block for an entirely open contact set.
+    # read_contact independently requires zero CNUM and zero spring energy;
+    # every displacement/stress/contact field still requires full coverage.
+    frames=parse_frd(directory/"analysis.frd",allow_empty=('CELS',) if contact is not None else ())
     vectors=parse_vector_history(directory/"analysis.dat")
+    if contact is not None:
+        from .simulation_contact import normalize_contact_history
+        history,frames,vectors,initialization=normalize_contact_history(contact,history,frames,vectors,increments,convergence,force)
+        result['load_displacement_history']=history
+        result['contact_initialization']=initialization
+        result['checks']['increments']=[{**r,'solver_total_time':r['total_time'],'total_time':r['total_time']-offset} for r in increments if r['step']>1]
+        result['checks']['nonlinear_convergence']=[r for r in convergence if r['step']>1]
+        result['checks']['residual']=max((abs(r['force_residual_percent'])/100 for r in {(r['step'],r['increment']):r for r in convergence if r['step']>1}.values()),default=float('inf'))
     envelope={n:0. for n in system.ids}
     increment_checks=[];probes=[]
     load_history=case.history or [(0.,0.),(1.,1.)]
@@ -295,4 +330,7 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         peak=max(probes,key=lambda p:p["magnitude_mm"])
         result["values"]["probe_displacement_mm"]=peak["magnitude_mm"]
         result["displacement_probe"]={"final":probes[-1],"peak":peak,"history":probes}
+    if system._contact_definition is not None:
+        from .simulation_contact import read_contact
+        read_contact(directory,system._contact_definition,case,result,frames,vectors,force,constrained)
     return result

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .simulation_models import SimulationDomain
 
-ADAPTER_VERSION="oxygen-canonical-8"
+ADAPTER_VERSION="oxygen-canonical-9"
 
 
 def clean(value):
@@ -33,6 +33,14 @@ def numerical_checks(result,study):
     if checks.get("reference_displacement_to_extent_ratio",0)>.05:failures.append("linear reference-load deformation screen exceeded")
     if checks.get("geometric_integration",{}).get("maximum_sampled_strain_norm",0)>.05:failures.append("linear reference-load strain screen exceeded")
     if checks.get("maximum_relative_interface_jump",0)>settings.convergence_tolerance:failures.append("mortar strong trace jump requires further interface refinement")
+    for metric in ('contact_body_force_balance_error','contact_body_moment_balance_error'):
+        if checks.get(metric,0)>settings.balance_tolerance:failures.append(metric)
+    if checks.get('contact_pressure_law_error',0)>1e-5:failures.append('contact pressure/overclosure law')
+    if checks.get('contact_coulomb_bound_error',0)>1e-5:failures.append('contact Coulomb friction bound')
+    if checks.get('maximum_contact_penetration_limit_ratio',0)>1:failures.append('declared contact penetration limit exceeded')
+    if checks.get('contact_penalty_change',0)>settings.convergence_tolerance:failures.append('contact penalty sensitivity')
+    if checks.get('contact_active_set_stability_qualified') is False:failures.append('contact active-set tangent stability not qualified')
+    if checks.get('frictional_work_qualified') is False:failures.append('integrated frictional work not qualified')
     if "prestress" in checks:
         if checks["prestress"].get("residual",0)>settings.residual_tolerance:failures.append("prestress equation residual")
         if any(checks["prestress"].get(k,0)>settings.balance_tolerance for k in ("force_balance_error","moment_balance_error")):failures.append("prestress equilibrium")
@@ -143,6 +151,27 @@ def solve(request,directory,cancel=None):
             refined=calculix_solve(system,case,directory/f"mesh-{i}"/"increment-half",cancel,increment_scale=.5)
             delta=abs(refined["values"]["max_displacement_mm"]-result["values"]["max_displacement_mm"])/max(abs(refined["values"]["max_displacement_mm"]),1e-12)
             result=refined;result["checks"]["load_step_change"]=delta
+            if any(interface.kind!='disabled' for interface in study.interfaces):
+                import copy
+                # A separate, retained numerical trial; the returned fields and
+                # declared study remain at the user's actual penalty values.
+                trial=copy.copy(system)
+                interfaces=[interface.model_copy(update={"normal_penalty_n_mm3":interface.normal_penalty_n_mm3*2,
+                    "tangential_penalty_n_mm3":interface.tangential_penalty_n_mm3*2 if interface.tangential_penalty_n_mm3 else None})
+                    if interface.kind!='disabled' else interface for interface in study.interfaces]
+                trial.study=study.model_copy(update={'interfaces':interfaces})
+                tested=calculix_solve(trial,case,directory/f"mesh-{i}"/'penalty-double',cancel,increment_scale=.5)
+                penalty_change=abs(tested['values']['max_displacement_mm']-result['values']['max_displacement_mm'])/max(abs(result['values']['max_displacement_mm']),1e-12)
+                trajectory_changes=[]
+                for row in result['load_displacement_history']:
+                    # The declared history starts at zero load and the adapter
+                    # has no nonzero displacement/velocity initial condition.
+                    # Include that state when adaptive first increments differ.
+                    comparison=float(numpy.interp(row['time'],[0.,*[r['time'] for r in tested['load_displacement_history']]],[0.,*[r['max_displacement_mm'] for r in tested['load_displacement_history']]]))
+                    trajectory_changes.append(abs(row['max_displacement_mm']-comparison)/max(result['values']['max_displacement_mm'],1e-12))
+                result['checks'].update({'contact_penalty_change':max(penalty_change,*trajectory_changes),
+                    'contact_penalty_trial':{'normal_multiplier':2,'tangential_multiplier':2,'directory':f'mesh-{i}/penalty-double',
+                    'scope':'maximum and displacement history against doubled normal/tangential penalties; nominal fields retained'}})
         elif study.type in {"dynamic_event","quasi_static_event"}:
             coarse=event_solve(system,case,cancel)
             result=event_solve(system,case,cancel,step_scale=.5)
@@ -183,6 +212,10 @@ def solve(request,directory,cancel=None):
     result["field"]["boundary_faces"]=exterior_triangles(mesh.nodes,mesh.elements)
     result["field"]["element_connectivity"]={e.id:list(e.nodes) for e in mesh.elements}
     result=clean(result)
+    if study.type=='nonlinear_static' and any(i.kind!='disabled' for i in study.interfaces):
+        import hashlib
+        evidence=directory/f'mesh-{len(meshes)-1}'/'increment-half'/'contact.json'
+        result['interface_evidence']={'path':str(evidence.relative_to(directory)),'sha256':hashlib.sha256(evidence.read_bytes()).hexdigest(),'bytes':evidence.stat().st_size}
     failures=numerical_checks(result,study)
     if family=="C3D10" and study.type in {"linear_static","nonlinear_static","thermal_stress"} and study.settings.probe_point_mm is None:failures.append("fixed physical displacement probe not supplied")
     if family=="C3D10" and study.type in {"linear_static","thermal_stress"} and result["checks"].get("displacement_to_extent_ratio",1)>.05:failures.append("small-deformation screening limit exceeded")

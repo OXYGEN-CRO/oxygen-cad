@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -20,6 +21,19 @@ from .store import Store, now, write_json
 
 class Cancelled(RuntimeError):
     pass
+
+
+CALCULIX_REAL_PATTERN=r"[+-]?\d\.\d+(?:[EeDd][+-]\d+|[+-]\d{3,})"
+
+
+def calculix_float(token):
+    """Fortran E-format omits E when the exponent needs three digits."""
+    token=token.replace('D','E').replace('d','e')
+    if re.fullmatch(r'[+-]?(?:\d+\.\d*|\.\d+)[+-]\d{3,}',token):
+        token=re.sub(r'([+-]\d{3,})$',r'E\1',token)
+    value=float(token)
+    if not math.isfinite(value):raise ValueError('Nonfinite CalculiX output')
+    return value
 
 
 def calculix_number(value):
@@ -136,9 +150,9 @@ def parse_stress(path):
             active = "STRESS" in line
         elif active and line.startswith(" -1"):
             node = int(line[3:13])
-            values = re.findall(r"[+-]?\d\.\d+(?:[ED][+-]\d+)", line[13:])
+            values = re.findall(CALCULIX_REAL_PATTERN, line[13:])
             if len(values) >= 6:
-                sx, sy, sz, txy, tyz, tzx = [float(v.replace("D", "E")) for v in values[:6]]
+                sx, sy, sz, txy, tyz, tzx = [calculix_float(v) for v in values[:6]]
                 stress[node] = float(np.sqrt(0.5 * ((sx - sy) ** 2 + (sy - sz) ** 2 + (sz - sx) ** 2) + 3 * (txy ** 2 + tyz ** 2 + tzx ** 2)))
     if not stress:
         raise RuntimeError("Solver output has no nodal stress field")

@@ -19,6 +19,7 @@ import numpy as np
 from .analysis_mesh import exterior_triangles, generate_mesh, prepare_geometry
 from .model import digest, geometry_key, study_key
 from .store import now, write_json
+from .solver import calculix_float,CALCULIX_REAL_PATTERN
 
 ADAPTER_VERSION = "calculix-studies-v6"
 LABELS = {"linear_static": "Static stress", "modal": "Modal frequencies", "buckling": "Structural buckling",
@@ -244,7 +245,7 @@ def write_deck(path, mesh, project, thermal=False, temperatures=None):
     return fixed, forces
 
 
-def parse_frd(path):
+def parse_frd(path,allow_empty=()):
     frames, frame, frame_time = [], None, None
     for line in path.read_text(errors="replace").splitlines():
         if line.startswith("  100CL"):
@@ -255,11 +256,12 @@ def parse_frd(path):
             frames.append(frame)
         elif frame is not None and line.startswith(" -1"):
             node = int(line[3:13])
-            values = re.findall(r"[+-]?\d\.\d+(?:[ED][+-]\d+)",line[13:])
-            frame["values"][node] = [float(v.replace("D","E")) for v in values]
+            values = re.findall(CALCULIX_REAL_PATTERN,line[13:])
+            frame["values"][node] = [calculix_float(v) for v in values]
         elif line.startswith(" -3"):
             frame = None
     for frame in frames:
+        if not frame['values'] and frame['name'] in allow_empty:continue
         if not frame["values"] or not all(np.isfinite(v).all() for v in frame["values"].values()):
             raise RuntimeError("Solver field is empty or contains nonfinite values")
     return frames
@@ -433,7 +435,7 @@ def parse_vector_history(path):
         elif target is not None:
             parts=line.split()
             if len(parts)==4 and parts[0].isdigit():
-                target[int(parts[0])]=[float(v.replace("D","E")) for v in parts[1:]]
+                target[int(parts[0])]=[calculix_float(v) for v in parts[1:]]
     return history
 
 

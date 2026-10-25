@@ -275,7 +275,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
       });
     return regionId;
   };
-  const chooseBondFace = (
+  const chooseInterfaceFace = (
     index: number,
     role: "primary_region_id" | "secondary_region_id",
   ) => {
@@ -1002,7 +1002,7 @@ export default function SimulationPanel(props: DomainPanelProps) {
                           <Button
                             disabled={props.selection?.kind !== "face"}
                             onClick={() =>
-                              chooseBondFace(index, `${role}_region_id`)
+                              chooseInterfaceFace(index, `${role}_region_id`)
                             }
                           >
                             Use selected {role} face
@@ -1063,6 +1063,162 @@ export default function SimulationPanel(props: DomainPanelProps) {
                         }
                       >
                         Remove bond
+                      </Button>
+                    </div>
+                  ),
+              )}
+            </details>
+          )}
+          {(study.type === "nonlinear_static" ||
+            study.interfaces?.some(
+              (item: Row) => item.formulation === "surface_to_surface_penalty",
+            )) && (
+            <details>
+              <summary>Surface contact</summary>
+              <p className="sim-help">
+                Experimental quadratic face contact with separation and Coulomb
+                friction. Supply all properties and their source. Results remain
+                inconclusive while active contact stability and frictional work
+                are unqualified. Geometry is preserved; positive opening is
+                clipped in solver contact fields.
+              </p>
+              <Button
+                disabled={
+                  study.type !== "nonlinear_static" || elementFamily !== "C3D10"
+                }
+                onClick={() =>
+                  editStudy((draft) => {
+                    draft.interfaces ??= [];
+                    draft.interfaces.push({
+                      id: id("contact"),
+                      kind: "separation",
+                      formulation: "surface_to_surface_penalty",
+                      primary_region_id: "",
+                      secondary_region_id: "",
+                      position_tolerance_mm: null,
+                      normal_penalty_n_mm3: null,
+                      friction_coefficient: null,
+                      tangential_penalty_n_mm3: null,
+                      maximum_penetration_mm: null,
+                      source: "",
+                    });
+                  })
+                }
+              >
+                Add surface contact
+              </Button>
+              {study.interfaces?.map(
+                (contact: Row, index: number) =>
+                  contact.formulation === "surface_to_surface_penalty" && (
+                    <div className="sim-boundary" key={contact.id}>
+                      {(["primary", "secondary"] as const).map((role) => (
+                        <label key={role}>
+                          {role === "primary"
+                            ? "Primary contact region"
+                            : "Secondary contact region"}
+                          <SelectControl
+                            aria-label={`Contact ${index + 1} ${role} region`}
+                            value={contact[`${role}_region_id`] ?? ""}
+                            onChange={(event) =>
+                              editStudy((draft) => {
+                                draft.interfaces[index][`${role}_region_id`] =
+                                  event.target.value;
+                              })
+                            }
+                          >
+                            <option value="">Choose a face region</option>
+                            {model?.regions?.map((region: Row) => (
+                              <option key={region.id} value={region.id}>
+                                {region.id}
+                              </option>
+                            ))}
+                          </SelectControl>
+                          <Button
+                            disabled={props.selection?.kind !== "face"}
+                            onClick={() =>
+                              chooseInterfaceFace(index, `${role}_region_id`)
+                            }
+                          >
+                            Use selected {role} contact face
+                          </Button>
+                        </label>
+                      ))}
+                      {(
+                        [
+                          ["normal_penalty_n_mm3", "Normal penalty (N/mm³)"],
+                          [
+                            "friction_coefficient",
+                            "Friction coefficient (0 for frictionless)",
+                          ],
+                          [
+                            "tangential_penalty_n_mm3",
+                            "Tangential penalty (N/mm³, positive friction only)",
+                          ],
+                          [
+                            "maximum_penetration_mm",
+                            "Maximum permitted penetration (mm)",
+                          ],
+                          [
+                            "position_tolerance_mm",
+                            "Initial contact geometry tolerance (mm)",
+                          ],
+                        ] as const
+                      ).map(([field, label]) => (
+                        <label key={field}>
+                          {label}
+                          <Input
+                            aria-label={`Contact ${index + 1} ${label}`}
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={contact[field] ?? ""}
+                            onChange={(event) =>
+                              editStudy((draft) => {
+                                draft.interfaces[index][field] =
+                                  event.target.value === ""
+                                    ? null
+                                    : Number(event.target.value);
+                              })
+                            }
+                          />
+                        </label>
+                      ))}
+                      <label>
+                        Contact assumption and property source
+                        <Input
+                          aria-label={`Contact ${index + 1} source`}
+                          value={contact.source}
+                          onChange={(event) =>
+                            editStudy((draft) => {
+                              draft.interfaces[index].source =
+                                event.target.value;
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="sim-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={contact.kind !== "disabled"}
+                          onChange={(event) =>
+                            editStudy((draft) => {
+                              draft.interfaces[index].kind = event.target
+                                .checked
+                                ? "separation"
+                                : "disabled";
+                            })
+                          }
+                        />
+                        Enabled
+                      </label>
+                      <Button
+                        onClick={() =>
+                          editStudy((draft) => {
+                            draft.interfaces.splice(index, 1);
+                          })
+                        }
+                      >
+                        Remove contact
                       </Button>
                     </div>
                   ),
@@ -1395,7 +1551,9 @@ export default function SimulationPanel(props: DomainPanelProps) {
                     </a>
                     {r.interface_artifact && (
                       <a href={artifact(r.interface_artifact)} download>
-                        Bond interface fields
+                        {r.study_type === "nonlinear_static"
+                          ? "Contact interface fields"
+                          : "Bond interface fields"}
                       </a>
                     )}
                     {r.reference_load_artifact && (
@@ -1466,6 +1624,19 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 </option>
                 <option value="temperature">Temperature (K)</option>
                 <option value="stress">Von Mises stress (MPa)</option>
+                {field.nodal_contact && (
+                  <>
+                    <option value="contact_pressure">
+                      Contact pressure (MPa)
+                    </option>
+                    <option value="contact_shear">
+                      Contact shear magnitude (MPa)
+                    </option>
+                    <option value="contact_penetration">
+                      Contact penetration, negative (mm)
+                    </option>
+                  </>
+                )}
                 {field.element_density && (
                   <option value="density">
                     Relative density · mesh guidance
@@ -1525,6 +1696,13 @@ export default function SimulationPanel(props: DomainPanelProps) {
                 scale={scale}
                 mode={mode}
               />
+              {quantity.startsWith("contact_") && (
+                <p className="sim-help">
+                  Secondary contact faces only; nodal recovery may smooth
+                  integration-point peaks.
+                  {field.contact_gap_convention}
+                </p>
+              )}
               <p className="sim-help">
                 Blue → red: low → high. Display scale changes the picture. Mode
                 amplitudes are normalized, not physical motion.

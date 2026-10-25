@@ -18,7 +18,7 @@ def fingerprint_file(path):
 
 def software_fingerprint(study_type,element_family="C3D4"):
     root=Path(__file__).parent
-    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","simulation_thermoelastic.py","simulation_eigen.py","simulation_buckling.py","simulation_assembly.py","simulation_bonding.py","simulation_mortar.py","simulation_mode_tracking.py","mode_tracking.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
+    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_mesh_worker.py","simulation_units.py","simulation_quadratic.py","simulation_quadratic_thermal.py","simulation_thermoelastic.py","simulation_eigen.py","simulation_buckling.py","simulation_assembly.py","simulation_bonding.py","simulation_mortar.py","simulation_contact.py","simulation_mode_tracking.py","mode_tracking.py","quadratic.py","thermal_exchange.py","analysis_mesh.py","mesh_quality_worker.py","solver.py","analysis.py","domains/simulation.py","simulation_provenance.py")}
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)
@@ -31,7 +31,7 @@ def software_fingerprint(study_type,element_family="C3D4"):
         local=root.parents[1]/".tools/root/usr/bin/ccx"
         binary=configured or shutil.which("ccx") or (str(local) if local.exists() else None)
         result["calculix_binary_sha256"]=fingerprint_file(binary) if binary and Path(binary).is_file() else "unavailable"
-    if element_family=="C3D10" and study_type in {"linear_static","modal","buckling"}:
+    if element_family=="C3D10" and study_type in {"linear_static","nonlinear_static","modal","buckling"}:
         runtime={}
         patterns={"numpy":["numpy/_core/_umath_linalg*.so","numpy/_core/_multiarray_umath*.so","numpy.libs/*","numpy/.dylibs/*"],
                   "scipy":["scipy/linalg/_flapack*.so","scipy/sparse/linalg/_eigen/arpack/_arpack*.so","scipy/sparse/linalg/_dsolve/_superlu*.so","scipy.libs/*","scipy/.dylibs/*"]}

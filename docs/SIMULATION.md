@@ -58,10 +58,90 @@ CalculiX assembly deck is claimed. Dense mortar factors/transfers are capped at
 three million entries, expanded constraints at ten million entries and reduced
 mechanical unknowns at 60,000. Larger/dual-space qualification remains open.
 
-This increment is linear perfect bonding. Quadratic separation/friction,
+This bonded increment is linear perfect bonding. Experimental separation/friction
+is described below; qualification,
 adhesive compliance/damage, general connectors/preload, thermal interfaces,
 bonded modal/buckling/nonlinear transfer and physical interface calibration remain
 open under the complete simulation roadmap.
+
+## Experimental quadratic separation and friction
+
+Canonical nonlinear-static C3D10 studies now translate explicit
+`surface_to_surface_penalty` interfaces with `kind = "separation"` into
+CalculiX 2.23 face-to-face contact. Full six-node exterior faces retain their
+owning element and S1/S2/S3/S4 identity. Primary/secondary regions must belong
+to distinct bodies and each region to one connected solid. Secondary-node
+ownership cannot be ambiguous across pairs. No coordinate adjustment, invented
+spring or missing-interface fallback is used. Perfect linear bonds keep their
+separate mortar formulation; mixed bond/contact, self-contact and connector
+translation remain unavailable.
+
+Inputs require a source, primary/secondary regions, initial geometry tolerance,
+normal pressure/overclosure slope in **N/mm³**, an explicit friction coefficient
+(including zero), and a maximum permitted penetration in mm. Positive friction
+also requires a tangential stick slope in N/mm³. These surface slopes are not
+paired-node N/mm stiffnesses. Actual mesh geometry defines gaps; the paired-node
+`initial_gap_mm` cannot be used as a surface offset. The geometry tolerance only
+bounds the coincident initial-contact support audit, not solver search or a
+coordinate move.
+
+The adapter first verifies independent mounting constraints or the rank of
+supports plus coincident full-quadratic **normal** contact rigid spaces. Friction
+is never counted as a mounting constraint. That necessary initial test is capped
+at 32 solids and inherits the current bounded graph-mortar geometry/integration
+limits when contact carries rigid support. Gapped/partial contacts cannot repair
+an initially unsupported load path through this audit. Changing contact patches,
+sliding constraints and active-set tangent stability throughout loading remain
+unqualified. All surface-contact runs therefore remain **inconclusive**, even
+when their numerical checks pass. Friction runs additionally retain the gap
+that accumulated frictional work is not qualified.
+
+An unloaded first step completes CalculiX's first-step penetration-removal
+logic before the actual loading path. Without it, a series-bar probe had correct
+final displacement but incorrect intermediate geometric gaps. The adapter checks
+that initialization neither moves nor loads the design beyond roundoff, and
+rejects hidden interference/prestress. User load parameters subtract that period;
+raw solver total times and the mapping remain in evidence. This is a numerical
+initialization of a rate-independent static model, not an inferred physical
+waiting period. The implementation follows the official 2.23
+`gencontelem_f2f.f` and `springforc_f2f.f` behavior, and retains original solver
+outputs.
+
+Each mesh runs the declared increments, half-sized increments, and a separate
+half-increment trial with doubled normal/tangential penalties. Returned fields
+always use the nominal penalties. Displacement-history penalty sensitivity,
+full-path residuals, whole-model and per-body force/moment equilibrium, contact
+pressure/overclosure and Coulomb bounds, and the supplied penetration limit are
+reported. `contact.json` retains integration-point records, each pair's force and
+moment resultants, spring energy, initial support audit and history. The handoff
+keeps every executed trial and exports the exact executed nominal finest deck.
+Spring energy is recoverable penalty energy, **not** accumulated frictional
+heat/work. Integration-point coordinates/weights and frictional dissipation are
+not inferred from the printed output.
+
+The studio edits these sourced inputs and offers pressure, shear and negative
+penetration plots on secondary faces only. They are nodal recoveries, distinct
+from integration-point peaks. CalculiX COPEN clips positive opening to zero;
+zero COPEN cannot establish a closed interface or measure a positive clearance.
+Empty CELS output is allowed only when independently printed contact count and
+spring energy are both zero; required displacement/stress/contact fields remain
+complete and finite. Undefined zero-area center/normal statistics stay in raw
+DAT output and are not promoted to measured geometry. Fortran three-digit
+exponents without an E are parsed without replacing small values with zero.
+
+Independent SI equations check all increments of two/three-bar compression,
+penalty compliance, open-interface zero tension, and guided simple-shear stick
+and Coulomb sliding limits. A native CAD → UI → mesh → solver → field download
+workflow is also exercised. These synthetic numerical cases do not calibrate a
+material/interface, establish general sliding convergence, or prove hardware
+reliability. Contact tangent qualification, integrated dissipation/energy,
+nontrivial sliding/unloading, general curved mapping and measured interface tests
+remain part of the full roadmap.
+
+Primary solver definitions: [CalculiX official downloads](https://www.dhondt.de/),
+[2.23 HTML manual archive](https://www.dhondt.de/ccx_2.23.htm.tar.bz2), and
+[2.23 source](https://www.dhondt.de/ccx_2.23.src.tar.bz2). No new production solver
+or dependency is introduced by this contact adapter.
 
 ## Canonical quadratic study integration
 
@@ -92,7 +172,8 @@ declared inputs; recording a process does not calibrate an isotropic material la
 The current canonical quadratic transfer supports fixed/world-axis partial
 constraints, consistent force/pressure/gravity loads, and conservative remote
 force/moment idealizations. Disconnected static load paths require adequate supports; validated perfect
-surface bonds can connect solids. Modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Linear perfect surface bonds are described above. General contact, bolts,
+surface bonds and experimental nonlinear face contact can connect solids. Modal rigid motions are preserved explicitly. Shared points/edges do not become a solid load path. Linear perfect surface bonds and experimental separation/friction are described above.
+General contact qualification, bolts,
 inertial relief and bearing/hydrostatic loads
 are not yet connected to this quadratic adapter; unsupported conditions refuse.
 The existing C3D4 and legacy quadratic study capabilities remain separately
@@ -215,7 +296,7 @@ uses unique staging and rechecks current study inputs before publication. Source
 CAD/STEP is not included; numerical meshes are included. None of this establishes
 physical correlation or complete Fusion parity.
 
-## Current executable workflows
+## Legacy single-study executable workflows
 
 `o3d studies --json` returns the versioned capability manifest and setup errors.
 `o3d simulate --json` and the studio run the same study model and external CalculiX

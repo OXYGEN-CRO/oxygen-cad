@@ -12,6 +12,9 @@ export interface FieldData {
   element_density?: Record<string, number>;
   nodal_extrapolated_von_mises_mpa?: Record<string, number>;
   nodal_recovered_von_mises_mpa?: Record<string, number>;
+  nodal_contact?: Record<string, number[]>;
+  contact_secondary_node_ids?: number[];
+  contact_gap_convention?: string;
   boundary_triangles?: number[][];
   element_connectivity?: Record<string, number[]>;
   modes?: {
@@ -58,8 +61,23 @@ export default function FieldPreview({
         ? (field.modes?.[mode]?.shape ??
           field.modes?.[mode]?.mass_normalized_displacement)
         : field.displacements_mm;
-    const values: Record<string, number> =
-      quantity === "temperature"
+    const values: Record<string, number> = quantity.startsWith("contact_")
+      ? Object.fromEntries(
+          (field.contact_secondary_node_ids ?? []).map((id) => {
+            const v = field.nodal_contact?.[id];
+            return [
+              id,
+              v
+                ? quantity === "contact_pressure"
+                  ? v[3]
+                  : quantity === "contact_shear"
+                    ? Math.hypot(v[4], v[5])
+                    : v[0]
+                : NaN,
+            ];
+          }),
+        )
+      : quantity === "temperature"
         ? (field.temperature_k ?? {})
         : quantity === "stress"
           ? (field.nodal_recovered_von_mises_mpa ??
@@ -111,7 +129,9 @@ export default function FieldPreview({
     const uniform =
       Number(minimum.toPrecision(6)) === Number(maximum.toPrecision(6));
     const unit =
-      quantity === "stress"
+      quantity === "stress" ||
+      quantity === "contact_pressure" ||
+      quantity === "contact_shear"
         ? "MPa"
         : quantity === "temperature"
           ? "K"
@@ -130,6 +150,11 @@ export default function FieldPreview({
     const positions: number[] = [],
       colors: number[] = [];
     for (const triangle of field.boundary_triangles) {
+      if (
+        quantity.startsWith("contact_") &&
+        !triangle.every((n) => Object.hasOwn(values, n))
+      )
+        continue;
       const elementValue =
         elementValues?.[
           owner.get([...triangle].sort((a, b) => a - b).join(",")) ?? ""

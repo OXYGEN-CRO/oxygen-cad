@@ -6,12 +6,13 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 ## Canonical quadratic transfer
 
-Adapter `oxygen-canonical-6` connects static and nonlinear C3D10 CalculiX studies
+Adapter `oxygen-canonical-9` connects static and nonlinear C3D10 CalculiX studies
 to these same canonical models, materials, cases and result signatures. No legacy
 Project is reconstructed, no midside node is discarded and no material/load is
-invented. Multiple bodies/materials are tested as separately supported solids;
-this does not establish quadratic contact or general assembly parity. Quadratic steady thermal/prescribed-film electronics conduction also uses these records, without elastic-property prerequisites. Other
-canonical study families still use their C3D4 adapters. Sequential linear thermal-stress transfer is connected with explicit expansion and stress-free temperature. The separate legacy
+invented. Multiple bodies/materials retain their identity. Linear perfect mortar bonds and
+experimental nonlinear face separation/friction are integrated with explicit
+limits; general assembly/contact qualification remains open. Quadratic steady thermal/prescribed-film electronics conduction also uses these records, without elastic-property prerequisites. Quadratic unloaded modal and linearized buckling studies also share these records.
+Remaining study families retain their separately bounded C3D4 adapters. Sequential linear thermal-stress transfer is connected with explicit expansion and stress-free temperature. The separate legacy
 quadratic study path is retained pending complete unification/migration.
 
 Quadratic thermal uses full ten-node conduction and volume heat, six-node
@@ -124,9 +125,9 @@ subtracts the final history-scaled `CLOAD` there. Raw solver forces, applied loa
 and corrected support reactions remain in the field artifact. No correction is
 applied to unconstrained components. This is distinct from the density fix.
 
-Contact is a sourced finite-stiffness paired-node idealization: elastic bonded springs or frictionless normal separation springs, with explicit gap and active-set reporting. It is not general surface-to-surface sliding, Coulomb friction, self-contact or automatic contact qualification. Detection proposes one-to-one node pairs and reports ambiguity; it never silently inserts physical interface properties. Bolts are axial elastic trusses with specified preload; thread, washer, bending and torque conversion are absent. Inertial relief explicitly assembles translational/angular acceleration and removes only six rigid displacement gauges for a connected free solid.
+The C3D4 contact path is a sourced finite-stiffness paired-node idealization: elastic bonded springs or frictionless normal separation springs, with explicit gap and active-set reporting. It is not general surface-to-surface sliding, Coulomb friction, self-contact or automatic contact qualification. Detection proposes one-to-one node pairs and reports ambiguity; it never silently inserts physical interface properties. Bolts are axial elastic trusses with specified preload; thread, washer, bending and torque conversion are absent. Inertial relief explicitly assembles translational/angular acceleration and removes only six rigid displacement gauges for a connected free solid.
 
-CalculiX is invoked as a separate GPL-licensed executable for nonlinear C3D4/C3D10 studies and quadratic linear-static cases. The adapter translates isotropic elasticity, supplied true-stress/equivalent-plastic-strain J2 hardening, optional finite deformation, dead nodal loads and world-axis zero supports. Increment histories support loading and unloading. It checks complete step time, per-increment convergence records, constrained-DOF reactions and load-step sensitivity. It refuses unimplemented nonlinear contact/connector and follower-load translation. An analytical plastic bar reproduces both the loaded strain and permanent strain after unloading. Material curves in tests are synthetic and do not establish a real grade or process calibration.
+CalculiX is invoked as a separate GPL-licensed executable for nonlinear C3D4/C3D10 studies and quadratic linear-static cases. The adapter translates isotropic elasticity, supplied true-stress/equivalent-plastic-strain J2 hardening, optional finite deformation, dead nodal loads and world-axis zero supports. Increment histories support loading and unloading. It checks complete step time, per-increment convergence records, constrained-DOF reactions and load-step sensitivity. The C3D10 nonlinear path additionally translates explicitly sourced experimental face-to-face separation/Coulomb friction. Connector and follower-load translation still refuse. An analytical plastic bar reproduces both the loaded strain and permanent strain after unloading. Material curves in tests are synthetic and do not establish a real grade or process calibration.
 
 Events use physical lumped mass, an explicit stability bound including potential closed-contact stiffness, user load histories, initial velocity and optional viscous damping. No mass scaling is applied. Timestep refinement, work/kinetic/strain/damping energy and significant-energy kinetic/internal ratios are reported. Peak scalar stress/displacement are accumulated at **every** integration step; displayed history decimation never defines an extremum. Stored spatial fields are labeled final-state fields and include a separate stress envelope. Large motion, rate laws, damage/deletion, prescribed-motion events and advanced impact qualification require another adapter. A quasi-static label requires a sufficiently small kinetic/internal ratio over the significant strain-energy history.
 
@@ -177,3 +178,21 @@ Quadratic separation/friction, adhesive laws, connectors/preload, thermal and
 bonded modal/buckling/nonlinear transfer, larger budgets and physical calibration
 remain unfinished. Earlier all-quadratic-interface refusal statements are
 historical for this explicit linear perfect-bond subset only.
+
+## Experimental full-quadratic face contact
+
+See the [implementation ledger](../SIMULATION.md#experimental-quadratic-separation-and-friction)
+for the complete input/output and qualification contract. Normal and tangential
+surface penalties use N/mm³ with explicit sources and a penetration limit.
+No paired-node N/mm parameter is reinterpreted. Initial normal-contact support
+rank, unloaded initialization, full loading histories, body-wise equilibrium,
+Coulomb bounds and separate step/penalty trials remain inspectable. Raw solver
+times and nominal executed decks are retained. COPEN positive opening is clipped;
+CELS is recoverable spring energy. Neither is a substitute for measured clearance
+or integrated frictional dissipation.
+
+All surface-contact results remain inconclusive pending active-set tangent
+stability; friction additionally lacks qualified integrated work. General sliding,
+mixed bond/contact, self-contact, connectors, thermal contact and physical
+interface/material correlation remain open. Independent SI compression/opening
+and guided shear references establish only the stated numerical fixtures.

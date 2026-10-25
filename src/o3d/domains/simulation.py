@@ -19,9 +19,9 @@ CAPABILITIES=[
     ("SIM-01","Linear static stress","experimental","C3D4 reference and audited C3D10 CalculiX isotropic multi-body/multi-case elasticity; physical probes, mesh refinement and equation/equilibrium checks"),
     ("SIM-02","Loads and supports","experimental","Planar traction/pressure, conservative moments/remote forces, gravity, bearing-direction traction and hydrostatic pressure; fixed/partial/frictionless/cylindrical pin"),
     ("SIM-03","Inertial relief","experimental","Free connected isotropic static solid; explicit translation/angular acceleration and six rigid gauge constraints"),
-    ("SIM-04","Assembly contact","experimental","C3D4 sourced paired penalties and canonical C3D10 linear perfect bonds through full-quadratic common-refinement mortar; no quadratic separation/friction/self-contact"),
+    ("SIM-04","Assembly contact","experimental","C3D4 paired penalties; C3D10 linear perfect mortar bonds and experimental nonlinear face separation/Coulomb friction; active-set tangent stability and frictional work unqualified; no self-contact"),
     ("SIM-05","Bolts/connectors","experimental","Axial elastic truss connector with sourced preload/stiffness; no thread/washer/bending/torque-derived preload"),
-    ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 isotropic-hardening curves; full-path peaks/equilibrium, dead loads and axis supports; no translated contact/bolts"),
+    ("SIM-06","Nonlinear static","experimental","CalculiX C3D4/C3D10 finite deformation and supplied J2 curves; explicit experimental C3D10 face contact, full-path equilibrium, step/penalty sensitivity; no bolts/follower loads"),
     ("SIM-07","Modal","experimental","C3D4 lumped and C3D10 consistent-mass eigenpairs, analytic rigid spaces, mass-weighted modal pairing/participation and residuals; no quadratic interfaces/preload transfer"),
     ("SIM-08","Structural buckling","experimental","C3D4 and full C3D10 reference-load stress/geometric stiffness, positive factors and physical mode correlation; no imperfect collapse/postbuckling"),
     ("SIM-09","Steady thermal","experimental","C3D4 solid conduction/thermal pair conductance and audited C3D10 conduction, consistent power/flux/body heat/film/radiation with heat balance; quadratic interfaces unavailable"),
@@ -68,6 +68,7 @@ def preflight(project,domain,study,model):
     if not study.assumptions_confirmed:errors.append("Review and confirm the study assumptions")
     if not study.cases:errors.append("Add at least one explicit load case")
     if study.settings.probe_point_mm is not None and study.type not in {"linear_static","nonlinear_static","thermal_stress"}:errors.append("Physical displacement probes currently require a static or thermal-stress study; arbitrary eigenmode amplitudes are not displacement predictions")
+    if study.type in {'linear_static','nonlinear_static','thermal_stress'} and any(any(c.initial_velocity_mm_s) for c in study.cases):errors.append('Static studies do not translate initial velocity; use an event study')
     if not model.mesh:errors.append("Generate or supply a volume mesh")
     for mesh in [model.mesh,*model.refinements]:
         if mesh and mesh.geometry_key!=current:errors.append(f"Mesh {mesh.id} belongs to stale geometry")
@@ -77,7 +78,9 @@ def preflight(project,domain,study,model):
     if model.mesh and model.mesh.element_family=="C3D10":
         if study.bolts or study.settings.inertial_relief:errors.append("Quadratic connector/inertial-relief translation is not integrated; no condition will be discarded")
         active=[i for i in study.interfaces if i.kind!='disabled']
-        if study.interfaces and not (study.type=='linear_static' and all(i.kind=='bonded' and i.formulation=='quadratic_surface_mortar' for i in active)):errors.append("Quadratic interfaces currently require linear-static full-quadratic surface bonds; no other contact/thermal/connector condition is reinterpreted; no condition will be discarded")
+        bonds=study.type=='linear_static' and all(i.kind=='bonded' and i.formulation=='quadratic_surface_mortar' for i in active)
+        contact=study.type=='nonlinear_static' and all(i.kind=='separation' and i.formulation=='surface_to_surface_penalty' for i in active)
+        if study.interfaces and not (bonds or contact):errors.append("Quadratic interfaces require linear-static full-quadratic surface bonds or nonlinear-static explicit surface penalty contact; no other condition is reinterpreted; no condition will be discarded")
         if study.type in {"steady_thermal","electronics_cooling"} and any(c.supports or c.loads or c.history or any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Quadratic steady thermal studies require thermal boundaries without mechanical supports/loads/history/velocity")
         if any(s.kind not in {"fixed","partial"} for c in study.cases for s in c.supports):errors.append("Quadratic supports require fixed or world-axis partial components")
         if any(load.kind not in {"force","pressure","gravity","moment","remote"} for c in study.cases for load in c.loads):errors.append("Quadratic load transfer supports force, pressure, gravity and conservative moment/remote loads")
@@ -85,7 +88,7 @@ def preflight(project,domain,study,model):
     if study.type=="thermal_stress":
         if study.stress_free_temperature_k is None:errors.append("Thermal stress requires an explicit stress-free temperature in kelvin")
         if any(any(c.initial_velocity_mm_s) for c in study.cases):errors.append("Thermal stress does not translate initial velocity")
-    if study.type=="nonlinear_static" and not study.settings.large_deformation and not any(m.plastic_curve for m in domain.materials if m.id in {a.material_id for a in study.assignments}):errors.append("Nonlinear study requires large deformation or a sourced plastic constitutive curve")
+    if study.type=="nonlinear_static" and not study.settings.large_deformation and not any(i.kind=='separation' and i.formulation=='surface_to_surface_penalty' for i in study.interfaces) and not any(m.plastic_curve for m in domain.materials if m.id in {a.material_id for a in study.assignments}):errors.append("Nonlinear study requires large deformation, explicit surface contact or a sourced plastic constitutive curve")
     return errors
 
 
@@ -122,7 +125,7 @@ def _mesh(store,project,domain,study,model,payload,cancel):
         parts=[{"body_id":"part","step":str(store.artifact(built["artifacts"]["step"]))}]
         faces=[{**f,"body_id":"part"} for f in built["faces"]]
     required={item.region_id for case in study.cases for item in [*case.supports,*case.loads,*case.thermal] if item.region_id}|{r.id for r in model.regions}
-    required|={name for interface in study.interfaces if interface.kind!='disabled' and interface.formulation=='quadratic_surface_mortar' for name in [interface.primary_region_id,interface.secondary_region_id] if name}
+    required|={name for interface in study.interfaces if interface.kind!='disabled' and interface.formulation in {'quadratic_surface_mortar','surface_to_surface_penalty'} for name in [interface.primary_region_id,interface.secondary_region_id] if name}
     region_requests={r.id:r.model_dump(mode="json") for r in model.regions}
     region_requests.update({r["id"]:r for r in payload.get("regions",[])})
     regions=[]

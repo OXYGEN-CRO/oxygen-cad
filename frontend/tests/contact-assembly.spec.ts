@@ -1,0 +1,274 @@
+import { expect, test, type APIRequestContext } from "@playwright/test";
+async function complete(request: APIRequestContext, id: string) {
+  let job: any;
+  await expect
+    .poll(
+      async () => {
+        job = await (await request.get(`/api/jobs/${id}`)).json();
+        return job.state;
+      },
+      { timeout: 120000 },
+    )
+    .not.toMatch(/queued|running/);
+  expect(job.state, job.message).toBe("succeeded");
+  return job.result;
+}
+
+test("native solids preserve explicit experimental contact and downloadable evidence", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180000);
+  const original = await (await request.get("/api/project")).json();
+  try {
+    const reset = await request.post("/api/commands", {
+      data: {
+        expected_revision: original.revision,
+        actor: "human",
+        project: {
+          ...original,
+          name: "Disposable contact assembly reference",
+          geometry_engine: "solidcraft",
+          native_document: null,
+          features: [],
+          parameters: {},
+          references: [],
+          domains: {},
+          material: null,
+          requirements: [],
+          placement: { translation: [0, 0, 0], rotation: [0, 0, 0] },
+        },
+      },
+    });
+    expect(reset.ok(), await reset.text()).toBeTruthy();
+    for (const [name, corner] of [
+      ["First", [0, 0, 0]],
+      ["Second", [10, 0, 0]],
+    ] as const) {
+      const project = await (await request.get("/api/project")).json();
+      const response = await request.post("/api/native/execute", {
+        data: {
+          expected_revision: project.revision,
+          actor: "human",
+          command: "solid.box",
+          params: { length: 10, width: 2, height: 2, corner, body_name: name },
+        },
+      });
+      expect(response.ok(), await response.text()).toBeTruthy();
+    }
+    await complete(
+      request,
+      (await (await request.post("/api/jobs/build")).json()).id,
+    );
+    const state = await (await request.get("/api/state")).json();
+    const bodies = state.build.scene.bodies;
+    const first = bodies.find((b: any) => b.name === "First"),
+      second = bodies.find((b: any) => b.name === "Second");
+    const face = (body: any, sign: number) =>
+      body.faces.find((f: any) => f.normal && sign * f.normal[0] > 0.99);
+    const regions = [
+      { id: "root", body_id: first.id, selection: face(first, -1).id },
+      { id: "primary", body_id: first.id, selection: face(first, 1).id },
+      { id: "secondary", body_id: second.id, selection: face(second, -1).id },
+      { id: "tip", body_id: second.id, selection: face(second, 1).id },
+    ];
+    const project = await (await request.get("/api/project")).json();
+    const data = {
+      schema_version: 1,
+      active_study_id: "assembly",
+      models: [
+        {
+          id: "model",
+          name: "Native contact pair",
+          geometry_key: state.geometry_key,
+          body_ids: [first.id, second.id],
+          regions,
+        },
+      ],
+      materials: [
+        {
+          id: "synthetic",
+          name: "Declared numerical material",
+          source: "SI browser reference, no process calibration",
+          youngs_modulus_mpa: 200000,
+          poisson_ratio: 0,
+        },
+      ],
+      studies: [
+        {
+          id: "assembly",
+          name: "Actual surface contact",
+          type: "nonlinear_static",
+          model_id: "model",
+          assignments: [first, second].map((body) => ({
+            body_id: body.id,
+            material_id: "synthetic",
+          })),
+          cases: [
+            {
+              id: "pull",
+              name: "Contact SI reference",
+              supports: [
+                { id: "root", region_id: "root" },
+                {
+                  id: "guide",
+                  region_id: "tip",
+                  kind: "partial",
+                  components: [false, true, true],
+                },
+              ],
+              loads: [
+                {
+                  id: "force",
+                  region_id: "tip",
+                  vector: [-100, 0, 0],
+                  source: "Declared100Ntest",
+                },
+              ],
+            },
+          ],
+          interfaces: [],
+          settings: { probe_point_mm: [20, 1, 1], probe_body_id: second.id },
+          assumptions_confirmed: true,
+        },
+      ],
+    };
+    const save = await request.put("/api/domains/simulation", {
+      data: { expected_revision: project.revision, actor: "human", data },
+    });
+    expect(save.ok(), await save.text()).toBeTruthy();
+    await page.goto("/");
+    await page
+      .getByLabel("Workspace", { exact: true })
+      .selectOption("simulation");
+    await page.getByText("Surface contact", { exact: true }).click();
+    await page
+      .getByRole("button", { name: "Add surface contact", exact: true })
+      .click();
+    await page
+      .getByLabel("Contact 1 primary region", { exact: true })
+      .selectOption("primary");
+    await page
+      .getByLabel("Contact 1 secondary region", { exact: true })
+      .selectOption("secondary");
+    await page
+      .getByLabel("Contact 1 Initial contact geometry tolerance (mm)", {
+        exact: true,
+      })
+      .fill("0.0000001");
+    await page
+      .getByLabel("Contact 1 source", { exact: true })
+      .fill("Declared frictionless contact verification parameters");
+    await page
+      .getByLabel("Contact 1 Normal penalty (N/mm³)", { exact: true })
+      .fill("10000000");
+    await page
+      .getByLabel("Contact 1 Friction coefficient (0 for frictionless)", {
+        exact: true,
+      })
+      .fill("0");
+    await page
+      .getByLabel("Contact 1 Maximum permitted penetration (mm)", {
+        exact: true,
+      })
+      .fill("0.0001");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await (await request.get("/api/project")).json()).domains.simulation
+            .studies[0].interfaces[0]?.source,
+      )
+      .toBe("Declared frictionless contact verification parameters");
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Saving/ }),
+    ).toHaveCount(0);
+    const saved = await (await request.get("/api/project")).json();
+    expect(saved.domains.simulation.studies[0].interfaces[0].formulation).toBe(
+      "surface_to_surface_penalty",
+    );
+    expect(saved.domains.simulation.materials[0].density_g_cm3).toBeNull();
+    await page.getByLabel("Initial size (mm)", { exact: true }).fill("1.5");
+    await page.getByLabel("Mesh levels", { exact: true }).fill("2");
+    await page
+      .getByRole("button", { name: "Generate mesh", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () =>
+          (await (await request.get("/api/project")).json()).domains.simulation
+            .models[0].refinements?.length,
+        { timeout: 120000 },
+      )
+      .toBe(1);
+    await expect(
+      page.getByRole("button", { name: "Solve all cases", exact: true }),
+    ).toBeEnabled();
+    await page
+      .getByRole("button", { name: "Solve all cases", exact: true })
+      .click();
+    await expect(
+      page.getByText("Contact SI reference · inconclusive", {
+        exact: true,
+      }),
+    ).toBeVisible({ timeout: 120000 });
+    const link = page.getByRole("link", {
+      name: "Contact interface fields",
+      exact: true,
+    });
+    const response = await request.get((await link.getAttribute("href"))!);
+    expect(response.ok()).toBeTruthy();
+    const evidence = await response.json();
+    expect(evidence.pairs).toHaveLength(1);
+    expect(evidence.pairs[0].normal_penalty_n_mm3).toBe(10000000);
+    expect(evidence.pairs[0].friction_coefficient).toBe(0);
+    expect(
+      evidence.checks.at(-1).pairs[evidence.pairs[0].id].maximum_pressure_mpa,
+    ).toBeCloseTo(25, 4);
+    expect(evidence.checks.at(-1).force_balance_error).toBeLessThan(1e-5);
+    await expect(
+      page.getByText("contact active-set tangent stability not qualified", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    const fieldResponse = await request.get(
+      (await page
+        .getByRole("link", { name: "Field JSON", exact: true })
+        .getAttribute("href"))!,
+    );
+    const field = await fieldResponse.json();
+    expect(field.contact_components[0]).toBe("clipped_normal_gap_mm");
+    expect(field.contact_gap_convention).toContain(
+      "positive opening is clipped",
+    );
+    await page
+      .getByRole("button", { name: "View numerical field", exact: true })
+      .click();
+    const preview = page.getByLabel("Numerical finite element field preview", {
+      exact: true,
+    });
+    await preview.scrollIntoViewIfNeeded();
+    await expect(preview.locator("canvas")).toBeVisible();
+    await page
+      .getByLabel("Field quantity", { exact: true })
+      .selectOption("contact_pressure");
+    await expect(
+      page.getByLabel("Field color range", { exact: true }),
+    ).toHaveText("Uniform at displayed precision: 25.0000 MPa");
+    await preview.screenshot({
+      path: "test-results/contact-assembly-preview.png",
+    });
+    await page.screenshot({ path: "test-results/contact-assembly-field.png" });
+  } finally {
+    const project = await (await request.get("/api/project")).json();
+    const restored = await request.post("/api/commands", {
+      data: {
+        expected_revision: project.revision,
+        actor: "human",
+        action: "restore",
+        restore_revision: original.revision,
+      },
+    });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+  }
+});
