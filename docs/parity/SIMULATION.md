@@ -6,6 +6,25 @@ The native geometry bridge consumes exact per-body STEP plus face ID, body ID, c
 
 The NumPy/SciPy worker assembles constant-strain C3D4 stiffness, consistent face tractions and lumped translational mass. It solves small-strain linear elasticity, solid conduction with nonlinear radiation, sequential thermal expansion, mass-normalized modal eigenpairs, initial-stress buckling and a bounded central-difference event subset. Axis and arbitrary plane-normal constraints are eliminated using local orthonormal bases. Linear tetrahedra can lock or over-stiffen bending; near incompressibility and thin sections require particular care. The buckling regression deliberately demonstrates coarse-mesh stiffness error instead of calling a finite eigenvalue an accurate critical load.
 
+Adapter `oxygen-tet4-2` corrects an earlier density conversion: structural cards
+in g/cm³ convert by `1e-9` to tonne/mm³; hydrostatic fluid inputs already in
+kg/m³ convert by `1e-12`. The earlier adapter underreported mass and gravity
+forces by 1000 and overpredicted modal frequencies by √1000. Inertial-relief
+accelerations, event timing/energies and affected requirement/search outcomes
+also require recomputation. Previous inputs and immutable artifacts are retained;
+the new adapter and unit-source fingerprints mark their results stale. The
+separate quadratic CalculiX path already used the correct `1e-9` conversion.
+Independent SI regressions cover actual mass, weight/reactions, axial frequency,
+inertial-relief acceleration and free-flight displacement/work/kinetic energy;
+an actual CalculiX solve checks translated gravity and deck density. These checks
+do not establish a real material card or physical validation.
+
+The same adapter corrects support-reaction accounting when a nodal load acts on
+a constrained component: CalculiX `RF` includes the applied load, so the adapter
+subtracts the final history-scaled `CLOAD` there. Raw solver forces, applied loads
+and corrected support reactions remain in the field artifact. No correction is
+applied to unconstrained components. This is distinct from the density fix.
+
 Contact is a sourced finite-stiffness paired-node idealization: elastic bonded springs or frictionless normal separation springs, with explicit gap and active-set reporting. It is not general surface-to-surface sliding, Coulomb friction, self-contact or automatic contact qualification. Detection proposes one-to-one node pairs and reports ambiguity; it never silently inserts physical interface properties. Bolts are axial elastic trusses with specified preload; thread, washer, bending and torque conversion are absent. Inertial relief explicitly assembles translational/angular acceleration and removes only six rigid displacement gauges for a connected free solid.
 
 CalculiX is invoked as a separate GPL-licensed executable for nonlinear C3D4 studies. The adapter translates isotropic elasticity, supplied true-stress/equivalent-plastic-strain J2 hardening, optional finite deformation, dead nodal loads and world-axis zero supports. Increment histories support loading and unloading. It checks complete step time, per-increment convergence records, constrained-DOF reactions and load-step sensitivity. It refuses unimplemented nonlinear contact/connector and follower-load translation. An analytical plastic bar reproduces both the loaded strain and permanent strain after unloading. Material curves in tests are synthetic and do not establish a real grade or process calibration.

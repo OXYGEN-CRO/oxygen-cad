@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from .solver import run_process, solver_binary, parse_stress
 from .simulation_fem import System
+from .simulation_units import density_tonne_mm3
 
 
 def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1.):
@@ -32,7 +33,7 @@ def write_calculix(path, system: System, case, nonlinear=True, increment_scale=1
         material=system.assignments[body]
         lines.extend([f"*MATERIAL,NAME=MAT{body_index}","*ELASTIC",f"{material.youngs_modulus_mpa},{material.poisson_ratio}"])
         if material.density_g_cm3:
-            lines.extend(["*DENSITY",str(material.density_g_cm3*1e-12)])
+            lines.extend(["*DENSITY",str(density_tonne_mm3(material.density_g_cm3))])
         if nonlinear and material.plastic_curve:
             lines.append("*PLASTIC")
             lines.extend(f"{stress},{strain}" for stress,strain in material.plastic_curve)
@@ -139,7 +140,13 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
         components=(True,True,True) if support.kind=="fixed" else support.components
         for i in system.region_nodes(support.region_id):
             for axis,active in enumerate(components):
-                if active:reacted[i,axis]=reactions.get(system.ids[i],[0,0,0])[axis]
+                if active:
+                    if system.ids[i] not in reactions:
+                        raise RuntimeError("CalculiX result misses a constrained-node force")
+                    # RF is reaction + applied nodal force, not reaction alone.
+                    # All translated loads here are CLOADs; subtract their final
+                    # history-scaled values on each constrained component.
+                    reacted[i,axis]=reactions[system.ids[i]][axis]-applied[i,axis]
     scale=max(np.linalg.norm(applied,axis=1).sum(),np.linalg.norm(force.reshape(-1,3),axis=1).sum(),1e-12)
     force_error=float(np.linalg.norm((applied+reacted).sum(axis=0))/scale)
     coordinates=system.xyz+(u.reshape(-1,3) if system.study.settings.large_deformation else 0)
@@ -149,7 +156,8 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
     residual=max((abs(r["force_residual_percent"])/100 for r in last_by_increment.values()),default=None)
     if residual is None and not nonlinear:
         transform=system.transformation(case)
-        residual=float(np.linalg.norm(transform.T@(system.k@u-force))/max(np.linalg.norm(transform.T@force),1e-12))
+        final_force=applied.ravel()
+        residual=float(np.linalg.norm(transform.T@(system.k@u-final_force))/max(np.linalg.norm(transform.T@final_force),1e-12))
     if residual is None:raise RuntimeError("CalculiX convergence residuals unavailable; no verification inferred from process exit")
     plastic_values=[]
     active=False
@@ -159,4 +167,4 @@ def calculix_solve(system,case,directory: Path,cancel=None,nonlinear=True,increm
             values=re.findall(r"[+-]?\d\.\d+(?:[ED][+-]\d+)",line[13:])
             plastic_values.extend(float(v.replace("D","E")) for v in values)
     history=_displacement_history(directory/"analysis.dat")
-    return {"load_displacement_history":history,"values":{"max_displacement_mm":max(h["max_displacement_mm"] for h in history),"final_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(stress.values()),"max_equivalent_plastic_strain":max(plastic_values,default=0.)},"checks":{"residual":float(residual),"force_balance_error":force_error,"moment_balance_error":moment_error,"increments":increments,"nonlinear_convergence":convergence},"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":displacement,"nodal_extrapolated_von_mises_mpa":stress,"support_reactions_n":{n:reacted[i].tolist() for i,n in enumerate(system.ids)}},"solver":"CalculiX","warnings":["Nodal stress is extrapolated; fixture peaks can be singular.","J2 isotropic hardening follows supplied true-stress/plastic-strain data; no cyclic/rate calibration is inferred."]}
+    return {"load_displacement_history":history,"values":{"max_displacement_mm":max(h["max_displacement_mm"] for h in history),"final_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(stress.values()),"max_equivalent_plastic_strain":max(plastic_values,default=0.)},"checks":{"residual":float(residual),"force_balance_error":force_error,"moment_balance_error":moment_error,"increments":increments,"nonlinear_convergence":convergence},"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":displacement,"nodal_extrapolated_von_mises_mpa":stress,"support_reactions_n":{n:reacted[i].tolist() for i,n in enumerate(system.ids)},"solver_external_forces_n":reactions,"applied_nodal_forces_n":{n:applied[i].tolist() for i,n in enumerate(system.ids)}},"solver":"CalculiX","reaction_convention":"support reaction = CalculiX RF - final applied CLOAD on each constrained DOF","warnings":["Nodal stress is extrapolated; fixture peaks can be singular.","J2 isotropic hardening follows supplied true-stress/plastic-strain data; no cyclic/rate calibration is inferred."]}

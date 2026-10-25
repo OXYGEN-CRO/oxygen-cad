@@ -93,9 +93,11 @@ def test_modal_residual_mass_orthogonality_and_analytic_axial_mode():
     system.assignments["part"].poisson_ratio=0
     system=System(system.mesh,study,system.materials)
     result=modal_solve(system,case)
-    wave=math.sqrt(200000/(7.8e-12))
-    expected=wave/(4*10)
+    # Independent SI reference: Pa, kg/m³ and metres, rather than deck units.
+    wave_m_s=math.sqrt(200e9/7800)
+    expected=wave_m_s/(4*.010)
     assert result["values"]["min_frequency_hz"]==pytest.approx(expected,rel=.01)
+    assert result["values"]["mass_g"]==pytest.approx(7800*(.010*.002*.002)*1000,rel=1e-12)
     assert result["checks"]["residual"]<1e-9
     assert result["checks"]["mass_orthogonality_error"]<1e-10
 
@@ -115,9 +117,111 @@ def test_inertial_relief_explicit_acceleration():
     case.supports=[];study.settings.inertial_relief=True
     result=static_solve(system,case)
     acceleration=result["checks"]["inertial_relief"]["translation_acceleration_mm_s2"]
-    assert acceleration[0]==pytest.approx(100/(40*7.8e-12))
+    mass_kg=7800*(.010*.002*.002)
+    assert acceleration[0]/1000==pytest.approx(100/mass_kg)
     assert result["checks"]["residual"]<1e-8
     assert result["checks"]["force_balance_error"]<1e-8
+
+
+def test_mass_weight_and_support_reactions_against_si():
+    _,_,_,case,system=fixture(divisions=(2,1,1))
+    # Independent SI calculation for the 10 x 2 x 2 mm synthetic steel block.
+    mass_kg=7800*(.010*.002*.002)
+    gravity_m_s2=np.array([0.,0.,-9.80665])
+    case.loads=[Load(id="weight",kind="gravity",vector=tuple(gravity_m_s2*1000),source="SI dimensional reference")]
+    force=system.loads(case).reshape(-1,3)
+    expected_weight_n=mass_kg*gravity_m_s2
+    assert force.sum(axis=0)==pytest.approx(expected_weight_n,abs=1e-15)
+    result=static_solve(system,case)
+    assert result["values"]["mass_g"]==pytest.approx(mass_kg*1000,rel=1e-12)
+    reaction=np.array(list(result["field"]["reactions_n"].values())).sum(axis=0)
+    assert reaction==pytest.approx(-expected_weight_n,abs=1e-14)
+    # The volume centroid is (5,1,1) mm; check moment as well as resultant.
+    assert np.cross(system.xyz,force).sum(axis=0)==pytest.approx(np.cross([5,1,1],expected_weight_n),abs=1e-15)
+
+
+def test_free_flight_transient_kinetic_energy_against_si():
+    _,_,study,case,system=fixture(divisions=(2,1,1),kind="dynamic_event")
+    case.supports=[]
+    velocity_m_s=np.array([1.,-2.,.5])
+    acceleration_m_s2=np.array([0.,0.,-9.80665])
+    case.initial_velocity_mm_s=tuple(velocity_m_s*1000)
+    case.loads=[Load(id="gravity",kind="gravity",vector=tuple(acceleration_m_s2*1000),source="SI free-flight reference")]
+    duration=1e-5
+    case.history=[(0,1),(duration,1)]
+    study.settings.duration_s=duration
+    result=event_solve(system,case)
+    mass_kg=7800*(.010*.002*.002)
+    initial_j=.5*mass_kg*np.dot(velocity_m_s,velocity_m_s)
+    final_velocity=velocity_m_s+acceleration_m_s2*duration
+    final_j=.5*mass_kg*np.dot(final_velocity,final_velocity)
+    expected_displacement_m=velocity_m_s*duration+.5*acceleration_m_s2*duration**2
+    assert result["time_history"][0]["kinetic_energy_n_mm"]==pytest.approx(initial_j*1000,rel=1e-12)
+    assert result["time_history"][-1]["kinetic_energy_n_mm"]==pytest.approx(final_j*1000,rel=1e-10)
+    assert result["time_history"][-1]["external_work_n_mm"]==pytest.approx((final_j-initial_j)*1000,rel=1e-7)
+    for displacement in result["field"]["displacements_mm"].values():
+        assert np.array(displacement)/1000==pytest.approx(expected_displacement_m,abs=1e-14)
+    assert result["checks"]["energy_balance_error"]<1e-9
+    assert result["checks"]["mass_scaling"] is False
+
+
+@pytest.mark.parametrize("final_factor",[1.,.4,0.,-1.])
+def test_calculix_gravity_and_density_deck_against_si(tmp_path,final_factor):
+    from o3d.extended_solver import calculix_solve
+    _,_,_,case,system=fixture(divisions=(2,1,1))
+    case.loads=[Load(id="gravity",kind="gravity",vector=(0,0,-9806.65),source="SI dimensional reference")]
+    case.history=[(0,0),(1,1),(2,final_factor)]
+    result=calculix_solve(system,case,tmp_path,nonlinear=False)
+    deck=(tmp_path/"analysis.inp").read_text().splitlines()
+    # 7800 kg/m³ / (1000 kg/tonne) / (1e9 mm³/m³).
+    assert float(deck[deck.index("*DENSITY")+1])==pytest.approx(7800/1000/1e9,rel=1e-12)
+    reactions=np.array(list(result["field"]["support_reactions_n"].values())).sum(axis=0)
+    expected_weight_n=7800*(.010*.002*.002)*9.80665*final_factor
+    assert reactions==pytest.approx([0,0,expected_weight_n],abs=1e-9)
+    assert result["checks"]["force_balance_error"]<1e-6
+    assert result["checks"]["residual"]<1e-6
+    assert result["checks"]["moment_balance_error"]<1e-6
+    # The partially restrained fixture exercises loaded, constrained and free
+    # components on the same node. Retain and check the raw correction audit.
+    fields=result["field"]
+    for support in case.supports:
+        for i in system.region_nodes(support.region_id):
+            n=system.ids[i]
+            for axis,constrained in enumerate(support.components):
+                if constrained:
+                    assert fields["support_reactions_n"][n][axis]==pytest.approx(fields["solver_external_forces_n"][n][axis]-fields["applied_nodal_forces_n"][n][axis],abs=1e-15)
+
+
+def test_mass_limit_uses_physical_grams(tmp_path):
+    project,domain,study,_,_=fixture(divisions=(2,1,1))
+    domain.models[0].refinements=[block_mesh(geometry_key(project),divisions=(4,2,2))]
+    study.limits=[Limit(id="mass-budget",quantity="mass_g",operator="le",value=.1,source="Synthetic .1 g budget")]
+    request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":input_key(project,domain,study),"geometry_key":geometry_key(project),"revision":project.revision}
+    result=solve(request,tmp_path)
+    assert result["numerical_state"]=="verified_numerically"
+    assert result["values"]["mass_g"]==pytest.approx(.312,rel=1e-12)
+    assert result["requirements_state"]=="not_satisfied"
+    assert result["findings"][0]["satisfied"] is False
+    assert result["physical_validation"]=="not_supplied"
+
+
+def test_unit_source_changes_invalidate_previous_results(tmp_path,monkeypatch):
+    import o3d.simulation_provenance as provenance
+    from o3d.domains.simulation import ADAPTER_VERSION as domain_adapter
+    from o3d.simulation_worker import ADAPTER_VERSION as worker_adapter
+    project,domain,study,_,_=fixture(divisions=(2,1,1))
+    before=provenance.software_fingerprint(study.type)
+    assert "simulation_units.py" in before["source_sha256"]
+    key=input_key(project,domain,study)
+    actual_hash=provenance.fingerprint_file
+    def changed(path):
+        return "0"*64 if Path(path).name=="simulation_units.py" else actual_hash(path)
+    monkeypatch.setattr(provenance,"fingerprint_file",changed)
+    assert input_key(project,domain,study)!=key
+    assert domain_adapter==worker_adapter=="oxygen-tet4-2"
+    request={"data":domain.model_dump(mode="json"),"study_id":study.id,"case_id":"axial","input_key":key,"geometry_key":geometry_key(project),"revision":project.revision,"software":before}
+    with pytest.raises(ValueError,match="software changed after snapshot"):
+        solve(request,tmp_path)
 
 
 def test_dynamic_energy_timestep_and_rate_are_measured():

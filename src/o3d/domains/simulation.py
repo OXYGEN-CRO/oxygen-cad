@@ -9,12 +9,11 @@ import sys
 import zipfile
 import secrets
 from ..simulation_provenance import software_fingerprint
+from ..simulation_worker import ADAPTER_VERSION
 from pathlib import Path
 from ..model import digest,geometry_key
 from ..simulation_models import SimulationDomain,StudyRecord,AnalysisModel,MeshRecord,Region
 from ..store import now,write_json
-
-ADAPTER_VERSION="oxygen-tet4-1"
 
 CAPABILITIES=[
     ("SIM-01","Linear static stress","experimental","C3D4 isotropic multi-body/multi-case linear elasticity; mesh refinement and equation/equilibrium checks"),

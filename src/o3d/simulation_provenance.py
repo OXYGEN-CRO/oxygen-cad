@@ -18,7 +18,7 @@ def fingerprint_file(path):
 
 def software_fingerprint(study_type):
     root=Path(__file__).parent
-    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_provenance.py")}
+    sources={name:fingerprint_file(root/name) for name in ("simulation_models.py","simulation_fem.py","simulation_worker.py","simulation_search.py","extended_solver.py","simulation_mesh.py","simulation_units.py","simulation_provenance.py")}
     packages={}
     for name in ("numpy","scipy"):
         try:packages[name]=version(name)

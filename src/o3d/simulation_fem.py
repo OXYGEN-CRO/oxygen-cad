@@ -13,6 +13,7 @@ from scipy import sparse, linalg
 from scipy.sparse import linalg as sla
 from .simulation_models import MeshRecord, StudyRecord, MaterialRecord, LoadCase
 from .solver import Cancelled
+from .simulation_units import GRAMS_PER_TONNE, density_tonne_mm3, fluid_density_tonne_mm3
 
 
 def unit(value):
@@ -90,8 +91,7 @@ class System:
             else:
                 d = None
             if mat.density_g_cm3:
-                # g/cm3 -> tonne/mm3, consistent with mm/N/s.
-                self.mass[inds] += mat.density_g_cm3 * 1e-12 * v / 4
+                self.mass[inds] += density_tonne_mm3(mat.density_g_cm3) * v / 4
             if mat.conductivity_w_mk:
                 kt = v * mat.conductivity_w_mk / 1000 * grad @ grad.T
                 self.thermal_rows.extend(np.repeat(inds, 4)); self.thermal_cols.extend(np.tile(inds, 4)); self.thermal_values.extend(kt.ravel())
@@ -174,7 +174,7 @@ class System:
                 masses = np.zeros(len(self.ids))
                 for e, inds, _, v, *_ in self.elements:
                     if load.body_id is None or e.body_id == load.body_id:
-                        masses[inds] += self.assignments[e.body_id].density_g_cm3 * 1e-12 * v / 4
+                        masses[inds] += density_tonne_mm3(self.assignments[e.body_id].density_g_cm3) * v / 4
                 f += (masses[:, None] * vector).ravel()
                 continue
             if not load.region_id:
@@ -238,7 +238,7 @@ class System:
                         subarea=np.linalg.norm(np.cross(sub[1][0]-sub[0][0],sub[2][0]-sub[0][0]))/2
                         shape=np.array([p[1] for p in sub]);head=np.array([p[2] for p in sub])
                         integrated+=subarea/12*(shape.sum(axis=0)*head.sum()+shape.T@head)
-                    coefficient=load.density_kg_m3*np.linalg.norm(vector)*1e-12
+                    coefficient=fluid_density_tonne_mm3(load.density_kg_m3)*np.linalg.norm(vector)
                     for a,i in enumerate(nodes):f[3*i:3*i+3]-=normal*coefficient*integrated[a]
                     continue
                 else:
@@ -430,7 +430,7 @@ def static_solve(system, case, cancel=None, temperatures=None):
     moment_error=float(np.linalg.norm(np.cross(system.xyz,reactions+applied).sum(axis=0))/(force_scale*characteristic))
     fields,kg=system.strain_fields(u,temperatures,system.study.stress_free_temperature_k)
     fields.update({"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"displacements_mm":{n:u[3*i:3*i+3].tolist() for i,n in enumerate(system.ids)},"reactions_n":{n:reactions[i].tolist() for i,n in enumerate(system.ids)}})
-    values={"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(fields["von_mises_mpa"].values()),"mass_g":float(system.mass.sum()*1e6) if all(m.density_g_cm3 is not None for m in system.assignments.values()) else None,"strain_energy_n_mm":float(.5*u@(system.k@u))}
+    values={"max_displacement_mm":float(np.linalg.norm(u.reshape(-1,3),axis=1).max()),"max_von_mises_mpa":max(fields["von_mises_mpa"].values()),"mass_g":float(system.mass.sum()*GRAMS_PER_TONNE) if all(m.density_g_cm3 is not None for m in system.assignments.values()) else None,"strain_energy_n_mm":float(.5*u@(system.k@u))}
     checks={"residual":residual,"force_balance_error":force_error,"moment_balance_error":moment_error,"contact_iterations":history}
     if not system.study.interfaces and not system.study.bolts and temperatures is None:
         external_work=float(.5*u@f)
@@ -569,7 +569,7 @@ def modal_solve(system,case,cancel=None):
         modes.append({"mode":j+1,"frequency_hz":math.sqrt(max(0.,float(val)))/(2*math.pi),"eigenvalue_s_2":float(val),"rigid_body":bool(abs(val)<=rigid_cutoff),"unstable":bool(val < -rigid_cutoff),"residual":residual,"participation":participation,"mass_normalized_displacement":{n:full[i*3:i*3+3].tolist() for i,n in enumerate(system.ids)}})
     nonrigid=[x for x in modes if not x["rigid_body"] and not x["unstable"]]
     gram=vecs.T@m@vecs
-    return {"values":{"min_frequency_hz":min((x["frequency_hz"] for x in nonrigid),default=0),"mass_g":float(system.mass.sum()*1e6)},"checks":{"residual":max((x["residual"] for x in modes if not x["rigid_body"]),default=0),"mass_orthogonality_error":float(np.max(np.abs(gram-np.eye(len(vals)))))},"modes":modes,"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"modes":modes}}
+    return {"values":{"min_frequency_hz":min((x["frequency_hz"] for x in nonrigid),default=0),"mass_g":float(system.mass.sum()*GRAMS_PER_TONNE)},"checks":{"residual":max((x["residual"] for x in modes if not x["rigid_body"]),default=0),"mass_orthogonality_error":float(np.max(np.abs(gram-np.eye(len(vals)))))},"modes":modes,"field":{"nodes":{n:system.xyz[i].tolist() for i,n in enumerate(system.ids)},"modes":modes}}
 
 
 def buckling_solve(system,case,cancel=None):
