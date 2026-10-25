@@ -1,0 +1,75 @@
+{
+  "profile": {
+    "schema_version": 1,
+    "provider": "synthetic-fixture",
+    "record": {
+      "external_id": "synthetic-capability-1",
+      "name": "Synthetic fixture, not a vendor capability standard",
+      "record_type": "capability",
+      "process": "fixture-process",
+      "material": "fixture-material",
+      "source_url": "https://example.invalid/synthetic-fixture",
+      "facts": {
+        "supported_formats": [
+          "step"
+        ]
+      },
+      "constraints": [
+        {
+          "key": "max_x",
+          "value": 200,
+          "unit": "mm",
+          "source_field": "fixture.max_x"
+        },
+        {
+          "key": "max_y",
+          "value": 200,
+          "unit": "mm",
+          "source_field": "fixture.max_y"
+        },
+        {
+          "key": "max_z",
+          "value": 200,
+          "unit": "mm",
+          "source_field": "fixture.max_z"
+        },
+        {
+          "key": "min_quantity",
+          "value": 1,
+          "unit": "count",
+          "source_field": "fixture.min_quantity"
+        },
+        {
+          "key": "max_quantity",
+          "value": 10,
+          "unit": "count",
+          "source_field": "fixture.max_quantity"
+        }
+      ],
+      "api_access": "unknown",
+      "notes": [
+        "Synthetic example only. No vendor capability, quote or acceptance is asserted."
+      ]
+    },
+    "source": {
+      "url": "https://example.invalid/synthetic-fixture",
+      "capture": "supplier-sources/fixture.txt",
+      "sha256": "ae577ab93a827a67f3f69305a1ea64d898e61f349c349826fa704b7ebed116a0",
+      "captured_at": "2026-10-25T00:00:00Z",
+      "expires_at": "2026-10-26T00:00:00Z",
+      "kind": "synthetic_fixture"
+    }
+  },
+  "request": {
+    "schema_version": 1,
+    "request_id": "replace-with-your-request-id",
+    "provider": "synthetic-fixture",
+    "process": "fixture-process",
+    "material": "fixture-material",
+    "quantity": 2,
+    "handoff_manifest": "handoffs/replace-with-generated-id/manifest.json",
+    "artifacts": [
+      "native/part.step"
+    ]
+  }
+}

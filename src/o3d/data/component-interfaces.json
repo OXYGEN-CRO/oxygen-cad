@@ -1,0 +1,56 @@
+{
+  "a": {
+    "provider": "synthetic-demo",
+    "sku": "fixture-a-not-a-real-supplier-part",
+    "asset_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "interface_id": "mount",
+    "kind": "planar_through_holes",
+    "units": "mm",
+    "frame": {
+      "assembly_frame": "synthetic-bench",
+      "origin": [0, 0, 0],
+      "x_axis": [1, 0, 0],
+      "y_axis": [0, 1, 0]
+    },
+    "holes": [
+      { "label": "left", "center": [-10, -10], "diameter": 4.2 },
+      { "label": "right", "center": [10, -10], "diameter": 4.2 }
+    ],
+    "tolerance": { "position": 0.05, "diameter": 0.1 },
+    "evidence": {
+      "kind": "source",
+      "reference": "Synthetic illustrative dimensions only; not supplier data",
+      "source_field": "fixture-a.mounting",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "b": {
+    "provider": "synthetic-demo",
+    "sku": "fixture-b-not-a-real-supplier-part",
+    "asset_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "interface_id": "mount",
+    "kind": "planar_through_holes",
+    "units": "mm",
+    "frame": {
+      "assembly_frame": "synthetic-bench",
+      "origin": [0, 0, 0],
+      "x_axis": [1, 0, 0],
+      "y_axis": [0, 1, 0]
+    },
+    "holes": [
+      { "label": "left", "center": [-10, 10], "diameter": 4.2 },
+      { "label": "right", "center": [10, 10], "diameter": 4.2 }
+    ],
+    "tolerance": { "position": 0.05, "diameter": 0.1 },
+    "evidence": {
+      "kind": "measured",
+      "reference": "Synthetic measurement example only; no physical specimen measured",
+      "source_field": "fixture-b.mounting",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  },
+  "thickness_mm": 3,
+  "edge_clearance_mm": 3,
+  "web_clearance_mm": 2,
+  "machining_clearance_mm": 0.2
+}
